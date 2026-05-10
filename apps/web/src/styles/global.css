@@ -133,6 +133,112 @@ textarea {
   justify-self: end;
 }
 
+.header-tools {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+}
+
+.user-search {
+  position: relative;
+  width: 190px;
+}
+
+.search-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.user-search input {
+  width: 100%;
+  height: 31px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  outline: none;
+  font-size: 12px;
+}
+
+.user-search input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.user-search input:focus {
+  border-bottom-color: var(--accent-hover);
+}
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 11px);
+  right: 0;
+  z-index: 30;
+  width: 318px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+}
+
+.search-result {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.search-result:last-child {
+  border-bottom: 0;
+}
+
+.search-result:hover {
+  background: var(--bg-hover);
+}
+
+.search-result-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.search-result-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-copy span,
+.search-note {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.search-note {
+  margin: 0;
+  padding: 14px 0;
+}
+
+.follow-mini {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.follow-mini:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
 .avatar {
   display: inline-grid;
   place-items: center;
@@ -876,6 +982,18 @@ textarea {
     gap: 16px;
     padding-top: 6px;
     font-size: 16px;
+  }
+
+  .header-tools {
+    gap: 10px;
+  }
+
+  .user-search {
+    width: min(44vw, 190px);
+  }
+
+  .search-results {
+    width: min(318px, calc(100vw - 32px));
   }
 
   .annotation-headline {

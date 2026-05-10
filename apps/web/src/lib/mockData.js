@@ -5,6 +5,45 @@ export const currentUser = {
   avatar_url: null,
 };
 
+export const mockUsers = [
+  {
+    id: 'hZTIgPwtkZPF',
+    username: 'mayadesai',
+    display_name: 'Maya Desai',
+    avatar_url: null,
+    bio: 'Editor, policy reader, and collector of sentences that explain more than they should.',
+    stats: { annotations: 128, followers: 24800, following: 312 },
+    following: false,
+  },
+  {
+    id: 'jonah',
+    username: 'jonahlee',
+    display_name: 'Jonah Lee',
+    avatar_url: null,
+    bio: 'Writing about memory, attention, and the technologies that keep both under pressure.',
+    stats: { annotations: 83, followers: 9400, following: 190 },
+    following: true,
+  },
+  {
+    id: 'leila',
+    username: 'leilahaddad',
+    display_name: 'Leila Haddad',
+    avatar_url: null,
+    bio: 'Foreign policy notes, energy maps, and the occasional sentence worth arguing with.',
+    stats: { annotations: 54, followers: 7200, following: 144 },
+    following: false,
+  },
+  {
+    id: 'david',
+    username: 'davidng',
+    display_name: 'David Ng',
+    avatar_url: null,
+    bio: 'Economics editor watching AI discourse become labor discourse in real time.',
+    stats: { annotations: 67, followers: 11800, following: 203 },
+    following: false,
+  },
+];
+
 export const mockAnnotations = [
   {
     id: 'I6KyT-Ah5Wna',
@@ -150,15 +189,5 @@ export const mockComments = [
 ];
 
 export const mockUser = {
-  id: 'hZTIgPwtkZPF',
-  username: 'mayadesai',
-  display_name: 'Maya Desai',
-  avatar_url: null,
-  bio: 'Editor, policy reader, and collector of sentences that explain more than they should.',
-  stats: {
-    annotations: 128,
-    followers: 24800,
-    following: 312,
-  },
-  following: false,
+  ...mockUsers[0],
 };

@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import UserAvatar from './UserAvatar.jsx';
+import UserSearch from './UserSearch.jsx';
 import { currentUser } from '../lib/mockData.js';
 
 export default function Layout() {
@@ -13,9 +14,12 @@ export default function Layout() {
             <NavLink to="/new">Annotate</NavLink>
             <NavLink to="/u/mayadesai">Profile</NavLink>
           </nav>
-          <Link to="/login" className="avatar-link" aria-label="Account">
-            <UserAvatar user={currentUser} size="sm" />
-          </Link>
+          <div className="header-tools">
+            <UserSearch />
+            <Link to="/login" className="avatar-link" aria-label="Account">
+              <UserAvatar user={currentUser} size="sm" />
+            </Link>
+          </div>
         </div>
       </header>
       <main className="site-main">

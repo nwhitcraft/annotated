@@ -1,4 +1,4 @@
-import { currentUser, mockAnnotations, mockComments, mockUser } from './mockData.js';
+import { currentUser, mockAnnotations, mockComments, mockUser, mockUsers } from './mockData.js';
 
 export const CURRENT_USER_ID = currentUser.id;
 
@@ -42,7 +42,25 @@ export async function getUser(username) {
   try {
     return await request(`/api/users/${username}`);
   } catch {
-    return { ...mockUser, username: username || mockUser.username };
+    return mockUsers.find((user) => user.username === username || user.id === username) || { ...mockUser, username: username || mockUser.username };
+  }
+}
+
+export async function searchUsers(query) {
+  const term = query.trim().replace(/^@/, '').toLowerCase();
+  if (term.length < 2) return [];
+
+  const localMatches = mockUsers.filter((user) => {
+    const name = `${user.display_name || ''} ${user.username || ''} ${user.bio || ''}`.toLowerCase();
+    return name.includes(term);
+  });
+
+  try {
+    const exact = await request(`/api/users/${encodeURIComponent(term)}`);
+    const merged = [exact, ...localMatches.filter((user) => user.id !== exact.id && user.username !== exact.username)];
+    return merged.slice(0, 5);
+  } catch {
+    return localMatches.slice(0, 5);
   }
 }
 
