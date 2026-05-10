@@ -1,0 +1,35 @@
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { serveStatic } from '@hono/node-server/serve-static';
+import annotations from './routes/annotations.js';
+import feed from './routes/feed.js';
+import users from './routes/users.js';
+import claims from './routes/claims.js';
+import clip from './routes/clip.js';
+
+const app = new Hono();
+
+// Middleware
+app.use('*', cors({ origin: '*' }));
+app.use('*', logger());
+
+// Health
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
+
+// Routes
+app.route('/api/annotations', annotations);
+app.route('/api/feed', feed);
+app.route('/api/users', users);
+app.route('/api/claims', claims);
+app.route('/api/clip', clip);
+
+// Serve clip media files
+app.use('/media/*', serveStatic({ root: './data' }));
+
+const PORT = Number(process.env.PORT) || 3080;
+
+serve({ fetch: app.fetch, port: PORT }, (info) => {
+  console.log(`✦ Annotated API running on http://localhost:${info.port}`);
+});

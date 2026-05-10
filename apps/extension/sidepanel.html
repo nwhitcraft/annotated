@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Annotated</title>
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --bg-card: #111113;
+      --bg-hover: #18181b;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #a1a1aa;
+      --text-muted: #71717a;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 16px;
+      min-width: 320px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .logo-mark { color: var(--accent); }
+
+    .status {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 12px;
+    }
+
+    .status-type {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .status-type.article { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
+    .status-type.youtube { background: rgba(248, 113, 113, 0.12); color: #f87171; }
+    .status-type.podcast { background: rgba(167, 139, 250, 0.12); color: #a78bfa; }
+
+    .clip-preview {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border-left: 3px solid var(--accent);
+      font-style: italic;
+      color: var(--text-dim);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: Georgia, serif;
+      font-size: 14px;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    textarea::placeholder { color: var(--text-muted); }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: #818cf8;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-muted);
+    }
+
+    .empty-icon { font-size: 32px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <span class="logo-mark">✦</span> annotated
+  </div>
+
+  <div id="status" class="status" style="display:none"></div>
+  <div id="clip" class="clip-preview" style="display:none"></div>
+
+  <div id="empty" class="empty">
+    <div class="empty-icon">✦</div>
+    <p>Select text on any page to clip it.</p>
+    <p style="margin-top:8px;font-size:11px;">Highlight → Write your take → Post</p>
+  </div>
+
+  <div id="compose" style="display:none">
+    <textarea id="commentary" placeholder="What's your take on this?"></textarea>
+    <button id="post-btn" class="btn" disabled>✦ Post Annotation</button>
+  </div>
+
+  <script src="src/sidepanel.js"></script>
+</body>
+</html>

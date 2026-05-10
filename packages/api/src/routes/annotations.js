@@ -1,0 +1,144 @@
+import { Hono } from 'hono';
+import { nanoid } from 'nanoid';
+import db from '../db.js';
+
+const app = new Hono();
+
+// List annotations (with optional filters)
+app.get('/', (c) => {
+  const { user_id, source_type, limit = '20', offset = '0' } = c.req.query();
+  
+  let sql = 'SELECT a.*, u.username, u.display_name, u.avatar_url FROM annotations a JOIN users u ON a.user_id = u.id WHERE a.is_public = 1';
+  const params = [];
+
+  if (user_id) {
+    sql += ' AND a.user_id = ?';
+    params.push(user_id);
+  }
+  if (source_type) {
+    sql += ' AND a.source_type = ?';
+    params.push(source_type);
+  }
+
+  sql += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?';
+  params.push(Number(limit), Number(offset));
+
+  const items = db.prepare(sql).all(...params);
+  const total = db.prepare('SELECT COUNT(*) as count FROM annotations WHERE is_public = 1').get();
+
+  return c.json({ items, total: total.count });
+});
+
+// Get single annotation
+app.get('/:id', (c) => {
+  const { id } = c.req.param();
+  const annotation = db.prepare(`
+    SELECT a.*, u.username, u.display_name, u.avatar_url 
+    FROM annotations a JOIN users u ON a.user_id = u.id 
+    WHERE a.id = ?
+  `).get(id);
+  
+  if (!annotation) return c.json({ error: 'Not found' }, 404);
+
+  const comments = db.prepare(`
+    SELECT c.*, u.username, u.display_name, u.avatar_url 
+    FROM comments c JOIN users u ON c.user_id = u.id 
+    WHERE c.annotation_id = ? ORDER BY c.created_at ASC
+  `).all(id);
+
+  return c.json({ ...annotation, comments });
+});
+
+// Create annotation
+app.post('/', async (c) => {
+  const body = await c.req.json();
+  const { user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+          clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary } = body;
+
+  if (!user_id || !source_url || !source_type || !commentary) {
+    return c.json({ error: 'Missing required fields: user_id, source_url, source_type, commentary' }, 400);
+  }
+
+  const id = nanoid(12);
+  db.prepare(`
+    INSERT INTO annotations (id, user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+      clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+    clip_text || null, clip_start_sec || null, clip_end_sec || null, clip_media_path || null, commentary);
+
+  return c.json({ id, created: true }, 201);
+});
+
+// Update annotation
+app.patch('/:id', async (c) => {
+  const { id } = c.req.param();
+  const body = await c.req.json();
+  const allowed = ['commentary', 'is_public'];
+  const updates = [];
+  const params = [];
+
+  for (const key of allowed) {
+    if (body[key] !== undefined) {
+      updates.push(`${key} = ?`);
+      params.push(body[key]);
+    }
+  }
+
+  if (!updates.length) return c.json({ error: 'Nothing to update' }, 400);
+
+  updates.push("updated_at = datetime('now')");
+  params.push(id);
+
+  db.prepare(`UPDATE annotations SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+  return c.json({ updated: true });
+});
+
+// Delete annotation
+app.delete('/:id', (c) => {
+  const { id } = c.req.param();
+  db.prepare('DELETE FROM annotations WHERE id = ?').run(id);
+  return c.json({ deleted: true });
+});
+
+// Add comment
+app.post('/:id/comments', async (c) => {
+  const { id: annotation_id } = c.req.param();
+  const { user_id, body: commentBody } = await c.req.json();
+
+  if (!user_id || !commentBody) return c.json({ error: 'Missing user_id or body' }, 400);
+
+  const id = nanoid(12);
+  db.prepare('INSERT INTO comments (id, annotation_id, user_id, body) VALUES (?, ?, ?, ?)')
+    .run(id, annotation_id, user_id, commentBody);
+  
+  db.prepare('UPDATE annotations SET comment_count = comment_count + 1 WHERE id = ?')
+    .run(annotation_id);
+
+  return c.json({ id, created: true }, 201);
+});
+
+// Pin/unpin
+app.post('/:id/pin', async (c) => {
+  const { id: annotation_id } = c.req.param();
+  const { user_id } = await c.req.json();
+
+  const existing = db.prepare('SELECT 1 FROM pins WHERE user_id = ? AND annotation_id = ?')
+    .get(user_id, annotation_id);
+
+  if (existing) {
+    db.prepare('DELETE FROM pins WHERE user_id = ? AND annotation_id = ?')
+      .run(user_id, annotation_id);
+    db.prepare('UPDATE annotations SET pin_count = MAX(0, pin_count - 1) WHERE id = ?')
+      .run(annotation_id);
+    return c.json({ pinned: false });
+  } else {
+    db.prepare('INSERT INTO pins (user_id, annotation_id) VALUES (?, ?)')
+      .run(user_id, annotation_id);
+    db.prepare('UPDATE annotations SET pin_count = pin_count + 1 WHERE id = ?')
+      .run(annotation_id);
+    return c.json({ pinned: true });
+  }
+});
+
+export default app;

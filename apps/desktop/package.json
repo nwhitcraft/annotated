@@ -1,0 +1,10 @@
+{
+  "name": "@annotated/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Annotated desktop app — Tauri floating toolbar with global hotkey",
+  "scripts": {
+    "dev": "echo 'Tauri app — run with: cargo tauri dev'",
+    "build": "echo 'Tauri app — run with: cargo tauri build'"
+  }
+}
