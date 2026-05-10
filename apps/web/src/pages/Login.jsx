@@ -1,8 +1,23 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { authUrl, setCurrentUserId, setToken } from '../lib/api.js';
 
 export default function Login() {
-  function go(path) {
-    window.location.href = path;
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token') || params.get('jwt');
+    const userId = params.get('user_id') || params.get('userId');
+    if (token) {
+      setToken(token);
+      setCurrentUserId(userId);
+      navigate('/', { replace: true });
+    }
+  }, [navigate]);
+
+  function go(provider) {
+    window.location.href = authUrl(provider);
   }
 
   return (
@@ -13,8 +28,8 @@ export default function Login() {
           <h1>Sign in to join the conversation</h1>
           <p>Clip sources, write commentary, and reply with context.</p>
         </div>
-        <button className="oauth-button" onClick={() => go('/api/auth/google')}>Continue with Google</button>
-        <button className="oauth-button" onClick={() => go('/api/auth/twitter')}>Continue with X</button>
+        <button className="oauth-button" onClick={() => go('google')}>Continue with Google</button>
+        <button className="oauth-button" onClick={() => go('twitter')}>Continue with X</button>
         <footer>By continuing, you agree to Terms and Privacy.</footer>
       </section>
     </main>

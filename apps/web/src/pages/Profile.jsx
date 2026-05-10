@@ -14,8 +14,9 @@ export default function Profile() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([getUser(username), getUserAnnotations(username, tab)])
-      .then(([profile, annotations]) => {
+    getUser(username)
+      .then(async (profile) => {
+        const annotations = await getUserAnnotations(profile.id || username, tab);
         if (cancelled) return;
         setUser(profile);
         setFollowing(Boolean(profile.following));

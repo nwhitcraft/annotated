@@ -12,7 +12,7 @@ export default function Layout() {
           <nav className="main-nav" aria-label="Primary navigation">
             <NavLink to="/" end>Feed</NavLink>
             <NavLink to="/new">Annotate</NavLink>
-            <NavLink to="/u/mayadesai">Profile</NavLink>
+            <NavLink to={`/u/${currentUser.username}`}>Profile</NavLink>
           </nav>
           <div className="header-tools">
             <UserSearch />

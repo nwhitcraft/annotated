@@ -1,112 +1,120 @@
-import { currentUser, mockAnnotations, mockComments, mockUser, mockUsers } from './mockData.js';
+const API_BASE = '/api';
+const TOKEN_KEY = 'annotated.jwt';
+const USER_ID_KEY = 'annotated.user_id';
 
-export const CURRENT_USER_ID = currentUser.id;
+export function getToken() {
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  if (token) window.localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  window.localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getCurrentUserId() {
+  return window.localStorage.getItem(USER_ID_KEY) || 'demo-user';
+}
+
+export function setCurrentUserId(userId) {
+  if (userId) window.localStorage.setItem(USER_ID_KEY, userId);
+}
+
+export function authUrl(provider) {
+  return `${API_BASE}/auth/${provider}`;
+}
 
 async function request(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  const token = getToken();
+  const headers = new Headers(options.headers || {});
+
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
+    headers,
   });
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) throw new Error(data?.error || `Request failed: ${response.status}`);
   return data;
 }
 
 export async function getFeed(tab) {
-  try {
-    let path = '/api/feed';
-    if (tab === 'trending') path = '/api/feed/trending';
-    if (['article', 'youtube', 'podcast'].includes(tab)) path = `/api/feed?type=${tab}`;
-    if (tab === 'following') path = `/api/feed/following/${CURRENT_USER_ID}`;
-    const data = await request(path);
-    return data.items || data.annotations || data || [];
-  } catch {
-    if (tab === 'trending') return [...mockAnnotations].sort((a, b) => b.like_count - a.like_count);
-    if (['article', 'youtube', 'podcast'].includes(tab)) return mockAnnotations.filter((item) => item.source_type === tab);
-    if (tab === 'following') return mockAnnotations.slice(0, 2);
-    return mockAnnotations;
-  }
+  let path = '/feed';
+  if (tab === 'trending') path = '/feed/trending';
+  if (['article', 'youtube', 'podcast'].includes(tab)) path = `/feed?type=${tab}`;
+  if (tab === 'following') path = `/feed/following/${encodeURIComponent(getCurrentUserId())}`;
+  const data = await request(path);
+  return data.items || data.annotations || data || [];
 }
 
 export async function getAnnotation(id) {
-  try {
-    const data = await request(`/api/annotations/${id}`);
-    return { ...data, comments: data.comments || [] };
-  } catch {
-    const fallback = mockAnnotations.find((item) => item.id === id) || mockAnnotations[0];
-    return { ...fallback, comments: mockComments };
-  }
+  const data = await request(`/annotations/${encodeURIComponent(id)}`);
+  return { ...data, comments: data.comments || [] };
 }
 
-export async function getUser(username) {
-  try {
-    return await request(`/api/users/${username}`);
-  } catch {
-    return mockUsers.find((user) => user.username === username || user.id === username) || { ...mockUser, username: username || mockUser.username };
-  }
+export async function getUser(usernameOrId) {
+  return request(`/users/${encodeURIComponent(usernameOrId)}`);
 }
 
 export async function searchUsers(query) {
-  const term = query.trim().replace(/^@/, '').toLowerCase();
+  const term = query.trim().replace(/^@/, '');
   if (term.length < 2) return [];
-
-  const localMatches = mockUsers.filter((user) => {
-    const name = `${user.display_name || ''} ${user.username || ''} ${user.bio || ''}`.toLowerCase();
-    return name.includes(term);
-  });
-
   try {
-    const exact = await request(`/api/users/${encodeURIComponent(term)}`);
-    const merged = [exact, ...localMatches.filter((user) => user.id !== exact.id && user.username !== exact.username)];
-    return merged.slice(0, 5);
+    const exact = await getUser(term);
+    return exact ? [exact] : [];
   } catch {
-    return localMatches.slice(0, 5);
+    return [];
   }
 }
 
-export async function getUserAnnotations(username, tab) {
-  try {
-    const data = await request(`/api/users/${username}/annotations`);
-    const items = data.items || data.annotations || [];
-    return tab === 'liked' ? [...items].reverse() : items;
-  } catch {
-    return tab === 'liked' ? [...mockAnnotations].reverse() : mockAnnotations;
-  }
+export async function getUserAnnotations(userId, tab) {
+  const data = await request(`/users/${encodeURIComponent(userId)}/annotations`);
+  const items = data.items || data.annotations || [];
+  return tab === 'liked' ? [...items].reverse() : items;
 }
 
 export async function toggleLike(id) {
-  return request(`/api/annotations/${id}/like`, {
+  return request(`/annotations/${encodeURIComponent(id)}/like`, {
     method: 'POST',
-    body: JSON.stringify({ user_id: CURRENT_USER_ID }),
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
   });
 }
 
 export async function postComment(annotationId, body, parentId) {
-  try {
-    return await request(`/api/annotations/${annotationId}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({ user_id: CURRENT_USER_ID, body, parent_id: parentId || undefined }),
-    });
-  } catch {
-    return { id: `local-${Date.now()}` };
-  }
+  return request(`/annotations/${encodeURIComponent(annotationId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: getCurrentUserId(),
+      body,
+      parent_id: parentId || undefined,
+    }),
+  });
 }
 
 export async function toggleFollow(userId) {
-  return request(`/api/users/${userId}/follow`, {
+  return request(`/users/${encodeURIComponent(userId)}/follow`, {
     method: 'POST',
-    body: JSON.stringify({ user_id: CURRENT_USER_ID }),
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
   });
 }
 
 export async function detectClip(url) {
-  const data = await request('/api/clip/detect', {
+  const data = await request('/clip/detect', {
     method: 'POST',
     body: JSON.stringify({ url }),
   });
+
   if (data.type !== 'article') return data;
+
   try {
-    const article = await request('/api/clip/article', {
+    const article = await request('/clip/article', {
       method: 'POST',
       body: JSON.stringify({ url }),
     });
@@ -117,8 +125,8 @@ export async function detectClip(url) {
 }
 
 export async function createAnnotation(payload) {
-  return request('/api/annotations', {
+  return request('/annotations', {
     method: 'POST',
-    body: JSON.stringify({ user_id: CURRENT_USER_ID, ...payload }),
+    body: JSON.stringify({ user_id: getCurrentUserId(), ...payload }),
   });
 }
