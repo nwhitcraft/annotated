@@ -1,145 +1,163 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import AnnotationCard from '../components/AnnotationCard.jsx';
+import CommentThread from '../components/CommentThread.jsx';
+import { getAnnotation, postComment } from '../lib/api.js';
+import { currentUser } from '../lib/mockData.js';
+
+function insertReply(comments, parentId, reply) {
+  if (!parentId) return [reply, ...comments];
+  return comments.map((comment) => {
+    const replies = comment.replies || comment.children || comment.comments || [];
+    if (comment.id === parentId) {
+      return { ...comment, replies: [...replies, reply] };
+    }
+    return { ...comment, replies: insertReply(replies, parentId, reply) };
+  });
+}
 
 export default function AnnotationPage() {
   const { id } = useParams();
   const [annotation, setAnnotation] = useState(null);
+  const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [claimOpen, setClaimOpen] = useState(false);
-  const [claimEmail, setClaimEmail] = useState('');
-  const [claimReason, setClaimReason] = useState('');
   const [claimSent, setClaimSent] = useState(false);
+  const [claim, setClaim] = useState({ email: '', reason: '' });
 
   useEffect(() => {
-    fetch(`/api/annotations/${id}`)
-      .then(r => r.json())
-      .then(data => { setAnnotation(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+    setLoading(true);
+    getAnnotation(id)
+      .then((data) => {
+        if (cancelled) return;
+        setAnnotation(data);
+        setComments(data.comments || []);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Annotation not found');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  async function fileClaim(e) {
-    e.preventDefault();
+  const totalComments = useMemo(() => comments.length, [comments]);
+
+  async function handlePost(body, parentId) {
+    const optimistic = {
+      id: `optimistic-${Date.now()}`,
+      username: currentUser.username,
+      display_name: currentUser.display_name,
+      avatar_url: currentUser.avatar_url,
+      body,
+      created_at: new Date().toISOString(),
+      replies: [],
+    };
+    setComments((existing) => insertReply(existing, parentId, optimistic));
+    setAnnotation((item) => item ? { ...item, comment_count: Number(item.comment_count || 0) + 1 } : item);
+    const saved = await postComment(id, body, parentId);
+    if (saved?.id) {
+      setComments((existing) => replaceCommentId(existing, optimistic.id, saved.id));
+    }
+  }
+
+  async function fileClaim(event) {
+    event.preventDefault();
+    setClaimSent(true);
     try {
       await fetch('/api/claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           annotation_id: id,
-          claimant_email: claimEmail,
-          reason: claimReason,
+          claimant_email: claim.email,
+          reason: claim.reason,
         }),
       });
-      setClaimSent(true);
-    } catch {}
+    } catch {
+      // The inline confirmation is still useful when the claims endpoint is not wired yet.
+    }
   }
 
   if (loading) {
     return (
-      <div className="container" style={{ maxWidth: 680 }}>
-        <div className="card" style={{ height: 300 }}>
-          <div className="skeleton" style={{ height: 14, width: '60%', marginBottom: 16 }} />
-          <div className="skeleton" style={{ height: 80, marginBottom: 16 }} />
-          <div className="skeleton" style={{ height: 14, width: '40%' }} />
+      <div className="detail-page page-wrap narrow-wrap">
+        <div className="annotation-card skeleton-card tall">
+          <div className="skeleton-line w-40" />
+          <div className="skeleton-block" />
+          <div className="skeleton-line w-90" />
         </div>
       </div>
     );
   }
 
-  if (!annotation || annotation.error) {
+  if (error || !annotation) {
     return (
-      <div className="container" style={{ maxWidth: 680, textAlign: 'center', paddingTop: 80 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>✦</div>
-        <h2>Annotation not found</h2>
-        <p className="text-secondary" style={{ marginTop: 8 }}>It may have been removed or doesn't exist.</p>
-        <Link to="/" className="btn btn-secondary" style={{ marginTop: 24 }}>Back to feed</Link>
+      <div className="page-wrap narrow-wrap">
+        <div className="empty-state">
+          <strong>Annotation not found</strong>
+          <p>It may have been removed, made private, or never existed.</p>
+          <Link to="/" className="btn btn-secondary">Back to feed</Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container" style={{ maxWidth: 680 }}>
-      <Link to="/" className="btn-ghost text-secondary" style={{ marginBottom: 16, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-        ← Back to feed
-      </Link>
+    <div className="detail-page page-wrap narrow-wrap">
+      <Link to="/" className="back-link">← Back to feed</Link>
+      <AnnotationCard annotation={{ ...annotation, comment_count: annotation.comment_count || totalComments }} expanded />
+      <CommentThread comments={comments} onPost={(body) => handlePost(body)} onReply={(parentId, body) => handlePost(body, parentId)} />
 
-      <AnnotationCard annotation={annotation} />
-
-      {/* Comments */}
-      {annotation.comments?.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>
-            Comments ({annotation.comments.length})
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {annotation.comments.map(c => (
-              <div key={c.id} className="card" style={{ padding: '12px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div className="avatar avatar-sm avatar-placeholder">
-                    {(c.display_name || c.username || '?')[0].toUpperCase()}
-                  </div>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>{c.display_name || c.username}</span>
-                  <span className="text-muted" style={{ fontSize: 12 }}>
-                    {new Date(c.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-                <p style={{ fontSize: 14, lineHeight: 1.6 }}>{c.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* File a Claim */}
-      <div className="divider" />
-      
-      <div style={{ textAlign: 'center', paddingBottom: 48 }}>
+      <section className="claim-section">
         {!claimOpen ? (
-          <button
-            className="btn btn-secondary btn-sm btn-danger"
-            onClick={() => setClaimOpen(true)}
-            style={{ fontSize: 12 }}
-          >
-            ⚖️ File a claim
-          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setClaimOpen(true)}>File a claim</button>
         ) : claimSent ? (
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-            <h4>Claim filed</h4>
-            <p className="text-secondary" style={{ fontSize: 13, marginTop: 4 }}>
-              We'll review your claim and respond via email.
-            </p>
+          <div className="claim-confirmation">
+            <strong>Claim filed</strong>
+            <p>Thanks. The moderation team will review this annotation and follow up if needed.</p>
           </div>
         ) : (
-          <form onSubmit={fileClaim} className="card" style={{ textAlign: 'left' }}>
-            <h4 style={{ marginBottom: 4 }}>⚖️ File a Fair Use Claim</h4>
-            <p className="text-secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-              If you believe this annotation violates your copyright, submit a claim below.
-            </p>
+          <form className="claim-form" onSubmit={fileClaim}>
+            <div>
+              <strong>File a claim</strong>
+              <p>Use this if you own the source material and believe this clip is not fair use.</p>
+            </div>
             <input
+              className="field"
               type="email"
-              placeholder="Your email address"
+              placeholder="Email address"
               required
-              value={claimEmail}
-              onChange={e => setClaimEmail(e.target.value)}
-              className="input"
-              style={{ marginBottom: 12 }}
+              value={claim.email}
+              onChange={(event) => setClaim((value) => ({ ...value, email: event.target.value }))}
             />
             <textarea
-              placeholder="Describe your claim..."
+              className="field"
+              placeholder="Tell us what should be reviewed"
               required
-              value={claimReason}
-              onChange={e => setClaimReason(e.target.value)}
-              className="input"
-              style={{ marginBottom: 12, minHeight: 80 }}
+              value={claim.reason}
+              onChange={(event) => setClaim((value) => ({ ...value, reason: event.target.value }))}
             />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" className="btn btn-primary btn-sm">Submit claim</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setClaimOpen(false)}>Cancel</button>
+            <div className="form-actions">
+              <button className="btn btn-primary btn-sm" type="submit">Submit</button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setClaimOpen(false)}>Cancel</button>
             </div>
           </form>
         )}
-      </div>
+      </section>
     </div>
   );
+}
+
+function replaceCommentId(comments, oldId, newId) {
+  return comments.map((comment) => ({
+    ...comment,
+    id: comment.id === oldId ? newId : comment.id,
+    replies: replaceCommentId(comment.replies || comment.children || comment.comments || [], oldId, newId),
+  }));
 }
