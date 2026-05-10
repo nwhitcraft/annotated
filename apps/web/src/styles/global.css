@@ -86,6 +86,9 @@ textarea {
 }
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   border-bottom: 1px solid var(--border);
   background: var(--bg-primary);
 }
@@ -326,6 +329,17 @@ textarea {
   cursor: pointer;
 }
 
+.annotation-byline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.author-avatar-link {
+  flex: 0 0 auto;
+  height: 31px;
+}
+
 .annotation-item-expanded {
   cursor: default;
   padding-top: 12px;
@@ -402,6 +416,41 @@ textarea {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+.source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.source-thumbnail {
+  display: grid;
+  gap: 5px;
+  width: 116px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.source-thumbnail img {
+  width: 116px;
+  height: 74px;
+  object-fit: cover;
+  filter: grayscale(100%);
+  transition: filter 150ms ease;
+}
+
+.source-thumbnail span {
+  display: inline-block;
+}
+
+.source-thumbnail:hover {
+  color: var(--accent-hover);
+}
+
+.source-thumbnail:hover img {
+  filter: grayscale(0%);
 }
 
 .clip-blockquote {
@@ -998,6 +1047,19 @@ textarea {
 
   .annotation-headline {
     font-size: 20px;
+  }
+
+  .source-row {
+    grid-template-columns: 1fr;
+  }
+
+  .source-thumbnail {
+    width: 138px;
+  }
+
+  .source-thumbnail img {
+    width: 138px;
+    height: 88px;
   }
 
   .annotation-item-expanded .annotation-headline {

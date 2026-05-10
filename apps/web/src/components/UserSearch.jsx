@@ -70,12 +70,12 @@ export default function UserSearch() {
 
   return (
     <div className="user-search" ref={wrapperRef}>
-      <label className="search-label" htmlFor="user-search">Search writers</label>
+      <label className="search-label" htmlFor="user-search">Search Annotaters</label>
       <input
         id="user-search"
         type="search"
         value={query}
-        placeholder="Search users"
+        placeholder="Search Annotaters"
         onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
