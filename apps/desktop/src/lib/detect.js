@@ -20,11 +20,25 @@ export function detectSource(url) {
 }
 
 function titleFromUrl(parsed) {
-  const last = parsed.pathname.split('/').filter(Boolean).pop();
-  if (!last) return parsed.hostname.replace(/^www\./, '');
-  return decodeURIComponent(last)
-    .replace(/[-_]+/g, ' ')
+  const host = parsed.hostname.replace(/^www\./, '');
+  const videoTitle = parsed.searchParams.get('title');
+  if (videoTitle) return cleanTitle(videoTitle);
+
+  const segments = parsed.pathname
+    .split('/')
+    .filter(Boolean)
+    .filter((segment) => !/^\d{4}$|^\d{1,2}$|^(article|video|podcasts?|watch|news)$/i.test(segment));
+  const candidate = segments.at(-1);
+  return candidate ? cleanTitle(candidate) : host;
+}
+
+function cleanTitle(value) {
+  return decodeURIComponent(value)
     .replace(/\.\w+$/, '')
+    .replace(/[+_-]+/g, ' ')
+    .replace(/\b[a-f0-9]{16,}\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 const isTauri = Boolean(window.__TAURI_INTERNALS__);
 const STORAGE_KEY = 'annotated.desktop.annotations';
@@ -91,12 +92,79 @@ export async function deleteAnnotation(id) {
   return true;
 }
 
-export async function postAnnotation(id) {
+async function markAnnotationPosted(id) {
   if (isTauri) return invoke('post_annotation', { id });
   const now = new Date().toISOString();
   const next = readLocal().map((item) => item.id === id ? { ...item, is_public: 1, synced_at: now, updated_at: now } : item);
   writeLocal(next);
   return next.find((item) => item.id === id);
+}
+
+export async function syncAnnotation(annotation, settings = defaultSettings) {
+  const endpoint = (settings.apiEndpoint || defaultSettings.apiEndpoint).replace(/\/$/, '');
+  const apiBase = endpoint.endsWith('/api') ? endpoint : `${endpoint}/api`;
+  const userResponse = await fetch(`${apiBase}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'local',
+      display_name: 'Local User',
+      provider: 'local',
+      provider_id: annotation.user_id || 'local-user',
+    }),
+  });
+
+  if (!userResponse.ok) {
+    const message = await userResponse.text();
+    throw new Error(message || `User sync failed with ${userResponse.status}`);
+  }
+
+  const user = await userResponse.json();
+  const response = await fetch(`${apiBase}/annotations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: user.id || annotation.user_id || 'local-user',
+      source_url: annotation.source_url,
+      source_type: annotation.source_type,
+      source_title: annotation.source_title,
+      source_domain: annotation.source_domain,
+      source_thumbnail: annotation.source_thumbnail || null,
+      clip_text: annotation.clip_text || null,
+      clip_start_sec: annotation.clip_start_sec || null,
+      clip_end_sec: annotation.clip_end_sec || null,
+      clip_media_path: annotation.clip_media_path || null,
+      commentary: annotation.commentary,
+      tags: annotation.tags || [],
+      local_id: annotation.id,
+      conflict_version: annotation.conflict_version || 1,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Sync failed with ${response.status}`);
+  }
+
+  const remote = await response.json();
+  return saveAnnotation({
+    ...annotation,
+    ...remote,
+    id: annotation.id,
+    is_public: 1,
+    synced_at: new Date().toISOString(),
+  });
+}
+
+export async function postAnnotation(id, settings = defaultSettings) {
+  const annotation = await getAnnotation(id);
+  if (!annotation) return null;
+
+  if (settings.apiEndpoint) {
+    return syncAnnotation(annotation, settings);
+  }
+
+  return markAnnotationPosted(id);
 }
 
 export async function addLocalComment(annotationId, body) {
@@ -134,6 +202,7 @@ export async function exportAnnotation(annotation) {
     '',
     `Tags: ${(annotation.tags || []).join(', ')}`,
   ].filter(Boolean).join('\n');
-  await navigator.clipboard?.writeText(text);
+  if (isTauri) await writeText(text);
+  else await navigator.clipboard?.writeText(text);
   return text;
 }

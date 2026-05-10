@@ -6,6 +6,7 @@ dist/
 *.db-shm
 data/
 target/
+apps/desktop/src-tauri/gen/
 .DS_Store
 *.log
 .env

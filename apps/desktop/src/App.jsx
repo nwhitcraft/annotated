@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import Composer from './components/Composer.jsx';
 import DetailView from './components/DetailView.jsx';
 import LibraryView from './components/LibraryView.jsx';
@@ -39,19 +40,28 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    function onKeyDown(event) {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        setEditing(null);
-        setActiveView('compose');
-      }
+    let unlistenShortcut;
+    const openComposer = () => {
+      setEditing(null);
+      setActiveView('compose');
+    };
+    const onClick = () => setContextMenu(null);
+    const onKeyDown = (event) => {
       if (event.key === 'Escape') setContextMenu(null);
+    };
+
+    if (window.__TAURI_INTERNALS__) {
+      listen('annotated://open-composer', openComposer).then((unlisten) => {
+        unlistenShortcut = unlisten;
+      });
     }
+
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('click', () => setContextMenu(null));
+    window.addEventListener('click', onClick);
     return () => {
+      unlistenShortcut?.();
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('click', () => setContextMenu(null));
+      window.removeEventListener('click', onClick);
     };
   }, []);
 
@@ -86,9 +96,13 @@ export default function App() {
   }
 
   async function post(id) {
-    const posted = await postAnnotation(id);
-    setStatus('Marked as posted');
-    await refresh(posted?.id || id);
+    try {
+      const posted = await postAnnotation(id, settings);
+      setStatus(posted?.synced_at ? 'Posted to feed' : 'Marked as posted');
+      await refresh(posted?.id || id);
+    } catch (error) {
+      setStatus(`Post failed: ${error.message}`);
+    }
   }
 
   async function remove(id) {

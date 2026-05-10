@@ -3,7 +3,8 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -365,6 +366,23 @@ fn save_settings(app: AppHandle, settings: Settings) -> Result<Settings, String>
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    let command_shortcut = shortcut.matches(Modifiers::SUPER | Modifiers::SHIFT, Code::KeyA);
+                    let control_shortcut = shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyA);
+                    if event.state == ShortcutState::Pressed && (command_shortcut || control_shortcut) {
+                        let _ = app.emit("annotated://open-composer", ());
+                    }
+                })
+                .build(),
+        )
+        .setup(|app| {
+            app.global_shortcut().register(Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyA))?;
+            app.global_shortcut().register(Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyA))?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_annotations,
             get_annotation,
