@@ -80,6 +80,13 @@ db.exec(`
     PRIMARY KEY (user_id, annotation_id)
   );
 
+  CREATE TABLE IF NOT EXISTS likes (
+    user_id TEXT NOT NULL REFERENCES users(id),
+    annotation_id TEXT NOT NULL REFERENCES annotations(id) ON DELETE CASCADE,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, annotation_id)
+  );
+
   CREATE TABLE IF NOT EXISTS claims (
     id TEXT PRIMARY KEY,
     annotation_id TEXT NOT NULL REFERENCES annotations(id),
@@ -95,6 +102,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_annotations_source_type ON annotations(source_type);
   CREATE INDEX IF NOT EXISTS idx_comments_annotation ON comments(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+  CREATE INDEX IF NOT EXISTS idx_likes_annotation ON likes(annotation_id);
+  CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC);
 `);
+
+// Add like_count column if missing (safe migration)
+try {
+  db.exec(`ALTER TABLE annotations ADD COLUMN like_count INTEGER DEFAULT 0`);
+} catch { /* column already exists */ }
+
+// Add parent_id to comments for nested replies if missing
+try {
+  db.exec(`ALTER TABLE comments ADD COLUMN parent_id TEXT REFERENCES comments(id)`);
+} catch { /* column already exists */ }
 
 export default db;

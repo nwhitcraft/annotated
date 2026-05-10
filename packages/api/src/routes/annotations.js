@@ -40,13 +40,28 @@ app.get('/:id', (c) => {
   
   if (!annotation) return c.json({ error: 'Not found' }, 404);
 
-  const comments = db.prepare(`
+  // Threaded comments
+  const flat = db.prepare(`
     SELECT c.*, u.username, u.display_name, u.avatar_url 
     FROM comments c JOIN users u ON c.user_id = u.id 
     WHERE c.annotation_id = ? ORDER BY c.created_at ASC
   `).all(id);
+  const byId = {};
+  const roots = [];
+  for (const c of flat) { c.replies = []; byId[c.id] = c; }
+  for (const c of flat) {
+    if (c.parent_id && byId[c.parent_id]) byId[c.parent_id].replies.push(c);
+    else roots.push(c);
+  }
 
-  return c.json({ ...annotation, comments });
+  // Who liked this (recent 5)
+  const recentLikes = db.prepare(`
+    SELECT u.username, u.display_name, u.avatar_url 
+    FROM likes l JOIN users u ON l.user_id = u.id 
+    WHERE l.annotation_id = ? ORDER BY l.created_at DESC LIMIT 5
+  `).all(id);
+
+  return c.json({ ...annotation, comments: roots, recent_likes: recentLikes });
 });
 
 // Create annotation
@@ -101,21 +116,77 @@ app.delete('/:id', (c) => {
   return c.json({ deleted: true });
 });
 
-// Add comment
+// Add comment (supports nested replies via parent_id)
 app.post('/:id/comments', async (c) => {
   const { id: annotation_id } = c.req.param();
-  const { user_id, body: commentBody } = await c.req.json();
+  const { user_id, body: commentBody, parent_id } = await c.req.json();
 
   if (!user_id || !commentBody) return c.json({ error: 'Missing user_id or body' }, 400);
 
+  // Validate parent exists if provided
+  if (parent_id) {
+    const parent = db.prepare('SELECT id FROM comments WHERE id = ? AND annotation_id = ?')
+      .get(parent_id, annotation_id);
+    if (!parent) return c.json({ error: 'Parent comment not found' }, 404);
+  }
+
   const id = nanoid(12);
-  db.prepare('INSERT INTO comments (id, annotation_id, user_id, body) VALUES (?, ?, ?, ?)')
-    .run(id, annotation_id, user_id, commentBody);
+  db.prepare('INSERT INTO comments (id, annotation_id, user_id, body, parent_id) VALUES (?, ?, ?, ?, ?)')
+    .run(id, annotation_id, user_id, commentBody, parent_id || null);
   
   db.prepare('UPDATE annotations SET comment_count = comment_count + 1 WHERE id = ?')
     .run(annotation_id);
 
   return c.json({ id, created: true }, 201);
+});
+
+// Get comments as a threaded tree
+app.get('/:id/comments', (c) => {
+  const { id: annotation_id } = c.req.param();
+  const flat = db.prepare(`
+    SELECT c.*, u.username, u.display_name, u.avatar_url 
+    FROM comments c JOIN users u ON c.user_id = u.id 
+    WHERE c.annotation_id = ? ORDER BY c.created_at ASC
+  `).all(annotation_id);
+
+  // Build tree
+  const byId = {};
+  const roots = [];
+  for (const c of flat) {
+    c.replies = [];
+    byId[c.id] = c;
+  }
+  for (const c of flat) {
+    if (c.parent_id && byId[c.parent_id]) {
+      byId[c.parent_id].replies.push(c);
+    } else {
+      roots.push(c);
+    }
+  }
+  return c.json({ comments: roots, total: flat.length });
+});
+
+// Like/unlike
+app.post('/:id/like', async (c) => {
+  const { id: annotation_id } = c.req.param();
+  const { user_id } = await c.req.json();
+
+  const existing = db.prepare('SELECT 1 FROM likes WHERE user_id = ? AND annotation_id = ?')
+    .get(user_id, annotation_id);
+
+  if (existing) {
+    db.prepare('DELETE FROM likes WHERE user_id = ? AND annotation_id = ?')
+      .run(user_id, annotation_id);
+    db.prepare('UPDATE annotations SET like_count = MAX(0, like_count - 1) WHERE id = ?')
+      .run(annotation_id);
+    return c.json({ liked: false });
+  } else {
+    db.prepare('INSERT INTO likes (user_id, annotation_id) VALUES (?, ?)')
+      .run(user_id, annotation_id);
+    db.prepare('UPDATE annotations SET like_count = like_count + 1 WHERE id = ?')
+      .run(annotation_id);
+    return c.json({ liked: true });
+  }
 });
 
 // Pin/unpin
