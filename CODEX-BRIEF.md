@@ -1,4 +1,12 @@
-# Annotated.com — Codex Frontend Brief
+# Annotated.com — Codex Frontend Brief (v2)
+
+## ⚠️ DESIGN RESET — READ THIS FIRST
+
+**The dark theme is scrapped.** See `design-reference.jpg` in the repo root — that is the new visual target. Match it.
+
+The new direction is **newspaper editorial**. Clean, light, typography-driven. Think The Economist's opinion section online, not a tech dashboard.
+
+---
 
 ## What This Is
 
@@ -8,230 +16,252 @@ Annotated is a social commentary platform for the internet. Users clip moments f
 
 ## Your Job
 
-Build the complete React frontend in `apps/web/`. The backend API is already running and fully functional. Your job is to make the frontend look and feel like a professional product — not a hackathon demo.
+Rebuild the React frontend in `apps/web/` to match the newspaper-editorial design in `design-reference.jpg`. The backend API is running. The existing dark-theme code should be **replaced entirely** — don't try to patch it.
 
-## Design Direction
+---
 
-### Style: Editorial + Social Hybrid
+## Design Direction: Newspaper Editorial
 
-The visual language should combine the **reading quality of Substack** with the **interaction speed of X/Twitter**.
+### The Core Idea
 
-**Why this mix:**
-- Content is commentary on media → needs editorial typography (serif body text, generous line height, proper hierarchy)
-- Interactions are social → needs modern UI chrome (tight cards, smooth transitions, quick reactions)
-- Audience is power users / media / tech → dark theme is correct
+This is a reading product. People come here to read sharp commentary on the internet. The design should feel like opening a beautifully typeset opinion section — not scrolling a social media feed.
+
+### Reference: `design-reference.jpg`
+
+Study it. The key decisions visible in the mockup:
+
+1. **White/light background** — clean, airy, paper-like
+2. **No cards** — annotations separated by thin horizontal ruled lines
+3. **Serif branding** — "annotated" in an elegant serif
+4. **Bold commentary as headline** — the user's take is the loudest element
+5. **De-emphasized metadata** — author, @handle, domain, timestamp are small and muted
+6. **Blockquote treatment** — clipped text is clearly quoted, secondary to the take
+7. **Tiny muted action icons** — heart, comment, share in gray, not colorful
+8. **Massive whitespace** — the content breathes
+9. **Minimal header** — logo left, simple text nav center, small avatar right. No pills, no glass, no glow
 
 ### Reference Products (study these)
-1. **Substack Notes** — card-based commentary feed, clean typography
-2. **Literal.club** — book annotation social network, excellent dark mode
-3. **Readwise Reader** — highlight + note UX, editorial feel
-4. **Arc Browser Boost pages** — clean, dark, editorial
-5. **X/Twitter quote tweets** — the interaction pattern we're emulating
+1. **The Information** — clean editorial web layout
+2. **Stratechery** — single-column essay format, typography-first
+3. **Financial Times web** — warm neutral palette, serif headlines, ruled lines
+4. **Matter (old Medium long-form)** — reading-focused, generous whitespace
+5. **Substack** — the newsletter reading experience (not the social feed)
 
 ### Color System
 ```
---bg-primary:     #09090b     (near-black background)
---bg-card:        #111113     (elevated surfaces)
---bg-elevated:    #18181b     (modals, popovers)
---bg-hover:       #1e1e22     (interactive hover)
---border:         #27272a     (default borders)
---border-subtle:  #1e1e22     (light dividers)
+--bg-primary:     #ffffff     (or very slightly warm: #FAFAF8)
+--bg-surface:     #f7f7f5     (subtle section backgrounds if needed)
+--bg-hover:       #f0f0ee     (interactive hover)
+--border:         #e5e5e3     (default borders, ruled lines)
+--border-subtle:  #eeeeec     (lighter dividers)
 
---text-primary:   #fafafa     (headings, primary content)
---text-secondary: #a1a1aa     (descriptions, metadata)
---text-tertiary:  #71717a     (timestamps, muted labels)
+--text-primary:   #1a1a1a     (headings, commentary — near black)
+--text-secondary: #6b6b6b     (descriptions, metadata)
+--text-tertiary:  #999999     (timestamps, muted labels)
 
---accent:         #6366f1     (indigo — primary brand)
---accent-hover:   #818cf8     (hover state)
---accent-glow:    rgba(99, 102, 241, 0.15)  (focus rings, glows)
+--accent:         #6366f1     (indigo — used SPARINGLY: links, active nav only)
+--accent-hover:   #4f46e5     (hover state)
 
---success:        #22c55e
---danger:         #ef4444
---warning:        #f59e0b
+--danger:         #dc2626     (errors only)
 
-Type badges:
-  article:  bg rgba(96, 165, 250, 0.1),  text #60a5fa (blue)
-  youtube:  bg rgba(248, 113, 113, 0.1), text #f87171 (red)
-  podcast:  bg rgba(167, 139, 250, 0.1), text #a78bfa (purple)
+Source type colors (muted, editorial):
+  article:  #2563eb  (blue, text only — no colored background pills)
+  youtube:  #dc2626  (red, text only)
+  podcast:  #7c3aed  (purple, text only)
 ```
 
-### Typography
-```
-UI text:    Inter (sans-serif) — navigation, buttons, labels, metadata
-Body text:  Newsreader or Source Serif 4 (serif) — commentary, clip text, comments
-Code/mono:  JetBrains Mono or SF Mono — URLs, timestamps
+### Typography — THIS IS EVERYTHING
 
-Heading sizes:   32/24/20/16px, weight 600-700, letter-spacing -0.02em to -0.03em
-Body:            15-16px, line-height 1.65-1.7
-Small/meta:      12-13px
+The typography makes or breaks this design. Get it right.
+
+```
+Branding:     A proper serif — Newsreader, Playfair Display, or Lora
+              Used for: the "annotated" wordmark
+
+Commentary:   Newsreader or Source Serif 4 (serif)
+              Size: 18-20px, weight 600-700, line-height 1.5
+              THIS IS THE HEADLINE OF EVERY ANNOTATION — bold, prominent
+
+Clip/Quote:   Same serif, 16px, italic, line-height 1.7
+              Indented or with a subtle left rule
+
+UI chrome:    Inter (sans-serif) — navigation, buttons, labels, metadata
+              Size: 13-14px, weight 400-600
+
+Metadata:     Inter, 12-13px, weight 400, color: --text-tertiary
+              Author name can be 500 weight
+
+Mono:         JetBrains Mono or SF Mono — source domains, timestamps
+              Size: 11-12px
 ```
 
-### Spacing
+**Load from Google Fonts in index.html:**
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
 ```
---space-xs:   4px
---space-sm:   8px
---space-md:   12px
---space-lg:   16px
---space-xl:   24px
---space-2xl:  32px
---space-3xl:  48px
 
-Cards:         padding 20-24px, border-radius 12px
-Buttons:       padding 8-12px 16-20px, border-radius 8px
-Input fields:  padding 10-12px, border-radius 8px
+### Layout & Spacing
+
+```
+Content column:     max-width 680px, centered
+                    Generous margin: min 24px on mobile, auto on desktop
+
+Between annotations: 1px solid var(--border) horizontal line
+                     padding: 28-32px top and bottom per annotation
+                     NO cards, NO shadows, NO border-radius on items
+
+Header height:      56-60px, simple bottom border, NOT sticky (or sticky with very subtle border only)
+                    No frosted glass, no blur, no semi-transparent background
+
+Section spacing:    48-64px between major sections
 ```
 
 ### Key Design Rules
-1. **No harsh white text on pure black.** Use zinc-50 (#fafafa) on zinc-950 (#09090b)
-2. **Borders should be barely visible.** 1px solid rgba(255,255,255,0.06)
-3. **Cards use subtle elevation.** Thin border + very subtle box-shadow, NOT heavy drop shadows
-4. **Frosted glass header.** `backdrop-filter: blur(12px)` with semi-transparent background
-5. **Smooth transitions everywhere.** 150ms ease for hovers, 200ms for state changes
-6. **Content width max 680px** for annotation detail; feed can go 720px
-7. **Generous whitespace.** When in doubt, add more space
+
+1. **NO card borders or shadows on annotation items.** Use thin horizontal ruled lines only
+2. **NO colored badges or pills.** Source type is indicated by a small colored dot or text only
+3. **NO dark backgrounds anywhere.** This is a light, airy, newspaper layout
+4. **NO frosted glass, glow effects, or gradients.** Clean and flat
+5. **The commentary is the HEADLINE** — make it the biggest, boldest thing per annotation
+6. **Metadata is quiet** — author name, handle, domain, timestamp should not compete with the commentary
+7. **Blockquotes are elegant** — thin left border or slight indent, italic serif, not a heavy card
+8. **Action icons are muted gray** — not colorful, not attention-grabbing. They appear on hover or always but very subdued
+9. **Whitespace is a feature** — when in doubt, add more space
+10. **Mobile: single column, same elegance** — responsive means the typography still sings on a small screen
+
+---
 
 ## Pages to Build
 
 ### 1. Feed (`/`)
-The home page. A scrolling timeline of annotations from everyone.
 
-**Layout:**
-- Hero section: "✦ What the internet is talking about" + subtitle
-- Tab bar: Latest | Trending | Articles | Videos | Podcasts | Following
-- Annotation cards in a single column (max-width 720px, centered)
-- Infinite scroll or "Load more" button
+**Layout (match the reference image):**
+- Minimal header: "annotated" serif wordmark left, text links center (Feed · Annotate · Profile), small avatar right
+- Subtitle or section label (optional): something understated like "Latest commentary"
+- Tab row: Latest | Trending | Articles | Videos | Podcasts | Following — simple text tabs with underline active state, not pills
+- List of annotations separated by thin ruled lines (NOT cards)
 
-**Each annotation card shows:**
-- User avatar + display name + @username + time ago
-- Source badge (📰 Article / ▶ Video / 🎙 Podcast) + source domain
-- Source title (clickable, links to original)
-- The clip: highlighted text for articles, time range for video/audio
-- Commentary text (serif font, generous line height)
-- Action bar: ♡ Like (count) | 💬 Comment (count) | 📌 Pin | 🔗 Share
+**Each annotation shows:**
+- **Author line** (small, muted): Display name · @username · source domain · time ago
+- **Source title** (linked, medium weight): clickable title of the source article/video/podcast
+- **Clip text** (if article): blockquote in italic serif — the passage they highlighted
+- **Commentary** (BOLD, LARGE serif): the user's take — this is the headline
+- **Action row** (muted, small): ♡ count · 💬 count · share icon — gray, understated
 
 **Interaction:**
-- Clicking a card opens the detail page (`/a/:id`)
-- Like/pin toggles are instant (optimistic update)
-- "Following" tab shows only annotations from followed users
+- Clicking anywhere on an annotation opens detail (`/a/:id`)
+- Like toggle is optimistic
+- "Following" tab filters to followed users
 
 ### 2. Annotation Detail (`/a/:id`)
-The full annotation with comments thread.
 
 **Layout:**
-- Back link to feed
-- Full annotation card (same as feed but expanded)
-- If video/audio: embedded player or clip playback UI
-- If article: the highlighted passage in a styled blockquote
+- Back link: "← Feed" or just "←"
+- Full annotation (same structure as feed but more room to breathe)
+- Embedded media if video/podcast: clean player
 - Divider
-- Comment thread (threaded/nested)
-- Comment input box at bottom
+- **Comment thread** — this should feel like reading replies in a comments section of a good publication
 
-**Comment thread UX — THIS IS CRITICAL:**
-- Comments feel like social media replies, not blog comments
-- Each comment: avatar + name + time + text
-- Reply button on each comment → indented reply with connecting line
-- Max nesting: 3 levels deep, then flatten
-- Replies are collapsible ("Show N more replies")
-- Comment input: clean textarea, serif font, "Reply" button
-- Posting is instant (optimistic), shows immediately
+**Comment thread:**
+- Each comment: small avatar or initial + name + time + body text
+- Reply button opens inline textarea (indented under the comment)
+- Nested replies with a thin vertical line on the left connecting them
+- Max 3 levels of nesting, then flatten
+- Collapsible threads ("Show N more replies")
+- Comment input at top: clean textarea, "Post" button
+- Optimistic posting
 
-**Also include:**
-- "File a claim" button (small, secondary, at bottom) — opens inline form
+**Also:**
+- "File a claim" link (small, at very bottom) → inline form
 - Share button → copies link
 
 ### 3. Profile (`/u/:username`)
-User's profile and their annotation history.
 
 **Layout:**
-- Profile header: avatar (large) + display name + @username + bio
-- Stats row: N annotations | N followers | N following
-- Follow/Unfollow button (if not own profile)
-- Tab bar: Annotations | Liked
-- List of their annotation cards
+- Clean header: name (large serif) + @username + bio
+- Stats: N annotations · N followers · N following (inline, muted)
+- Follow/Unfollow button (simple outline button)
+- Tabs: Annotations | Liked (underline style, not pills)
+- Their annotations in the same ruled-line list format
 
 ### 4. New Annotation (`/new`)
-Create a new annotation. This is the core product flow.
 
-**Flow:**
-1. Paste URL → hit "Detect" → API auto-detects source type
-2. Based on type:
-   - **Article:** Show extracted title. User pastes/types the key passage to highlight
-   - **YouTube:** Show title + thumbnail. User sets start/end time (max 90 seconds)
-   - **Podcast:** Show title. User sets start/end time (max 90 seconds)
-3. User writes their commentary (serif textarea, feels like writing a post)
-4. Hit "Post" → redirects to the annotation detail page
+**Stepped flow:**
+1. **URL input** — clean text field, "Detect" button. Paste a URL, hit detect
+2. **Source detected** — shows source type + title. For articles: textarea to paste the key passage. For video/podcast: start/end time inputs (max 90 sec)
+3. **Commentary** — large serif textarea. This should feel premium, like writing in a good editor. Generous size, proper font
+4. **Post** → redirects to the annotation detail
 
-**Design notes:**
-- Stepped flow (URL → Clip → Commentary → Post) with visual progress
-- Each step in a card
-- The commentary textarea should feel premium — proper font, good size, not cramped
+**Design:** Steps separated clearly, minimal chrome, the writing textarea is the star
 
-### 5. Login/Auth (`/login`)
-Simple, clean auth page.
+### 5. Login (`/login`)
 
 **Layout:**
-- Centered card with logo
-- "Sign in with Google" button (Google-branded)
-- "Sign in with X" button (X-branded)
-- Subtitle: "Join the conversation"
-- Footer: "By signing in you agree to Terms & Privacy"
+- Centered, simple
+- "annotated" wordmark
+- "Sign in to join the conversation"
+- "Continue with Google" button (clean, outline style)
+- "Continue with X" button (clean, outline style)
+- Small footer text: terms + privacy
 
-**Note:** OAuth endpoints are not yet live. Build the UI and have the buttons call `GET /api/auth/google` and `GET /api/auth/twitter` — the backend will handle the redirect flow once wired.
+**Note:** Buttons call `GET /api/auth/google` and `GET /api/auth/twitter` — backend handles redirect
 
-## Components to Build
+---
 
-### AnnotationCard
-The most important component. Used on feed, profile, and detail pages.
+## Components
 
-Props: `annotation` object, `compact` boolean (for feed vs detail), `onLike`, `onPin`
+### AnnotationCard → AnnotationItem
+Rename to reflect that it's NOT a card. It's a list item in a ruled feed.
+
+Props: `annotation`, `compact` (feed) vs `expanded` (detail)
 
 ### CommentThread
-Recursive threaded comments.
-
-Props: `comments` array (already nested from API), `onReply`, `onPost`
+Recursive nested comments. Vertical connecting lines. Clean, readable.
 
 ### CommentInput
-Textarea + post button. Used at top level and as inline reply.
+Textarea + button. Used at top level and inline reply.
 
 ### UserAvatar
-Circular avatar with fallback to first-letter initial.
+Small circle with fallback initial. Keep it small and subtle.
 
-### SourceBadge
-Colored pill showing source type (article/youtube/podcast).
+### SourceType
+Just a colored text label or small dot — NOT a pill badge.
 
-### ActionBar
-Like + Comment + Pin + Share buttons with counts.
+### ActionBar → ActionRow
+Muted gray icons with counts. Horizontal row, understated.
 
-### Layout/Nav
-Sticky top nav with frosted glass effect. Logo left, nav links center, user avatar right.
+### Layout
+Header + main. Header is simple and clean — no glass, no gradients.
+
+---
 
 ## API Reference
 
-Base URL: `/api` (proxied by Vite — already configured in `vite.config.js`)
+Base URL: `/api` (Vite proxy to :3080 already configured)
 
 ### Feed
-- `GET /api/feed` — latest annotations (query: `?type=article|youtube|podcast`, `?limit=`, `?offset=`)
+- `GET /api/feed` — latest (query: `?type=article|youtube|podcast`, `?limit=`, `?offset=`)
 - `GET /api/feed/trending` — trending (most liked/pinned in 7 days)
 - `GET /api/feed/following/:userId` — following feed
 
 ### Annotations
-- `GET /api/annotations/:id` — single annotation with nested comments + recent_likes
+- `GET /api/annotations/:id` — annotation with nested comments + recent_likes
 - `POST /api/annotations` — create (body: user_id, source_url, source_type, source_title, source_domain, clip_text, clip_start_sec, clip_end_sec, commentary)
-- `PATCH /api/annotations/:id` — update (commentary, is_public)
-- `DELETE /api/annotations/:id`
 - `POST /api/annotations/:id/like` — toggle like (body: user_id) → { liked: bool }
 - `POST /api/annotations/:id/pin` — toggle pin (body: user_id) → { pinned: bool }
-- `POST /api/annotations/:id/comments` — add comment (body: user_id, body, parent_id?) → { id }
-- `GET /api/annotations/:id/comments` — threaded comment tree → { comments: [...], total }
+- `POST /api/annotations/:id/comments` — add comment (body: user_id, body, parent_id?)
+- `GET /api/annotations/:id/comments` — threaded tree → { comments: [...], total }
 
 ### Users
 - `GET /api/users/:username` — profile + stats
 - `GET /api/users/:username/annotations` — user's annotations
-- `POST /api/users/:id/follow` — toggle follow (body: user_id) → { following: bool }
+- `POST /api/users/:id/follow` — toggle follow (body: user_id)
 
 ### Clip Detection
-- `POST /api/clip/detect` — detect source type from URL (body: url) → { type, title, domain }
-- `POST /api/clip/article` — extract article metadata (body: url) → { title, excerpt, content, author, domain }
+- `POST /api/clip/detect` — detect type from URL (body: url) → { type, title, domain }
+- `POST /api/clip/article` — extract article (body: url) → { title, excerpt, content, author, domain }
 
 ### Health
 - `GET /api/health` → { status: "ok", version: "0.1.0" }
@@ -267,36 +297,25 @@ Base URL: `/api` (proxied by Vite — already configured in `vite.config.js`)
 
 ## Tech Stack
 - React 18+ with react-router-dom v7
-- Vite as build tool (already configured)
-- No CSS framework — write clean CSS (CSS custom properties already set up in `src/styles/global.css`)
-- Google Fonts: Inter (400,500,600,700) + Newsreader (400,400i,600)
-
-## What Already Exists
-- `apps/web/package.json` — dependencies declared
-- `apps/web/vite.config.js` — proxy to API on :3080
-- `apps/web/src/styles/global.css` — design tokens and base styles
-- `apps/web/src/main.jsx` — React entry point
-- `apps/web/src/App.jsx` — Router with route stubs
-- `apps/web/src/components/Layout.jsx` — Shell with nav
-- `apps/web/src/components/AnnotationCard.jsx` — Basic card (needs redesign)
-- `apps/web/src/pages/Feed.jsx` — Basic feed (needs redesign)
-- `apps/web/src/pages/AnnotationPage.jsx` — Basic detail (needs redesign)
-- `apps/web/src/pages/Profile.jsx` — Basic profile (needs redesign)
-- `apps/web/src/pages/NewAnnotation.jsx` — Basic create form (needs redesign)
-
-**You can rewrite any of these files completely.** The existing code is scaffolding, not sacred. Make it look great.
+- Vite (already configured)
+- **No CSS framework** — clean CSS with custom properties
+- Google Fonts: Inter + Newsreader (see font loading snippet above)
+- No state management libraries — React state + context
 
 ## Quality Bar
-- This needs to look like it was built by a funded startup, not a weekend project
-- Smooth animations and transitions
-- Proper loading states (skeleton screens, not spinners)
-- Error handling (empty states, 404s, network errors)
-- Mobile responsive (works on phone, great on tablet, excellent on desktop)
-- Accessible (proper focus states, ARIA labels, keyboard navigation)
+- Must look like a product from a well-funded editorial startup
+- Clean, restrained, confident design
+- Typography must be beautiful — this is a reading product
+- Proper loading states (subtle skeleton shimmer, not spinners)
+- Error handling (empty states, network errors)
+- Mobile responsive (elegant on phone, perfect on desktop)
+- Accessible (focus states, ARIA labels, keyboard nav)
 
 ## Don't Do
 - Don't touch anything outside `apps/web/`
 - Don't modify the API
-- Don't add a CSS framework (Tailwind, etc.) — write clean CSS
-- Don't add state management libraries (Redux, Zustand) — React state + context is enough
-- Don't implement actual OAuth logic — just build the UI that calls the auth endpoints
+- Don't add CSS frameworks (Tailwind, etc.)
+- Don't add state management libraries
+- Don't use dark backgrounds, card shadows, frosted glass, or glow effects
+- Don't make the action icons colorful or attention-grabbing
+- Don't implement actual OAuth logic — just build UI that calls auth endpoints
