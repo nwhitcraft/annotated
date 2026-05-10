@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import Composer from './components/Composer.jsx';
 import DetailView from './components/DetailView.jsx';
 import LibraryView from './components/LibraryView.jsx';
@@ -39,19 +40,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    function onKeyDown(event) {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        setEditing(null);
-        setActiveView('compose');
+    let unlisten = null;
+    (async () => {
+      try {
+        unlisten = await listen('shortcut:composer-toggle', () => {
+          setEditing(null);
+          setActiveView('compose');
+        });
+      } catch (err) {
+        console.error('Failed to register global shortcut listener:', err);
       }
-      if (event.key === 'Escape') setContextMenu(null);
-    }
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('click', () => setContextMenu(null));
+    })();
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('click', () => setContextMenu(null));
+      if (unlisten) unlisten();
     };
   }, []);
 

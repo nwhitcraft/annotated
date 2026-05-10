@@ -3,7 +3,8 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -365,6 +366,17 @@ fn save_settings(app: AppHandle, settings: Settings) -> Result<Settings, String>
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            let shortcut_str = "CmdOrControl+Shift+A";
+            app.global_shortcut().on_shortcut(shortcut_str, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    let _ = app_handle.emit("shortcut:composer-toggle", true);
+                }
+            })?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_annotations,
             get_annotation,
@@ -372,7 +384,7 @@ pub fn run() {
             delete_annotation,
             post_annotation,
             load_settings,
-            save_settings
+            save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Annotated desktop app");
