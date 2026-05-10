@@ -1,162 +1,104 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AnnotationCard from '../components/AnnotationCard.jsx';
+import { getFeed } from '../lib/api.js';
 
-const TABS = [
+const tabs = [
   { key: 'latest', label: 'Latest' },
   { key: 'trending', label: 'Trending' },
-  { key: 'article', label: '📰 Articles' },
-  { key: 'youtube', label: '▶ Videos' },
-  { key: 'podcast', label: '🎙 Podcasts' },
+  { key: 'article', label: 'Articles' },
+  { key: 'youtube', label: 'Videos' },
+  { key: 'podcast', label: 'Podcasts' },
+  { key: 'following', label: 'Following' },
 ];
 
+function SkeletonFeed() {
+  return (
+    <>
+      {[0, 1, 2].map((item) => (
+        <div className="annotation-card skeleton-card" key={item}>
+          <div className="skeleton-line w-40" />
+          <div className="skeleton-line w-90" />
+          <div className="skeleton-block" />
+          <div className="skeleton-line w-70" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function Feed() {
-  const [tab, setTab] = useState('latest');
+  const [activeTab, setActiveTab] = useState('latest');
   const [items, setItems] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(6);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadFeed();
-  }, [tab]);
-
-  async function loadFeed() {
+    let cancelled = false;
     setLoading(true);
-    try {
-      let url = '/api/feed';
-      if (tab === 'trending') url = '/api/feed/trending';
-      else if (['article', 'youtube', 'podcast'].includes(tab)) url = `/api/feed?type=${tab}`;
-      
-      const res = await fetch(url);
-      const data = await res.json();
-      setItems(data.items || []);
-    } catch {
-      setItems([]);
-    }
-    setLoading(false);
-  }
+    setError('');
+    setVisibleCount(6);
+    getFeed(activeTab)
+      .then((data) => {
+        if (!cancelled) setItems(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Could not load feed');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  const visibleItems = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
 
   return (
-    <div className="feed-page container" style={{ maxWidth: 960 }}>
-      {/* Hero */}
-      <div className="feed-hero">
-        <h1 className="feed-hero-title">
-          <span className="feed-hero-mark">✦</span> What the internet is talking about
-        </h1>
-        <p className="feed-hero-sub text-secondary">
-          Clips, commentary, and context from people worth following.
-        </p>
-      </div>
+    <div className="feed-page page-wrap">
+      <section className="feed-hero">
+        <span className="eyebrow">Live commentary layer</span>
+        <h1>What the internet is talking about</h1>
+        <p>Clip the moment, publish the take, and let the thread form around the source instead of around a lonely link.</p>
+      </section>
 
-      {/* Tabs */}
-      <div className="feed-tabs">
-        {TABS.map(t => (
+      <div className="tabbar" role="tablist" aria-label="Feed filters">
+        {tabs.map((tab) => (
           <button
-            key={t.key}
-            className={`feed-tab ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
+            key={tab.key}
+            className={activeTab === tab.key ? 'active' : ''}
+            onClick={() => setActiveTab(tab.key)}
+            role="tab"
+            aria-selected={activeTab === tab.key}
           >
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Feed */}
+      {error && <div className="notice notice-danger">{error}</div>}
+
       <div className="feed-list">
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="card" style={{ height: 200 }}>
-              <div className="skeleton" style={{ height: 14, width: '60%', marginBottom: 12 }} />
-              <div className="skeleton" style={{ height: 48, marginBottom: 12 }} />
-              <div className="skeleton" style={{ height: 14, width: '80%' }} />
-            </div>
-          ))
-        ) : items.length === 0 ? (
-          <div className="feed-empty">
-            <div className="feed-empty-icon">✦</div>
-            <h3>No annotations yet</h3>
-            <p className="text-secondary">Be the first to clip something.</p>
+          <SkeletonFeed />
+        ) : visibleItems.length === 0 ? (
+          <div className="empty-state">
+            <strong>No annotations here yet</strong>
+            <p>Fresh clips will land here as soon as people start arguing with the internet.</p>
           </div>
         ) : (
-          items.map(item => <AnnotationCard key={item.id} annotation={item} />)
+          visibleItems.map((annotation) => <AnnotationCard key={annotation.id} annotation={annotation} />)
         )}
       </div>
 
-      <style>{`
-        .feed-hero {
-          text-align: center;
-          padding: var(--space-3xl) 0 var(--space-2xl);
-        }
-        
-        .feed-hero-title {
-          font-size: 32px;
-          font-weight: 700;
-          letter-spacing: -0.03em;
-          line-height: 1.2;
-        }
-        
-        .feed-hero-mark {
-          color: var(--accent);
-        }
-        
-        .feed-hero-sub {
-          margin-top: var(--space-sm);
-          font-size: 16px;
-        }
-        
-        .feed-tabs {
-          display: flex;
-          gap: var(--space-xs);
-          padding-bottom: var(--space-lg);
-          border-bottom: 1px solid var(--border-subtle);
-          margin-bottom: var(--space-xl);
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        .feed-tab {
-          padding: 8px 16px;
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--text-tertiary);
-          border-radius: var(--radius-full);
-          white-space: nowrap;
-          transition: all var(--transition-normal);
-        }
-        
-        .feed-tab:hover {
-          color: var(--text-primary);
-          background: var(--bg-hover);
-        }
-        
-        .feed-tab.active {
-          color: var(--text-primary);
-          background: var(--bg-elevated);
-          border: 1px solid var(--border);
-        }
-        
-        .feed-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-lg);
-          max-width: var(--content-width);
-          margin: 0 auto;
-        }
-        
-        .feed-empty {
-          text-align: center;
-          padding: var(--space-3xl) 0;
-        }
-        
-        .feed-empty-icon {
-          font-size: 48px;
-          color: var(--accent);
-          margin-bottom: var(--space-md);
-        }
-        
-        .feed-empty h3 {
-          font-size: 18px;
-          margin-bottom: var(--space-sm);
-        }
-      `}</style>
+      {!loading && visibleCount < items.length && (
+        <div className="load-more">
+          <button className="btn btn-secondary" onClick={() => setVisibleCount((count) => count + 6)}>
+            Load more
+          </button>
+        </div>
+      )}
     </div>
   );
 }
