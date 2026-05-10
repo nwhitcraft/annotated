@@ -8,6 +8,7 @@ import feed from './routes/feed.js';
 import users from './routes/users.js';
 import claims from './routes/claims.js';
 import clip from './routes/clip.js';
+import auth from './routes/auth.js';
 
 const app = new Hono();
 
@@ -19,6 +20,7 @@ app.use('*', logger());
 app.get('/api/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
 
 // Routes
+app.route('/api/auth', auth);
 app.route('/api/annotations', annotations);
 app.route('/api/feed', feed);
 app.route('/api/users', users);
@@ -26,7 +28,11 @@ app.route('/api/claims', claims);
 app.route('/api/clip', clip);
 
 // Serve clip media files
-app.use('/media/*', serveStatic({ root: './data' }));
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const mediaRoot = join(__dirname, '..', 'data');
+app.use('/media/*', serveStatic({ root: mediaRoot }));
 
 const PORT = Number(process.env.PORT) || 3080;
 
