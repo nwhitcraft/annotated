@@ -1,9 +1,11 @@
 const API_BASE = 'http://localhost:3080';
 const USER_ID = 'demo-user'; // TODO: replace with real auth
+const STORAGE_KEY = 'annotated_following';
 
 let currentClip = null;
 let currentPage = null;
 let currentUrl = null;
+let following = []; // user_ids we follow
 
 const statusEl = document.getElementById('status');
 const clipEl = document.getElementById('clip');
@@ -19,6 +21,28 @@ const urlRowEl = document.getElementById('url-row');
 const relatedEl = document.getElementById('related');
 const relatedListEl = document.getElementById('related-list');
 
+// ── Follow list (local) ──────────────────────────────────────
+
+async function loadFollowing() {
+  try {
+    const stored = await chrome.storage.local.get(STORAGE_KEY);
+    following = stored[STORAGE_KEY] || [];
+  } catch {
+    following = [];
+  }
+}
+
+async function toggleFollow(userId) {
+  if (following.includes(userId)) {
+    following = following.filter((id) => id !== userId);
+  } else {
+    following.push(userId);
+  }
+  await chrome.storage.local.set({ [STORAGE_KEY]: following });
+  // Reload related annotations to re-sort
+  if (currentUrl) loadRelatedAnnotations(currentUrl);
+}
+
 // ── Message Handling ──────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -31,8 +55,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       <span class="status-type ${msg.sourceType}">${msg.sourceType}</span>
       <span style="margin-left:8px;color:var(--text-dim)">${truncate(msg.title, 50)}</span>
     `;
-    // Load related annotations for this page
-    loadRelatedAnnotations(msg.url);
+    loadFollowing().then(() => loadRelatedAnnotations(msg.url));
   }
 
   // Text selected from content script (relayed via background)
@@ -162,31 +185,59 @@ async function loadRelatedAnnotations(url) {
     const data = await res.json();
     const allItems = data.items || [];
 
-    // Filter to annotations on the same source URL
-    const related = allItems.filter(
+    // Filter to annotations on the same source URL (exclude self)
+    const allRelated = allItems.filter(
       (a) => a.source_url === url && a.user_id !== USER_ID
     );
 
-    if (related.length === 0) {
+    if (allRelated.length === 0) {
       relatedEl.style.display = 'none';
       return;
     }
 
+    // Split into followed vs others
+    const followed = allRelated.filter((a) => following.includes(a.user_id));
+    const others = allRelated.filter((a) => !following.includes(a.user_id));
+
     relatedEl.style.display = 'block';
-    relatedListEl.innerHTML = related.map((a) => `
-      <div class="recent-item">
-        <div class="recent-item-quote">❝ ${truncate(escapeHtml(a.clip_text || a.commentary), 100)}</div>
-        <div class="recent-item-commentary">${escapeHtml(truncate(a.commentary, 140))}</div>
-        <div style="margin-top:4px;font-size:11px;color:var(--text-muted)">
-          ${a.display_name || a.username || 'anon'} · ${a.source_domain || ''}
-          ${a.like_count ? ` · ♥ ${a.like_count}` : ''}
-          ${a.comment_count ? ` · 💬 ${a.comment_count}` : ''}
-        </div>
-      </div>
-    `).join('');
+    let html = '';
+
+    // Section 1: Following (top)
+    if (followed.length > 0) {
+      html += `<div class="related-header">Following</div>`;
+      html += followed.map((a) => renderRelatedItem(a)).join('');
+    }
+
+    // Section 2: Others (most recent)
+    if (others.length > 0) {
+      html += `<div class="related-header">On this page</div>`;
+      html += others.map((a) => renderRelatedItem(a)).join('');
+    }
+
+    relatedListEl.innerHTML = html;
   } catch (err) {
     console.warn('Failed to load related annotations:', err);
   }
+}
+
+function renderRelatedItem(a) {
+  const name = a.display_name || a.username || 'anon';
+  const isFollowing = following.includes(a.user_id);
+  const followLabel = isFollowing ? 'Unfollow' : 'Follow';
+  const followClass = isFollowing ? 'follow-btn-following' : 'follow-btn';
+
+  return `
+    <div class="recent-item">
+      <div class="recent-item-quote">❝ ${truncate(escapeHtml(a.clip_text || a.commentary), 100)}</div>
+      <div class="recent-item-commentary">${escapeHtml(truncate(a.commentary, 140))}</div>
+      <div style="margin-top:4px;font-size:11px;color:var(--text-muted)">
+        ${name} · ${a.source_domain || ''}
+        ${a.like_count ? ` · ♥ ${a.like_count}` : ''}
+        ${a.comment_count ? ` · 💬 ${a.comment_count}` : ''}
+        <button class="${followClass}" data-user-id="${escapeHtml(a.user_id)}" style="margin-left:8px;padding:2px 8px;border:1px solid var(--border);border-radius:0;background:#fff;font-size:10px;cursor:pointer;font-weight:500">${followLabel}</button>
+      </div>
+    </div>
+  `;
 }
 
 // ── Recent Annotations ──────────────────────────────────────
@@ -284,6 +335,16 @@ function detectSourceType(url) {
   if (/spotify\.com|podcasts\.apple\.com|overcast\.fm/i.test(url)) return 'podcast';
   return 'article';
 }
+
+// ── Follow button clicks (delegation) ────────────────────────
+
+relatedListEl.addEventListener('click', (e) => {
+  if (e.target.classList.contains('follow-btn') || e.target.classList.contains('follow-btn-following')) {
+    e.preventDefault();
+    const userId = e.target.dataset.userId;
+    if (userId) toggleFollow(userId);
+  }
+});
 
 // ── Init ─────────────────────────────────────────────────────
 

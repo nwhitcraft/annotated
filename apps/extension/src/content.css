@@ -56,11 +56,8 @@ body.annotated-active .annotated-highlight {
   max-width: calc(100vw - 32px);
   background: #fafaf8;
   border: 1px solid #deded9;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 16px;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.12),
-    0 1px 4px rgba(0, 0, 0, 0.08);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   animation: annotated-fade-in 0.15s ease;
 }
@@ -200,9 +197,6 @@ body.annotated-active .annotated-highlight {
   border: 1px solid #deded9;
   border-radius: 0;
   padding: 16px;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.12),
-    0 1px 4px rgba(0, 0, 0, 0.08);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   animation: annotated-fade-in 0.2s ease;
 }
@@ -303,4 +297,23 @@ body.annotated-active .annotated-highlight {
 .annotated-timeline-btn-clip:hover:not(:disabled) {
   background: #1a1a1a;
   color: #fff;
+}
+
+/* ── Follow buttons (sidepanel) ─────────────────────────────── */
+
+.follow-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.follow-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.follow-btn-following {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.follow-btn-following:hover {
+  border-color: var(--error);
+  color: var(--error);
 }
