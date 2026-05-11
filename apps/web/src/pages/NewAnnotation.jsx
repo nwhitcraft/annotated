@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import QuoteAnnotationBubble from '../components/QuoteAnnotationBubble.jsx';
 import SourceType from '../components/SourceType.jsx';
 import { createAnnotation, detectClip } from '../lib/api.js';
 import { domainFromUrl, formatTime } from '../lib/format.js';
@@ -147,13 +148,24 @@ export default function NewAnnotation() {
         {detected && (
           <section className="form-section">
             <label htmlFor="commentary">Commentary</label>
-            <textarea id="commentary" className="field commentary-field" placeholder="Write the take people should respond to..." value={commentary} onChange={(event) => setCommentary(event.target.value)} />
+            {detected.type === 'article' && clipText.trim() ? (
+              <QuoteAnnotationBubble
+                quote={`“${clipText.trim()}”`}
+                value={commentary}
+                onChange={setCommentary}
+                placeholder="Write the take people should respond to..."
+                disabled={posting || activeStep < 3}
+                textareaId="commentary"
+              />
+            ) : (
+              <textarea id="commentary" className="field commentary-field" placeholder="Write the take people should respond to..." value={commentary} onChange={(event) => setCommentary(event.target.value)} />
+            )}
           </section>
         )}
 
         {error && <p className="notice error">{error}</p>}
 
-        {detected && (
+        {detected && !(detected.type === 'article' && clipText.trim()) && (
           <button className="button button-solid post-button" type="submit" disabled={posting || activeStep < 3}>
             {posting ? 'Posting' : 'Post annotation'}
           </button>

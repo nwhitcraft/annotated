@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authUrl, setCurrentUserId, setToken } from '../lib/api.js';
+import AuthButtons from '../components/AuthButtons.jsx';
+import { setCurrentUserId, setToken } from '../lib/api.js';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,13 +13,9 @@ export default function Login() {
     if (token) {
       setToken(token);
       setCurrentUserId(userId);
-      navigate('/', { replace: true });
+      navigate('/feed', { replace: true });
     }
   }, [navigate]);
-
-  function go(provider) {
-    window.location.href = authUrl(provider);
-  }
 
   return (
     <main className="login-page">
@@ -28,8 +25,7 @@ export default function Login() {
           <h1>Sign in to join the conversation</h1>
           <p>Clip sources, write commentary, and reply with context.</p>
         </div>
-        <button className="oauth-button" onClick={() => go('google')}>Continue with Google</button>
-        <button className="oauth-button" onClick={() => go('twitter')}>Continue with X</button>
+        <AuthButtons compact />
         <footer>By continuing, you agree to Terms and Privacy.</footer>
       </section>
     </main>

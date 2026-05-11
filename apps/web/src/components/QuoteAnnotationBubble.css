@@ -1,0 +1,93 @@
+.quote-annotation-bubble {
+  position: relative;
+  width: 100%;
+  min-height: 286px;
+  display: grid;
+  grid-template-rows: auto minmax(118px, 1fr) auto;
+  gap: 18px;
+  padding: clamp(24px, 5vw, 42px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 253, 0.78);
+  box-shadow: 0 18px 44px rgba(26, 26, 26, 0.04);
+}
+
+.quote-annotation-bubble__quote {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 2.2vw, 30px);
+  font-style: italic;
+  line-height: 1.32;
+}
+
+.quote-annotation-bubble__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.quote-annotation-bubble__textarea {
+  width: 100%;
+  min-height: 118px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.45;
+  outline: none;
+  resize: vertical;
+}
+
+.quote-annotation-bubble__textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.quote-annotation-bubble__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.quote-annotation-bubble__button {
+  min-height: 34px;
+  padding: 0;
+  color: var(--accent-hover);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.quote-annotation-bubble__button:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.quote-annotation-bubble__button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 6px;
+}
+
+@media (max-width: 620px) {
+  .quote-annotation-bubble {
+    min-height: 248px;
+    border-radius: 14px;
+  }
+
+  .quote-annotation-bubble__quote {
+    font-size: 20px;
+  }
+
+  .quote-annotation-bubble__textarea {
+    font-size: 19px;
+  }
+
+  .quote-annotation-bubble__button {
+    font-size: 22px;
+  }
+}
