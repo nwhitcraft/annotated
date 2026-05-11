@@ -68,6 +68,38 @@
     .status-type.youtube::before { background: #dc2626; }
     .status-type.podcast::before { background: #7c3aed; }
 
+    /* ── URL input ── */
+    .url-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .url-input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+      font-size: 12px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      outline: none;
+    }
+    .url-input:focus { border-color: var(--accent); }
+    .url-input::placeholder { color: var(--text-muted); }
+    .url-submit {
+      padding: 8px 12px;
+      border: 1px solid var(--text);
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .url-submit:hover { background: var(--bg-hover); }
 
     /* ── Clip preview ── */
     .clip-preview {
@@ -141,6 +173,43 @@
       line-height: 1.5;
     }
 
+    /* ── Related annotations (same page) ── */
+    .related-header {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-top: 24px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .related-header::before {
+      content: '💬 ';
+    }
+    .related-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .related-item > div:last-child {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .related-item-quote {
+      font-family: 'Newsreader', Georgia, serif;
+      font-style: italic;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+    .related-item-commentary {
+      font-family: 'Newsreader', Georgia, serif;
+      font-weight: 600;
+      color: var(--text);
+    }
+
     /* ── Recent annotations ── */
     .recent-header {
       font-size: 11px;
@@ -181,6 +250,12 @@
     <span class="logo-mark">✦</span> annotated
   </div>
 
+  <!-- Paste URL input -->
+  <div id="url-row" class="url-row">
+    <input id="url-input" class="url-input" type="text" placeholder="Paste a URL to annotate…">
+    <button id="url-submit" class="url-submit">Go</button>
+  </div>
+
   <div id="status" class="status" style="display:none"></div>
   <div id="clip" class="clip-preview" style="display:none"></div>
 
@@ -198,6 +273,13 @@
     <button id="post-btn" class="btn" disabled>✦ Post Annotation</button>
   </div>
 
+  <!-- Related annotations on the same page -->
+  <div id="related" style="display:none">
+    <div class="related-header">On this page</div>
+    <div id="related-list"></div>
+  </div>
+
+  <!-- Recent annotations across all pages -->
   <div id="recent" style="display:none">
     <div class="recent-header">Recent</div>
     <div id="recent-list"></div>

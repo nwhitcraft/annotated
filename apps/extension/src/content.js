@@ -3,11 +3,13 @@
 
 const MAX_CLIP_CHARS = 280;
 const MAX_COMMENTARY_CHARS = 500;
+const MAX_DURATION = 90; // seconds — per spec
 const API_BASE = 'http://localhost:3080';
 
 let annotateMode = false;
 let overlayEl = null;
 let tooltipEl = null;
+let videoTimelineEl = null;
 
 // ── Page Detection ──────────────────────────────────────────────
 
@@ -22,12 +24,178 @@ function detectPage() {
     sourceType: type,
     domain: window.location.hostname.replace(/^www\./, ''),
   });
+
+  // Show video timeline for YouTube/podcast pages
+  if (type === 'youtube' || type === 'podcast') {
+    showVideoTimeline(url, type);
+  }
 }
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
   if (/spotify\.com|podcasts\.apple\.com|overcast\.fm/i.test(url)) return 'podcast';
   return 'article';
+}
+
+// ── Video Timeline (YouTube / Podcast) ──────────────────────────
+
+function showVideoTimeline(url, type) {
+  removeVideoTimeline();
+
+  videoTimelineEl = document.createElement('div');
+  videoTimelineEl.id = 'annotated-timeline';
+  videoTimelineEl.innerHTML = `
+    <div class="annotated-timeline-header">
+      <span class="annotated-timeline-label">Clip this segment</span>
+      <span class="annotated-timeline-duration">0:00 / 0:00</span>
+    </div>
+    <div class="annotated-timeline-track">
+      <div class="annotated-timeline-handle annotated-timeline-handle-start" data-handle="start"></div>
+      <div class="annotated-timeline-range"></div>
+      <div class="annotated-timeline-handle annotated-timeline-handle-end" data-handle="end"></div>
+    </div>
+    <div class="annotated-timeline-controls">
+      <button class="annotated-timeline-btn annotated-timeline-btn-clip" disabled>✦ Clip & Annotate</button>
+      <button class="annotated-timeline-btn annotated-timeline-btn-cancel">Cancel</button>
+    </div>
+  `;
+
+  document.body.appendChild(videoTimelineEl);
+
+  // State
+  let totalDuration = 0;
+  let start = 0;
+  let end = 0;
+  let dragging = null;
+  let trackRect = null;
+
+  // Try to get video duration from the page
+  const videoEl = document.querySelector('video');
+  if (videoEl) {
+    videoEl.addEventListener('loadedmetadata', () => {
+      totalDuration = Math.min(videoEl.duration, MAX_DURATION * 10); // allow up to 15min, but clip max 90s
+      updateDurationDisplay();
+      // Default: first 30 seconds
+      start = 0;
+      end = Math.min(30, totalDuration);
+      updateRange();
+    });
+  }
+
+  // Fallback: if no video element, default to 0-30s
+  if (!videoEl) {
+    totalDuration = 120; // assume 2 min for podcasts
+    start = 0;
+    end = 30;
+    updateDurationDisplay();
+    updateRange();
+  }
+
+  function updateDurationDisplay() {
+    const durEl = videoTimelineEl.querySelector('.annotated-timeline-duration');
+    durEl.textContent = `${formatTime(start)} / ${formatTime(totalDuration)}`;
+  }
+
+  function updateRange() {
+    const range = videoTimelineEl.querySelector('.annotated-timeline-range');
+    const track = videoTimelineEl.querySelector('.annotated-timeline-track');
+    trackRect = track.getBoundingClientRect();
+
+    const startPct = (start / totalDuration) * 100;
+    const endPct = (end / totalDuration) * 100;
+    range.style.left = startPct + '%';
+    range.style.width = (endPct - startPct) + '%';
+
+    updateDurationDisplay();
+
+    // Enable clip button if range is valid and ≤ 90s
+    const clipBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-clip');
+    const duration = end - start;
+    clipBtn.disabled = duration <= 0 || duration > MAX_DURATION;
+  }
+
+  function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  // Drag handles
+  const handles = videoTimelineEl.querySelectorAll('.annotated-timeline-handle');
+  handles.forEach((handle) => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = handle.dataset.handle;
+      document.addEventListener('mousemove', onDrag);
+      document.addEventListener('mouseup', stopDrag);
+    });
+  });
+
+  // Click on track to set position
+  const track = videoTimelineEl.querySelector('.annotated-timeline-track');
+  track.addEventListener('mousedown', (e) => {
+    if (e.target.classList.contains('annotated-timeline-handle')) return;
+    const rect = track.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const time = Math.max(0, Math.min(totalDuration, pct * totalDuration));
+    start = time;
+    end = Math.min(time + 10, totalDuration); // default 10s range
+    updateRange();
+  });
+
+  function onDrag(e) {
+    if (!dragging || !trackRect) return;
+    const rect = track.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const time = pct * totalDuration;
+
+    if (dragging === 'start') {
+      start = Math.min(time, end - 1);
+    } else {
+      end = Math.max(time, start + 1);
+    }
+    updateRange();
+  }
+
+  function stopDrag() {
+    dragging = null;
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
+  }
+
+  // Clip button
+  const clipBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-clip');
+  clipBtn.addEventListener('click', () => {
+    const duration = end - start;
+    if (duration <= 0 || duration > MAX_DURATION) return;
+
+    // Send clip info to sidepanel
+    chrome.runtime.sendMessage({
+      type: 'CLIP_VIDEO',
+      url,
+      title: document.title,
+      sourceType: type,
+      clipText: `Clip: ${formatTime(start)}–${formatTime(end)} of ${document.title}`,
+      start,
+      end,
+      duration: totalDuration,
+    });
+
+    removeVideoTimeline();
+  });
+
+  // Cancel button
+  const cancelBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-cancel');
+  cancelBtn.addEventListener('click', () => {
+    removeVideoTimeline();
+  });
+}
+
+function removeVideoTimeline() {
+  if (videoTimelineEl) {
+    videoTimelineEl.remove();
+    videoTimelineEl = null;
+  }
 }
 
 // ── Blur Overlay ────────────────────────────────────────────────
@@ -71,11 +239,10 @@ function showAnnotationTooltip(selectedText, range) {
   `;
 
   // Position below the selection, with viewport boundary checks
-  const tooltipHeight = 280; // approximate max height
+  const tooltipHeight = 280;
   let top = rect.bottom + window.scrollY + 8;
   let left = Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 360));
 
-  // If tooltip would go below viewport, position above selection
   if (top + tooltipHeight > window.innerHeight + window.scrollY) {
     top = Math.max(window.scrollY + 8, rect.top + window.scrollY - tooltipHeight);
   }
@@ -85,7 +252,6 @@ function showAnnotationTooltip(selectedText, range) {
 
   document.body.appendChild(tooltipEl);
 
-  // Wire up events
   const textarea = tooltipEl.querySelector('.annotated-tooltip-textarea');
   const postBtn = tooltipEl.querySelector('.annotated-tooltip-post');
   const cancelBtn = tooltipEl.querySelector('.annotated-tooltip-cancel');
@@ -116,14 +282,14 @@ function showAnnotationTooltip(selectedText, range) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: 'demo-user', // TODO: real auth
+          user_id: 'demo-user',
           source_url: window.location.href,
           source_title: document.title,
           source_type: detectSourceType(window.location.href),
           source_domain: window.location.hostname.replace(/^www\./, ''),
           clip_text: constrained.text,
           commentary: textarea.value.trim(),
-          is_public: 1, // Chrome extension = always public (free tier)
+          is_public: 1,
         }),
       });
 
@@ -132,7 +298,6 @@ function showAnnotationTooltip(selectedText, range) {
         postBtn.textContent = '✓ Posted!';
         postBtn.style.background = '#22c55e';
 
-        // Also notify the sidebar
         chrome.runtime.sendMessage({
           type: 'ANNOTATION_POSTED',
           annotationId: data.id,
@@ -155,7 +320,6 @@ function showAnnotationTooltip(selectedText, range) {
     }
   });
 
-  // ESC to cancel
   const escHandler = (e) => {
     if (e.key === 'Escape') {
       exitAnnotateMode();
@@ -191,8 +355,8 @@ function exitAnnotateMode() {
 // ── Selection Handling ──────────────────────────────────────────
 
 document.addEventListener('mouseup', (e) => {
-  // Don't capture clicks inside our own tooltip
   if (e.target.closest('#annotated-tooltip')) return;
+  if (e.target.closest('#annotated-timeline')) return;
 
   const sel = window.getSelection();
   const text = sel?.toString().trim();
@@ -200,22 +364,18 @@ document.addEventListener('mouseup', (e) => {
   if (text && text.length > 3) {
     const range = sel.getRangeAt(0);
 
-    // Enter annotate mode with blur
     enterAnnotateMode();
 
-    // Highlight the selected text
     try {
       const highlight = document.createElement('span');
       highlight.className = 'annotated-highlight';
       range.surroundContents(highlight);
     } catch {
-      // surroundContents fails on partial element selections — that's OK,
-      // the native ::selection highlight still shows
+      // surroundContents fails on partial element selections
     }
 
     showAnnotationTooltip(text, range);
 
-    // Also send to sidebar (backwards compat)
     chrome.runtime.sendMessage({
       type: 'TEXT_SELECTED',
       text: constrainText(text).text,
@@ -231,6 +391,10 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'ACTIVATE_ANNOTATE') {
     enterAnnotateMode();
   }
+  if (msg.type === 'NAVIGATE_TO_URL') {
+    // User pasted a URL in the sidebar — open it
+    window.location.href = msg.url;
+  }
 });
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -240,7 +404,6 @@ function constrainText(text) {
   if (trimmed.length <= MAX_CLIP_CHARS) {
     return { text: trimmed, truncated: false };
   }
-  // Try to break at sentence boundary
   const cut = trimmed.slice(0, MAX_CLIP_CHARS);
   const sentenceEnd = Math.max(
     cut.lastIndexOf('. '),
@@ -264,11 +427,10 @@ function escapeHtml(str) {
 
 detectPage();
 
-// SPA navigation detection — throttle to avoid noise
 let lastUrl = window.location.href;
 let navCheckTimer = null;
 const observer = new MutationObserver(() => {
-  if (navCheckTimer) return; // debounce
+  if (navCheckTimer) return;
   navCheckTimer = setTimeout(() => {
     navCheckTimer = null;
     const newUrl = window.location.href;

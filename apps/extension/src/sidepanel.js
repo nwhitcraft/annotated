@@ -3,6 +3,7 @@ const USER_ID = 'demo-user'; // TODO: replace with real auth
 
 let currentClip = null;
 let currentPage = null;
+let currentUrl = null;
 
 const statusEl = document.getElementById('status');
 const clipEl = document.getElementById('clip');
@@ -12,6 +13,11 @@ const commentaryEl = document.getElementById('commentary');
 const postBtn = document.getElementById('post-btn');
 const recentEl = document.getElementById('recent');
 const recentListEl = document.getElementById('recent-list');
+const urlInputEl = document.getElementById('url-input');
+const urlSubmitEl = document.getElementById('url-submit');
+const urlRowEl = document.getElementById('url-row');
+const relatedEl = document.getElementById('related');
+const relatedListEl = document.getElementById('related-list');
 
 // ── Message Handling ──────────────────────────────────────────
 
@@ -19,11 +25,14 @@ chrome.runtime.onMessage.addListener((msg) => {
   // Page detection from content script (relayed via background)
   if (msg.type === 'PAGE_DETECTED') {
     currentPage = msg;
+    currentUrl = msg.url;
     statusEl.style.display = 'block';
     statusEl.innerHTML = `
       <span class="status-type ${msg.sourceType}">${msg.sourceType}</span>
       <span style="margin-left:8px;color:var(--text-dim)">${truncate(msg.title, 50)}</span>
     `;
+    // Load related annotations for this page
+    loadRelatedAnnotations(msg.url);
   }
 
   // Text selected from content script (relayed via background)
@@ -34,10 +43,23 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   // Annotation posted from content script's inline tooltip
   if (msg.type === 'ANNOTATION_POSTED') {
-    // Refresh recent list to include the new annotation
     loadRecentAnnotations();
-    // Show brief success in sidepanel too
+    if (currentUrl) loadRelatedAnnotations(currentUrl);
     showPostSuccess(msg.clipText, msg.commentary);
+  }
+
+  // YouTube/Podcast clip info from content script
+  if (msg.type === 'CLIP_VIDEO') {
+    currentClip = {
+      text: msg.clipText || '',
+      url: msg.url,
+      title: msg.title,
+      videoStart: msg.start,
+      videoEnd: msg.end,
+      videoDuration: msg.duration,
+      sourceType: 'youtube',
+    };
+    showCompose(msg.clipText || 'Video clip');
   }
 });
 
@@ -55,7 +77,6 @@ function resetCompose() {
   currentClip = null;
   clipEl.style.display = 'none';
   composeEl.style.display = 'none';
-  emptyEl.style.display = 'block';
   commentaryEl.value = '';
   postBtn.textContent = '✦ Post Annotation';
   postBtn.style.background = '';
@@ -90,11 +111,15 @@ postBtn.addEventListener('click', async () => {
         user_id: USER_ID,
         source_url: currentClip.url,
         source_title: currentClip.title || currentPage?.title || '',
-        source_type: currentPage?.sourceType || detectSourceType(currentClip.url),
+        source_type: currentClip.sourceType || currentPage?.sourceType || detectSourceType(currentClip.url),
         source_domain: domainFrom(currentClip.url) || currentPage?.domain || '',
         clip_text: currentClip.text,
         commentary: commentaryEl.value.trim(),
         is_public: 1,
+        // Video clip metadata
+        clip_start: currentClip.videoStart || null,
+        clip_end: currentClip.videoEnd || null,
+        clip_duration: currentClip.videoDuration || null,
       }),
     });
 
@@ -103,7 +128,6 @@ postBtn.addEventListener('click', async () => {
       postBtn.textContent = '✓ Posted!';
       postBtn.style.background = 'var(--success)';
 
-      // Notify background so content script can update too
       chrome.runtime.sendMessage({
         type: 'ANNOTATION_POSTED',
         annotationId: data.id,
@@ -114,6 +138,7 @@ postBtn.addEventListener('click', async () => {
       setTimeout(() => {
         resetCompose();
         loadRecentAnnotations();
+        if (currentUrl) loadRelatedAnnotations(currentUrl);
       }, 1500);
     } else {
       throw new Error(data.error || 'Unknown error');
@@ -128,6 +153,41 @@ postBtn.addEventListener('click', async () => {
     }, 2000);
   }
 });
+
+// ── Related Annotations (same page) ───────────────────────────
+
+async function loadRelatedAnnotations(url) {
+  try {
+    const res = await fetch(`${API_BASE}/api/feed?limit=50`);
+    const data = await res.json();
+    const allItems = data.items || [];
+
+    // Filter to annotations on the same source URL
+    const related = allItems.filter(
+      (a) => a.source_url === url && a.user_id !== USER_ID
+    );
+
+    if (related.length === 0) {
+      relatedEl.style.display = 'none';
+      return;
+    }
+
+    relatedEl.style.display = 'block';
+    relatedListEl.innerHTML = related.map((a) => `
+      <div class="recent-item">
+        <div class="recent-item-quote">❝ ${truncate(escapeHtml(a.clip_text || a.commentary), 100)}</div>
+        <div class="recent-item-commentary">${escapeHtml(truncate(a.commentary, 140))}</div>
+        <div style="margin-top:4px;font-size:11px;color:var(--text-muted)">
+          ${a.display_name || a.username || 'anon'} · ${a.source_domain || ''}
+          ${a.like_count ? ` · ♥ ${a.like_count}` : ''}
+          ${a.comment_count ? ` · 💬 ${a.comment_count}` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.warn('Failed to load related annotations:', err);
+  }
+}
 
 // ── Recent Annotations ──────────────────────────────────────
 
@@ -155,9 +215,46 @@ async function loadRecentAnnotations() {
       </div>
     `).join('');
   } catch (err) {
-    // Silently fail — API might not be running
     console.warn('Failed to load recent annotations:', err);
   }
+}
+
+// ── Paste URL Input ──────────────────────────────────────────
+
+if (urlInputEl && urlSubmitEl) {
+  urlSubmitEl.addEventListener('click', handleUrlSubmit);
+  urlInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleUrlSubmit();
+  });
+}
+
+async function handleUrlSubmit() {
+  const url = urlInputEl.value.trim();
+  if (!url) return;
+
+  // Validate URL
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
+  } catch {
+    return;
+  }
+
+  urlInputEl.value = '';
+  urlRowEl.style.display = 'none';
+
+  // Send URL to content script to detect page type
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: 'NAVIGATE_TO_URL',
+        url: parsedUrl.href,
+      }).catch(() => {});
+    }
+  });
+
+  // Also load related annotations for this URL
+  loadRelatedAnnotations(parsedUrl.href);
 }
 
 // ── Helpers ──────────────────────────────────────────────────

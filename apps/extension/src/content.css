@@ -185,3 +185,122 @@ body.annotated-active .annotated-highlight {
   margin-bottom: 10px;
   letter-spacing: 0.02em;
 }
+
+/* ── Video Timeline (YouTube / Podcast) ──────────────────────── */
+
+#annotated-timeline {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10003;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  background: #fafaf8;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  padding: 16px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.08);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  animation: annotated-fade-in 0.2s ease;
+}
+
+.annotated-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.annotated-timeline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text, #1a1a1a);
+}
+
+.annotated-timeline-duration {
+  font-size: 11px;
+  color: #999999;
+  font-variant-numeric: tabular-nums;
+}
+
+.annotated-timeline-track {
+  position: relative;
+  height: 24px;
+  background: #f0f0ee;
+  border-radius: 0;
+  margin-bottom: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.annotated-timeline-range {
+  position: absolute;
+  top: 4px;
+  height: 16px;
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  pointer-events: none;
+}
+
+.annotated-timeline-handle {
+  position: absolute;
+  top: 2px;
+  width: 16px;
+  height: 20px;
+  background: #6366f1;
+  border: 2px solid #fff;
+  cursor: ew-resize;
+  z-index: 2;
+  transition: background 0.1s;
+}
+
+.annotated-timeline-handle:hover {
+  background: #4f46e5;
+}
+
+.annotated-timeline-handle-start {
+  border-radius: 2px 0 0 2px;
+}
+
+.annotated-timeline-handle-end {
+  border-radius: 0 2px 2px 0;
+}
+
+.annotated-timeline-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.annotated-timeline-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.annotated-timeline-btn:hover:not(:disabled) {
+  background: #f0f0ee;
+}
+
+.annotated-timeline-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.annotated-timeline-btn-clip {
+  border-color: #1a1a1a;
+}
+
+.annotated-timeline-btn-clip:hover:not(:disabled) {
+  background: #1a1a1a;
+  color: #fff;
+}
