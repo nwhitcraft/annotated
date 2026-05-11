@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 3090,
     proxy: {
-      '/api': 'http://localhost:3080',
+      '/api/': 'http://localhost:3080',
       '/media': 'http://localhost:3080',
     },
   },

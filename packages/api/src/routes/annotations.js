@@ -64,14 +64,30 @@ app.get('/:id', (c) => {
   return c.json({ ...annotation, comments: roots, recent_likes: recentLikes });
 });
 
+// Resolve user_id — accepts nanoid or username, returns the nanoid id
+function resolveUserId(raw) {
+  if (!raw) return null;
+  // Try direct id lookup first
+  const byId = db.prepare('SELECT id FROM users WHERE id = ?').get(raw);
+  if (byId) return byId.id;
+  // Fall back to username lookup
+  const byName = db.prepare('SELECT id FROM users WHERE username = ?').get(raw);
+  return byName ? byName.id : null;
+}
+
 // Create annotation
 app.post('/', async (c) => {
   const body = await c.req.json();
-  const { user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+  const { user_id: rawUserId, source_url, source_title, source_type, source_domain, source_thumbnail,
           clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary } = body;
 
-  if (!user_id || !source_url || !source_type || !commentary) {
+  if (!rawUserId || !source_url || !source_type || !commentary) {
     return c.json({ error: 'Missing required fields: user_id, source_url, source_type, commentary' }, 400);
+  }
+
+  const user_id = resolveUserId(rawUserId);
+  if (!user_id) {
+    return c.json({ error: `User not found: ${rawUserId}` }, 404);
   }
 
   const id = nanoid(12);
@@ -82,7 +98,7 @@ app.post('/', async (c) => {
   `).run(id, user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
     clip_text || null, clip_start_sec || null, clip_end_sec || null, clip_media_path || null, commentary);
 
-  return c.json({ id, created: true }, 201);
+  return c.json({ id, user_id, created: true }, 201);
 });
 
 // Update annotation
@@ -119,9 +135,11 @@ app.delete('/:id', (c) => {
 // Add comment (supports nested replies via parent_id)
 app.post('/:id/comments', async (c) => {
   const { id: annotation_id } = c.req.param();
-  const { user_id, body: commentBody, parent_id } = await c.req.json();
+  const { user_id: rawUserId, body: commentBody, parent_id } = await c.req.json();
 
-  if (!user_id || !commentBody) return c.json({ error: 'Missing user_id or body' }, 400);
+  if (!rawUserId || !commentBody) return c.json({ error: 'Missing user_id or body' }, 400);
+  const user_id = resolveUserId(rawUserId);
+  if (!user_id) return c.json({ error: `User not found: ${rawUserId}` }, 404);
 
   // Validate parent exists if provided
   if (parent_id) {
@@ -169,7 +187,8 @@ app.get('/:id/comments', (c) => {
 // Like/unlike
 app.post('/:id/like', async (c) => {
   const { id: annotation_id } = c.req.param();
-  const { user_id } = await c.req.json();
+  const { user_id: rawUserId } = await c.req.json();
+  const user_id = resolveUserId(rawUserId) || rawUserId;
 
   const existing = db.prepare('SELECT 1 FROM likes WHERE user_id = ? AND annotation_id = ?')
     .get(user_id, annotation_id);
@@ -192,7 +211,8 @@ app.post('/:id/like', async (c) => {
 // Pin/unpin
 app.post('/:id/pin', async (c) => {
   const { id: annotation_id } = c.req.param();
-  const { user_id } = await c.req.json();
+  const { user_id: rawUserId } = await c.req.json();
+  const user_id = resolveUserId(rawUserId) || rawUserId;
 
   const existing = db.prepare('SELECT 1 FROM pins WHERE user_id = ? AND annotation_id = ?')
     .get(user_id, annotation_id);

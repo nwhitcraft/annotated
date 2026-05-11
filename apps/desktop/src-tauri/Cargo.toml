@@ -1,0 +1,18 @@
+[package]
+name = "annotated_desktop"
+version = "0.1.0"
+description = "Annotated desktop app"
+authors = ["Annotated"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["custom-protocol"] }
+tauri-plugin-global-shortcut = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }

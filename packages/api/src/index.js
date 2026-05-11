@@ -3,6 +3,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DATA_ROOT = join(__dirname, '..', 'data');
 import annotations from './routes/annotations.js';
 import feed from './routes/feed.js';
 import users from './routes/users.js';
@@ -27,12 +32,8 @@ app.route('/api/users', users);
 app.route('/api/claims', claims);
 app.route('/api/clip', clip);
 
-// Serve clip media files
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const mediaRoot = join(__dirname, '..', 'data');
-app.use('/media/*', serveStatic({ root: mediaRoot }));
+// Serve clip media files — resolve from package root, not cwd
+app.use('/media/*', serveStatic({ root: DATA_ROOT }));
 
 const PORT = Number(process.env.PORT) || 3080;
 

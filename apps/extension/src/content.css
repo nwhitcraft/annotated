@@ -1,4 +1,319 @@
-/* Minimal styling for selection indicator */
+/* Annotated — Content Script Styles
+   Injected into every page. Scoped via #annotated- prefixes.
+   Newspaper editorial aesthetic: warm, serif, restrained.
+   Matches frontend-v2 CSS variables exactly. */
+
+/* ── Selection highlight ─────────────────────────────────────── */
+
 ::selection {
-  background: rgba(99, 102, 241, 0.25) !important;
+  background: rgba(99, 102, 241, 0.16) !important;
+}
+
+.annotated-highlight {
+  background: rgba(99, 102, 241, 0.12);
+  border-bottom: 2px solid rgba(99, 102, 241, 0.4);
+  border-radius: 2px;
+  padding: 1px 0;
+  position: relative;
+  z-index: 10001;
+}
+
+/* ── Blur overlay ────────────────────────────────────────────── */
+
+#annotated-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 10000;
+  cursor: default;
+  transition: opacity 0.2s ease;
+  pointer-events: all;
+}
+
+body.annotated-active ::selection {
+  background: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Lift selected content above overlay */
+body.annotated-active .annotated-highlight {
+  position: relative;
+  z-index: 10001;
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
+}
+
+/* ── Annotation tooltip ──────────────────────────────────────── */
+
+#annotated-tooltip {
+  position: absolute;
+  z-index: 10002;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: #fafaf8;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  padding: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  animation: annotated-fade-in 0.15s ease;
+}
+
+@keyframes annotated-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Quote preview */
+.annotated-tooltip-quote {
+  font-family: 'Newsreader', 'Georgia', serif;
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333333;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-left: 1px solid #bfbfba;
+  background: transparent;
+  border-radius: 0;
+}
+
+.annotated-tooltip-truncated {
+  font-size: 11px;
+  color: #999999;
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+/* Commentary textarea */
+.annotated-tooltip-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: 'Newsreader', 'Georgia', serif;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.annotated-tooltip-textarea:focus {
+  border-color: #6366f1;
+  box-shadow: none;
+}
+
+.annotated-tooltip-textarea::placeholder {
+  color: #999999;
+  font-style: italic;
+}
+
+/* Action row */
+.annotated-tooltip-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.annotated-tooltip-chars {
+  font-size: 11px;
+  color: #999999;
+}
+
+.annotated-tooltip-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.annotated-tooltip-cancel {
+  padding: 6px 14px;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  background: transparent;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.annotated-tooltip-cancel:hover {
+  background: #f0f0ee;
+  border-color: #1a1a1a;
+}
+
+.annotated-tooltip-post {
+  padding: 6px 16px;
+  border: 1px solid #1a1a1a;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.annotated-tooltip-post:hover:not(:disabled) {
+  background: #f0f0ee;
+}
+
+.annotated-tooltip-post:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Annotated logo watermark (subtle) ───────────────────────── */
+
+#annotated-tooltip::before {
+  content: '✦ annotated';
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #999999;
+  margin-bottom: 10px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Video Timeline (YouTube / Podcast) ──────────────────────── */
+
+#annotated-timeline {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10003;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  background: #fafaf8;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  padding: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  animation: annotated-fade-in 0.2s ease;
+}
+
+.annotated-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.annotated-timeline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text, #1a1a1a);
+}
+
+.annotated-timeline-duration {
+  font-size: 11px;
+  color: #999999;
+  font-variant-numeric: tabular-nums;
+}
+
+.annotated-timeline-track {
+  position: relative;
+  height: 24px;
+  background: #f0f0ee;
+  border-radius: 0;
+  margin-bottom: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.annotated-timeline-range {
+  position: absolute;
+  top: 4px;
+  height: 16px;
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  pointer-events: none;
+}
+
+.annotated-timeline-handle {
+  position: absolute;
+  top: 2px;
+  width: 16px;
+  height: 20px;
+  background: #6366f1;
+  border: 2px solid #fff;
+  cursor: ew-resize;
+  z-index: 2;
+  transition: background 0.1s;
+}
+
+.annotated-timeline-handle:hover {
+  background: #4f46e5;
+}
+
+.annotated-timeline-handle-start {
+  border-radius: 2px 0 0 2px;
+}
+
+.annotated-timeline-handle-end {
+  border-radius: 0 2px 2px 0;
+}
+
+.annotated-timeline-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.annotated-timeline-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #deded9;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.annotated-timeline-btn:hover:not(:disabled) {
+  background: #f0f0ee;
+}
+
+.annotated-timeline-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.annotated-timeline-btn-clip {
+  border-color: #1a1a1a;
+}
+
+.annotated-timeline-btn-clip:hover:not(:disabled) {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+/* ── Follow buttons (sidepanel) ─────────────────────────────── */
+
+.follow-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.follow-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.follow-btn-following {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.follow-btn-following:hover {
+  border-color: var(--error);
+  color: var(--error);
 }

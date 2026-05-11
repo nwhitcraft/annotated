@@ -4,18 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Annotated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0a0b;
-      --bg-card: #111113;
-      --bg-hover: #18181b;
-      --border: #27272a;
-      --text: #fafafa;
-      --text-dim: #a1a1aa;
-      --text-muted: #71717a;
+      --bg: #fafaf8;
+      --bg-surface: #f7f7f5;
+      --bg-hover: #f0f0ee;
+      --border: #deded9;
+      --text: #1a1a1a;
+      --text-dim: #6b6b6b;
+      --text-muted: #999999;
       --accent: #6366f1;
-      --accent-glow: rgba(99, 102, 241, 0.25);
-      --radius: 10px;
+      --accent-hover: #4f46e5;
+      --success: #22c55e;
+      --error: #dc2626;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,11 +29,13 @@
       background: var(--bg);
       color: var(--text);
       font-size: 13px;
-      line-height: 1.6;
-      padding: 16px;
-      min-width: 320px;
+      line-height: 1.5;
+      padding: 20px 16px;
+      min-width: 300px;
+      -webkit-font-smoothing: antialiased;
     }
 
+    /* ── Header ── */
     .logo {
       display: flex;
       align-items: center;
@@ -37,98 +43,307 @@
       font-size: 16px;
       font-weight: 600;
       margin-bottom: 20px;
+      color: var(--text);
     }
-
     .logo-mark { color: var(--accent); }
 
+    /* ── Status bar ── */
     .status {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
+      padding: 10px 14px;
       margin-bottom: 16px;
       font-size: 12px;
-    }
-
-    .status-type {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 500;
-    }
-
-    .status-type.article { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
-    .status-type.youtube { background: rgba(248, 113, 113, 0.12); color: #f87171; }
-    .status-type.podcast { background: rgba(167, 139, 250, 0.12); color: #a78bfa; }
-
-    .clip-preview {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      border-left: 3px solid var(--accent);
-      font-style: italic;
+      border-bottom: 1px solid var(--border);
       color: var(--text-dim);
     }
+    .status-type::before {
+      content: '';
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .status-type.article::before { background: #2563eb; }
+    .status-type.youtube::before { background: #dc2626; }
+    .status-type.podcast::before { background: #7c3aed; }
 
+    /* ── URL input ── */
+    .url-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .url-input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+      font-size: 12px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      outline: none;
+    }
+    .url-input:focus { border-color: var(--accent); }
+    .url-input::placeholder { color: var(--text-muted); }
+    .url-submit {
+      padding: 8px 12px;
+      border: 1px solid var(--text);
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .url-submit:hover { background: var(--bg-hover); }
+
+    /* ── Clip preview ── */
+    .clip-preview {
+      font-family: 'Newsreader', Georgia, serif;
+      font-style: italic;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #333333;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      border-left: 1px solid #bfbfba;
+      background: transparent;
+      border-radius: 0;
+    }
+
+    /* ── Compose ── */
     textarea {
       width: 100%;
       min-height: 80px;
-      padding: 12px;
-      background: var(--bg-card);
+      padding: 10px 12px;
+      background: #fff;
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: 0;
       color: var(--text);
-      font-family: Georgia, serif;
-      font-size: 14px;
-      line-height: 1.6;
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 15px;
+      line-height: 1.5;
       resize: vertical;
       outline: none;
       margin-bottom: 12px;
+      transition: border-color 0.15s;
     }
-
     textarea:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-glow);
     }
-
-    textarea::placeholder { color: var(--text-muted); }
+    textarea::placeholder { color: var(--text-muted); font-style: italic; }
 
     .btn {
       display: block;
       width: 100%;
-      padding: 12px;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 14px;
-      font-weight: 600;
+      padding: 10px;
+      border: 1px solid var(--text);
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background 0.15s;
     }
-
-    .btn:hover {
-      background: #818cf8;
-      box-shadow: 0 0 20px var(--accent-glow);
-    }
-
+    .btn:hover:not(:disabled) { background: var(--bg-hover); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* ── Empty state ── */
     .empty {
       text-align: center;
-      padding: 32px 16px;
+      padding: 40px 16px;
       color: var(--text-muted);
     }
+    .empty-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+      color: var(--accent);
+      opacity: 0.4;
+    }
+    .empty p { margin-bottom: 6px; }
+    .empty .hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 12px;
+      line-height: 1.5;
+    }
 
-    .empty-icon { font-size: 32px; margin-bottom: 8px; }
+    /* ── Related annotations (same page) ── */
+    .related-header {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-top: 24px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .related-header::before {
+      content: '💬 ';
+    }
+    .related-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .related-item > div:last-child {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .related-item-quote {
+      font-family: 'Newsreader', Georgia, serif;
+      font-style: italic;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+    .related-item-commentary {
+      font-family: 'Newsreader', Georgia, serif;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ── Header row ── */
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    /* ── Sign-in button (unauthenticated) ── */
+    .auth-btn {
+      padding: 5px 14px;
+      border: 1px solid var(--accent);
+      border-radius: 0;
+      background: transparent;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .auth-btn:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* ── Avatar (authenticated) ── */
+    .avatar-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      cursor: pointer;
+      object-fit: cover;
+      transition: border-color 0.15s;
+      background: var(--bg-surface);
+    }
+    .avatar-btn:hover {
+      border-color: var(--text);
+    }
+    .avatar-placeholder {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .avatar-placeholder:hover {
+      border-color: var(--text);
+    }
+
+    /* ── Auth status bar ── */
+    .auth-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .auth-status .username {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .auth-status .logout {
+      color: var(--error);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    /* ── Following feed ── */
+    .following-header {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-top: 24px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .following-header::before {
+      content: '🔔 ';
+    }
+    .recent-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .recent-item > div:last-child {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .recent-item-quote {
+      font-family: 'Newsreader', Georgia, serif;
+      font-style: italic;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+    .recent-item-commentary {
+      font-family: 'Newsreader', Georgia, serif;
+      font-weight: 600;
+      color: var(--text);
+    }
   </style>
 </head>
 <body>
-  <div class="logo">
-    <span class="logo-mark">✦</span> annotated
+  <div class="header-row">
+    <div class="logo">
+      <span class="logo-mark">✦</span> annotated
+    </div>
+    <button id="auth-btn" class="auth-btn">Sign In</button>
+    <img id="avatar-img" class="avatar-btn" style="display:none" alt="Profile">
+    <div id="avatar-placeholder" class="avatar-placeholder" style="display:none"></div>
+  </div>
+  <div id="auth-status" class="auth-status" style="display:none"></div>
+
+  <!-- Paste URL input -->
+  <div id="url-row" class="url-row">
+    <input id="url-input" class="url-input" type="text" placeholder="Paste a URL to annotate…">
+    <button id="url-submit" class="url-submit">Go</button>
   </div>
 
   <div id="status" class="status" style="display:none"></div>
@@ -137,12 +352,27 @@
   <div id="empty" class="empty">
     <div class="empty-icon">✦</div>
     <p>Select text on any page to clip it.</p>
-    <p style="margin-top:8px;font-size:11px;">Highlight → Write your take → Post</p>
+    <p class="hint">
+      Highlight a sentence or two → add your take → post.<br>
+      <strong>⌘⇧A</strong> to toggle annotate mode.
+    </p>
   </div>
 
   <div id="compose" style="display:none">
-    <textarea id="commentary" placeholder="What's your take on this?"></textarea>
+    <textarea id="commentary" placeholder="What's your take?"></textarea>
     <button id="post-btn" class="btn" disabled>✦ Post Annotation</button>
+  </div>
+
+  <!-- Related annotations on the same page -->
+  <div id="related" style="display:none">
+    <div class="related-header">On this page</div>
+    <div id="related-list"></div>
+  </div>
+
+  <!-- Following feed (activity from followed users) -->
+  <div id="following" style="display:none">
+    <div class="following-header">Following</div>
+    <div id="following-list"></div>
   </div>
 
   <script src="src/sidepanel.js"></script>

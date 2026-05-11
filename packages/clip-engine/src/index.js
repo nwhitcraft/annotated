@@ -1,7 +1,7 @@
-// Clip engine — wraps yt-dlp and ffmpeg for media extraction
-// Used by the API server; can also be called from the Tauri desktop app
+// Clip engine — wraps Readability, yt-dlp, and ffmpeg for media extraction
+// Used by the API server and the Chrome extension (via API)
 
-export { extractArticle } from './article.js';
+export { extractArticle, constrainTextClip } from './article.js';
 export { extractYouTubeClip } from './youtube.js';
 export { extractPodcastClip } from './podcast.js';
 export { detectSourceType } from '@annotated/shared';
