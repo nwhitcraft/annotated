@@ -19,6 +19,14 @@ A complete, actionable spec for Codex to finish the Annotated.com project. Every
 
 ## 2. Current Codebase State (as of 2026-05-12)
 
+### Codex implementation note (2026-05-12)
+
+The tables below are the original v5.2 target-state audit. Current `origin/master`
+already includes partial implementations for auth routes, JWT middleware, Tauri
+desktop scaffolding, and the Chrome side panel. Treat the "What's Missing" rows
+as gap targets, not proof that the named files are absent. Continue auditing the
+actual files before each implementation pass.
+
 ### What's Built ✅
 
 | Component | Status | Details |
