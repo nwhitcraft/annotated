@@ -1,6 +1,6 @@
 # Annotated — Codex Completion Spec
 
-**Version:** 4.0
+**Version:** 5.1
 **Date:** 2026-05-12
 **Author:** Stark (written for Codex)
 **Bounty:** Jason Calacanis $5,000 via Launch.co (deadline ~May 15, 2026)
@@ -13,7 +13,7 @@
 
 A complete, actionable spec for Codex to finish the Annotated.com project. Everything Codex needs: current codebase state, what's built, what's missing, what to build, exact file paths, and design decisions.
 
-**Goal:** Ship a working MVP that beats ByteTalk on the core annotation experience, with a full desktop app (Tauri) as the flagship product.
+**Goal:** Ship a complete product — web + Chrome extension + desktop app (Tauri). The desktop app is not a future tier, it is a shipping requirement.
 
 ---
 
@@ -487,67 +487,34 @@ apps/extension/src/content.js               ← MODIFY (add claim detection)
 
 ## 7. Build Order (Recommended)
 
-Codex should build in this order:
+Codex should build in this order. Desktop app work runs **in parallel** with web/extension — it's a shipping requirement, not a later phase.
 
-1. **Auth system** (foundation for everything else)
-   - JWT middleware
-   - OAuth routes (stub for now, Nick provides credentials later)
-   - `/extension-auth` page
-   - Auth bridge in extension
-   - Update all API calls to include auth
+### Phase 1: Foundation (do first, everything depends on it)
+1. **Auth system** — JWT middleware, OAuth routes, `/extension-auth` page, auth bridge in extension, `annotated://callback` handler in desktop
+2. **Fix extension bugs** — quote closing, keyboard shortcut, highlight after dismiss, duplicate compose box, speech bubble positioning
+3. **Desktop scaffold** — Tauri v2 project, reuse web React components, set up Rust backend structure
 
-2. **Fix extension bugs** (quick wins)
-   - Quote closing
-   - Keyboard shortcut
-   - Highlight after dismiss
-   - Remove duplicate compose box
-   - Fix speech bubble positioning
+### Phase 2: Core Features (parallel: web + desktop)
+4. **Annotation type tags** — DB migration, API acceptance, UI selectors in extension + web + desktop
+5. **X/Twitter support** — oEmbed extraction, content detection, side panel display
+6. **Voting / credibility** — noteworthy endpoint, credibility score, UI display
+7. **Claims — extension + card + admin** — `claim_count` column, claim endpoints, claim badge on cards, claim button in ActionRow, claim indicator in extension, `/admin/claims` dashboard
+8. **Desktop media pipeline** — yt-dlp wrapper, ffmpeg wrapper, Whisper ASR, screen capture
 
-3. **Annotation type tags** (schema change)
-   - DB migration
-   - API acceptance
-   - UI selectors in extension + web
+### Phase 3: Activation & Polish
+9. **Onboarding flow** — 5-step wizard, tutorial page, starter accounts
+10. **Content detection intelligence** — JSON-LD, shadow DOM, smart reclassification
+11. **Following sync** — API-synced follows, remove local storage dependency
+12. **iTunes podcast fallback** — iTunes API wrapper, domain list expansion
+13. **API_BASE configuration** — configurable base URL, environment handling
 
-4. **X/Twitter support** (new source type)
-   - oEmbed extraction
-   - Content detection
-   - Side panel display
-
-5. **Voting / credibility** (engagement layer)
-   - Noteworthy endpoint
-   - Credibility score calculation
-   - UI display
-
-6. **Claims — extension + card + admin** (new in v4)
-   - Add `claim_count` to annotations table
-   - Add `GET /api/annotations/:id/claims` endpoint
-   - Add `PATCH /api/claims/:id` and `DELETE /api/claims/:id` endpoints
-   - Add claim count to `AnnotationItem` cards
-   - Add claim button to `ActionRow` component
-   - Add claim indicator to extension side panel
-   - Build `/admin/claims` dashboard page
-
-7. **Onboarding flow** (user activation)
-   - 5-step wizard
-   - Tutorial page
-   - Starter accounts
-
-8. **Content detection intelligence** (quality)
-   - JSON-LD parsing
-   - Shadow DOM traversal
-   - Smart reclassification
-
-9. **Following sync** (consistency)
-   - API-synced follows
-   - Remove local storage dependency
-
-10. **iTunes podcast fallback** (coverage)
-    - iTunes API wrapper
-    - Domain list expansion
-
-11. **API_BASE configuration** (deployment)
-    - Configurable base URL
-    - Environment handling
+### Phase 4: Desktop Completeness
+14. **Desktop sync engine** — conflict resolution with web app
+15. **Desktop collections + full-text search**
+16. **Desktop AI summaries** — local model integration
+17. **Desktop voice notes** — MediaRecorder + upload
+18. **Desktop private annotations** — local storage, sync when online
+19. **Desktop polish + bundle** — `.dmg` / `.msi`
 
 ---
 
