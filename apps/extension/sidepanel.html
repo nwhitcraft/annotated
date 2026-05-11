@@ -4,146 +4,221 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Annotated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0a0b;
-      --bg-card: #111113;
-      --bg-hover: #18181b;
-      --border: #27272a;
-      --text: #fafafa;
-      --text-dim: #a1a1aa;
-      --text-muted: #71717a;
+      --bg-primary: #fafaf8;
+      --bg-surface: #f7f7f5;
+      --bg-hover: #f0f0ee;
+      --border: #deded9;
+      --border-subtle: #eeeeec;
+      --text-primary: #1a1a1a;
+      --text-secondary: #6b6b6b;
+      --text-tertiary: #999999;
       --accent: #6366f1;
-      --accent-glow: rgba(99, 102, 241, 0.25);
-      --radius: 10px;
+      --accent-hover: #4f46e5;
+      --danger: #dc2626;
+      --article: #2563eb;
+      --youtube: #dc2626;
+      --podcast: #7c3aed;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
 
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
-      line-height: 1.6;
-      padding: 16px;
+    html, body {
+      margin: 0;
       min-width: 320px;
+      min-height: 100vh;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
     }
 
-    .logo {
+    body { padding: 16px 18px 22px; }
+
+    button, textarea { font: inherit; }
+
+    button {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    [hidden] { display: none !important; }
+
+    .shell {
+      display: grid;
+      gap: 18px;
+    }
+
+    .topline {
       display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 20px;
+      align-items: baseline;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .logo-mark { color: var(--accent); }
+    .wordmark {
+      font-family: var(--font-serif);
+      font-size: 32px;
+      font-weight: 400;
+      line-height: 1;
+    }
 
     .status {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 16px;
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr);
+      gap: 7px;
+      align-items: center;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
       font-size: 12px;
     }
 
-    .status-type {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 500;
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--article);
     }
 
-    .status-type.article { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
-    .status-type.youtube { background: rgba(248, 113, 113, 0.12); color: #f87171; }
-    .status-type.podcast { background: rgba(167, 139, 250, 0.12); color: #a78bfa; }
+    .status-dot.youtube { background: var(--youtube); }
+    .status-dot.podcast { background: var(--podcast); }
+
+    .status-source {
+      color: var(--text-primary);
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .status-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .clip-preview {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      border-left: 3px solid var(--accent);
+      margin: 0;
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-family: var(--font-serif);
+      font-size: 21px;
       font-style: italic;
-      color: var(--text-dim);
+      line-height: 1.32;
+    }
+
+    .clip-meta {
+      margin: -10px 0 0;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .compose {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
     }
 
     textarea {
       width: 100%;
-      min-height: 80px;
-      padding: 12px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-family: Georgia, serif;
-      font-size: 14px;
-      line-height: 1.6;
-      resize: vertical;
+      min-height: 132px;
+      padding: 14px 0;
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: var(--font-serif);
+      font-size: 20px;
+      line-height: 1.42;
       outline: none;
-      margin-bottom: 12px;
+      resize: vertical;
     }
 
-    textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-glow);
-    }
+    textarea::placeholder { color: var(--text-tertiary); }
 
-    textarea::placeholder { color: var(--text-muted); }
+    textarea:focus { border-bottom-color: var(--accent-hover); }
 
     .btn {
-      display: block;
-      width: 100%;
-      padding: 12px;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 14px;
+      justify-self: end;
+      padding: 8px 0 3px;
+      border-bottom: 1px solid currentColor;
+      color: var(--accent-hover);
+      font-family: var(--font-serif);
+      font-size: 24px;
       font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
+      line-height: 1;
     }
 
-    .btn:hover {
-      background: #818cf8;
-      box-shadow: 0 0 20px var(--accent-glow);
-    }
-
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { color: var(--accent); }
 
     .empty {
-      text-align: center;
-      padding: 32px 16px;
-      color: var(--text-muted);
+      display: grid;
+      gap: 12px;
+      padding: 28px 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
     }
 
-    .empty-icon { font-size: 32px; margin-bottom: 8px; }
+    .empty strong {
+      color: var(--text-primary);
+      font-family: var(--font-serif);
+      font-size: 27px;
+      font-weight: 400;
+      line-height: 1.05;
+    }
+
+    .empty p {
+      margin: 0;
+    }
   </style>
 </head>
 <body>
-  <div class="logo">
-    <span class="logo-mark">✦</span> annotated
-  </div>
+  <main class="shell">
+    <header class="topline">
+      <div class="wordmark">annotated</div>
+    </header>
 
-  <div id="status" class="status" style="display:none"></div>
-  <div id="clip" class="clip-preview" style="display:none"></div>
+    <div id="status" class="status" hidden></div>
 
-  <div id="empty" class="empty">
-    <div class="empty-icon">✦</div>
-    <p>Select text on any page to clip it.</p>
-    <p style="margin-top:8px;font-size:11px;">Highlight → Write your take → Post</p>
-  </div>
+    <section id="empty" class="empty">
+      <strong>Clip the sentence worth arguing with.</strong>
+      <p>Select text on a page, then choose Annotate.</p>
+    </section>
 
-  <div id="compose" style="display:none">
-    <textarea id="commentary" placeholder="What's your take on this?"></textarea>
-    <button id="post-btn" class="btn" disabled>✦ Post Annotation</button>
-  </div>
+    <blockquote id="clip" class="clip-preview" hidden></blockquote>
+    <p id="clip-meta" class="clip-meta" hidden></p>
+
+    <section id="compose" class="compose" hidden>
+      <label for="commentary">Commentary</label>
+      <textarea id="commentary" placeholder="Write the take people should respond to..."></textarea>
+      <button id="post-btn" class="btn" disabled>Post annotation</button>
+    </section>
+  </main>
 
   <script src="src/sidepanel.js"></script>
 </body>

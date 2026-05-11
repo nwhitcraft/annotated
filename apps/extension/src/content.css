@@ -1,4 +1,27 @@
-/* Minimal styling for selection indicator */
 ::selection {
-  background: rgba(99, 102, 241, 0.25) !important;
+  background: rgba(99, 102, 241, 0.16) !important;
+}
+
+#annotated-selection-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  min-width: 90px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #deded9;
+  border-radius: 4px;
+  background: #fafaf8;
+  color: #1a1a1a;
+  box-shadow: 0 12px 28px rgba(26, 26, 26, 0.12);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 30px;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+#annotated-selection-tooltip:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
 }

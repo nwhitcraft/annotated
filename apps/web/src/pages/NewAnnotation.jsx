@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QuoteAnnotationBubble from '../components/QuoteAnnotationBubble.jsx';
 import SourceType from '../components/SourceType.jsx';
-import { createAnnotation, detectClip } from '../lib/api.js';
+import { createAnnotation, createMediaClip, detectClip } from '../lib/api.js';
 import { domainFromUrl, formatTime } from '../lib/format.js';
 
 const steps = ['URL', 'Clip', 'Commentary', 'Post'];
@@ -17,6 +17,7 @@ export default function NewAnnotation() {
   const [commentary, setCommentary] = useState('');
   const [detecting, setDetecting] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [clipping, setClipping] = useState(false);
   const [error, setError] = useState('');
 
   const activeStep = useMemo(() => {
@@ -39,6 +40,7 @@ export default function NewAnnotation() {
         type: data.type || inferType(value),
         title: data.title || data.source_title || 'Untitled source',
         domain: data.domain || domainFromUrl(value),
+        thumbnail: data.thumbnail || data.source_thumbnail || '',
       });
       if (data.excerpt) setClipText(data.excerpt);
     } catch {
@@ -65,16 +67,36 @@ export default function NewAnnotation() {
     if (detected.type === 'article' && !clipText.trim()) return setError('Add the quoted passage.');
     if (!commentary.trim()) return setError('Write your commentary.');
     setPosting(true);
+    setClipping(false);
     setError('');
     try {
+      let mediaClip = null;
+      if (['youtube', 'podcast'].includes(detected.type)) {
+        setClipping(true);
+        try {
+          mediaClip = await createMediaClip({
+            type: detected.type,
+            url: url.trim(),
+            start: clipStart,
+            end: clipEnd,
+          });
+        } catch {
+          mediaClip = null;
+        } finally {
+          setClipping(false);
+        }
+      }
+
       const data = await createAnnotation({
         source_url: url.trim(),
         source_type: detected.type,
-        source_title: detected.title,
+        source_title: mediaClip?.title || detected.title,
         source_domain: detected.domain,
+        source_thumbnail: mediaClip?.thumbnail || detected.thumbnail || null,
         clip_text: detected.type === 'article' ? clipText.trim() : null,
-        clip_start_sec: detected.type === 'article' ? null : clipStart,
-        clip_end_sec: detected.type === 'article' ? null : clipEnd,
+        clip_start_sec: detected.type === 'article' ? null : (mediaClip?.startSec ?? clipStart),
+        clip_end_sec: detected.type === 'article' ? null : (mediaClip?.endSec ?? clipEnd),
+        clip_media_path: mediaClip?.mediaPath || null,
         commentary: commentary.trim(),
       });
       navigate(`/a/${data.id}`);
@@ -155,6 +177,7 @@ export default function NewAnnotation() {
                 onChange={setCommentary}
                 placeholder="Write the take people should respond to..."
                 disabled={posting || activeStep < 3}
+                buttonLabel={posting ? 'Posting' : 'Post annotation'}
                 textareaId="commentary"
               />
             ) : (
@@ -167,7 +190,7 @@ export default function NewAnnotation() {
 
         {detected && !(detected.type === 'article' && clipText.trim()) && (
           <button className="button button-solid post-button" type="submit" disabled={posting || activeStep < 3}>
-            {posting ? 'Posting' : 'Post annotation'}
+            {clipping ? 'Clipping media' : posting ? 'Posting' : 'Post annotation'}
           </button>
         )}
       </form>

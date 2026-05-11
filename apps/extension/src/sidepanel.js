@@ -9,33 +9,20 @@ const emptyEl = document.getElementById('empty');
 const composeEl = document.getElementById('compose');
 const commentaryEl = document.getElementById('commentary');
 const postBtn = document.getElementById('post-btn');
+const metaEl = document.getElementById('clip-meta');
 
-// Listen for messages from background/content
+hydrate();
+
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'PAGE_DETECTED') {
-    currentPage = msg;
-    statusEl.style.display = 'block';
-    statusEl.innerHTML = `
-      <span class="status-type ${msg.sourceType}">${msg.sourceType}</span>
-      <span style="margin-left:8px;color:var(--text-dim)">${truncate(msg.title, 50)}</span>
-    `;
-  }
-
-  if (msg.type === 'CLIP_TEXT') {
-    currentClip = { text: msg.text, url: msg.url, title: msg.title };
-    clipEl.style.display = 'block';
-    clipEl.textContent = `❝ ${truncate(msg.text, 200)}`;
-    emptyEl.style.display = 'none';
-    composeEl.style.display = 'block';
+  if (msg.type === 'PAGE_DETECTED' || msg.type === 'CLIP_TEXT' || msg.type === 'STATE_UPDATED') {
+    renderState(msg.state);
   }
 });
 
-// Enable post button when there's commentary
 commentaryEl.addEventListener('input', () => {
-  postBtn.disabled = !commentaryEl.value.trim();
+  updatePostState();
 });
 
-// Post
 postBtn.addEventListener('click', async () => {
   if (!currentClip || !commentaryEl.value.trim()) return;
 
@@ -47,12 +34,14 @@ postBtn.addEventListener('click', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: 'demo-user', // TODO: auth
+        user_id: 'demo-user',
         source_url: currentClip.url,
         source_title: currentClip.title || currentPage?.title || '',
         source_type: currentPage?.sourceType || 'article',
         source_domain: currentPage?.domain || '',
-        clip_text: currentClip.text,
+        clip_text: currentClip.text || null,
+        clip_start_sec: currentClip.clipStartSec ?? null,
+        clip_end_sec: currentClip.clipEndSec ?? null,
         commentary: commentaryEl.value.trim(),
       }),
     });
@@ -72,6 +61,8 @@ postBtn.addEventListener('click', async () => {
         composeEl.style.display = 'none';
         emptyEl.style.display = 'block';
       }, 2000);
+    } else {
+      throw new Error(data.error || 'Post failed');
     }
   } catch (err) {
     postBtn.textContent = 'Error — try again';
@@ -84,7 +75,68 @@ postBtn.addEventListener('click', async () => {
   }
 });
 
+function hydrate() {
+  chrome.runtime.sendMessage({ type: 'GET_ACTIVE_STATE' }, (response) => {
+    if (chrome.runtime.lastError) return;
+    renderState(response?.state);
+  });
+}
+
+function renderState(state) {
+  if (!state) return;
+  currentPage = state.page || currentPage;
+  currentClip = state.clip || currentClip;
+
+  if (currentPage) {
+    statusEl.hidden = false;
+    statusEl.innerHTML = `
+      <span class="status-dot ${escapeHtml(currentPage.sourceType || 'article')}"></span>
+      <span class="status-source">${escapeHtml(currentPage.sourceType || 'article')}</span>
+      <span class="status-title">${escapeHtml(truncate(currentPage.title || currentPage.url || '', 64))}</span>
+    `;
+  }
+
+  if (currentClip) {
+    clipEl.hidden = false;
+    clipEl.textContent = currentClip.text;
+    metaEl.hidden = false;
+    metaEl.textContent = clipMeta(currentClip, currentPage);
+    emptyEl.hidden = true;
+    composeEl.hidden = false;
+  }
+
+  updatePostState();
+}
+
+function clipMeta(clip, page) {
+  const parts = [page?.domain || clip.domain].filter(Boolean);
+  if (clip.clipStartSec != null && clip.clipEndSec != null) {
+    parts.push(`${formatTime(clip.clipStartSec)}-${formatTime(clip.clipEndSec)}`);
+  }
+  return parts.join(' · ');
+}
+
+function updatePostState() {
+  postBtn.disabled = !currentClip || !commentaryEl.value.trim();
+}
+
 function truncate(str, max) {
   if (!str) return '';
   return str.length > max ? str.slice(0, max) + '...' : str;
+}
+
+function formatTime(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(value / 60);
+  const secs = Math.floor(value % 60);
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }

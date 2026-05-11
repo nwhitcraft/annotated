@@ -34,6 +34,7 @@ app.post('/article', async (c) => {
       url,
       title: titleMatch?.[1]?.trim() || '',
       description: descMatch?.[1]?.trim() || '',
+      excerpt: descMatch?.[1]?.trim() || '',
       thumbnail: ogImageMatch?.[1] || '',
       domain: domainMatch?.[1] || '',
       type: 'article',
@@ -49,8 +50,9 @@ app.post('/youtube', async (c) => {
   if (!url) return c.json({ error: 'url required' }, 400);
 
   const startSec = Number(start) || 0;
-  const endSec = Number(end) || (startSec + 90);
-  const duration = Math.min(endSec - startSec, 90);
+  const requestedEndSec = Number(end) || (startSec + 90);
+  const endSec = Math.min(requestedEndSec, startSec + 90);
+  const duration = endSec - startSec;
 
   if (duration <= 0) return c.json({ error: 'Invalid time range' }, 400);
 
@@ -91,8 +93,9 @@ app.post('/podcast', async (c) => {
   if (!url) return c.json({ error: 'url required' }, 400);
 
   const startSec = Number(start) || 0;
-  const endSec = Number(end) || (startSec + 90);
-  const duration = Math.min(endSec - startSec, 90);
+  const requestedEndSec = Number(end) || (startSec + 90);
+  const endSec = Math.min(requestedEndSec, startSec + 90);
+  const duration = endSec - startSec;
 
   if (duration <= 0) return c.json({ error: 'Invalid time range' }, 400);
 

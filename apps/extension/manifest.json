@@ -8,6 +8,10 @@
     "sidePanel",
     "storage"
   ],
+  "host_permissions": [
+    "http://localhost:3080/*",
+    "http://127.0.0.1:3080/*"
+  ],
   "side_panel": {
     "default_path": "sidepanel.html"
   },

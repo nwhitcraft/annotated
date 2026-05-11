@@ -80,7 +80,7 @@ app.post('/', async (c) => {
       clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
-    clip_text || null, clip_start_sec || null, clip_end_sec || null, clip_media_path || null, commentary);
+    clip_text || null, clip_start_sec ?? null, clip_end_sec ?? null, clip_media_path || null, commentary);
 
   return c.json({ id, created: true }, 201);
 });
