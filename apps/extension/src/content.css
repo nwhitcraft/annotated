@@ -1,4 +1,185 @@
-/* Minimal styling for selection indicator */
+/* Annotated — Content Script Styles
+   Injected into every page. Scoped via #annotated- prefixes.
+   Newspaper editorial aesthetic: warm, serif, restrained. */
+
+/* ── Selection highlight ─────────────────────────────────────── */
+
 ::selection {
-  background: rgba(99, 102, 241, 0.25) !important;
+  background: rgba(99, 102, 241, 0.2) !important;
+}
+
+.annotated-highlight {
+  background: rgba(99, 102, 241, 0.15);
+  border-bottom: 2px solid rgba(99, 102, 241, 0.5);
+  border-radius: 2px;
+  padding: 1px 0;
+  position: relative;
+  z-index: 10001;
+}
+
+/* ── Blur overlay ────────────────────────────────────────────── */
+
+#annotated-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 10000;
+  cursor: crosshair;
+  transition: opacity 0.2s ease;
+  pointer-events: all;
+}
+
+body.annotated-active ::selection {
+  background: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Lift selected content above overlay */
+body.annotated-active .annotated-highlight {
+  position: relative;
+  z-index: 10001;
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
+}
+
+/* ── Annotation tooltip ──────────────────────────────────────── */
+
+#annotated-tooltip {
+  position: absolute;
+  z-index: 10002;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: #fafaf8;
+  border: 1px solid #e5e2d9;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.08);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  animation: annotated-fade-in 0.15s ease;
+}
+
+@keyframes annotated-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Quote preview */
+.annotated-tooltip-quote {
+  font-family: 'Newsreader', 'Georgia', serif;
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #3a3a3a;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-left: 3px solid #6366f1;
+  background: rgba(99, 102, 241, 0.04);
+  border-radius: 0 4px 4px 0;
+}
+
+.annotated-tooltip-truncated {
+  font-size: 11px;
+  color: #9a9a9a;
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+/* Commentary textarea */
+.annotated-tooltip-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid #e5e2d9;
+  border-radius: 6px;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: 'Newsreader', 'Georgia', serif;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.annotated-tooltip-textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.annotated-tooltip-textarea::placeholder {
+  color: #b0b0b0;
+  font-style: italic;
+}
+
+/* Action row */
+.annotated-tooltip-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.annotated-tooltip-chars {
+  font-size: 11px;
+  color: #a0a0a0;
+}
+
+.annotated-tooltip-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.annotated-tooltip-cancel {
+  padding: 6px 14px;
+  border: 1px solid #e5e2d9;
+  border-radius: 6px;
+  background: transparent;
+  color: #666;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.annotated-tooltip-cancel:hover {
+  background: #f0ede6;
+}
+
+.annotated-tooltip-post {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.annotated-tooltip-post:hover:not(:disabled) {
+  background: #818cf8;
+}
+
+.annotated-tooltip-post:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Annotated logo watermark (subtle) ───────────────────────── */
+
+#annotated-tooltip::before {
+  content: '✦ annotated';
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b0b0b0;
+  margin-bottom: 10px;
+  letter-spacing: 0.02em;
 }

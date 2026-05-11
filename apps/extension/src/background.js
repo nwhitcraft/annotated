@@ -1,26 +1,38 @@
-// Open side panel on action click
-chrome.action.onClicked.addListener((tab) => {
-  chrome.sidePanel.open({ tabId: tab.id });
+// Background service worker — handles hotkey, side panel, and message routing
+
+// Open side panel on extension icon click
+chrome.action.onClicked.addListener(async (tab) => {
+  // Open sidebar
+  await chrome.sidePanel.open({ tabId: tab.id });
+  // Also activate annotate mode on the page
+  chrome.tabs.sendMessage(tab.id, { type: 'ACTIVATE_ANNOTATE' }).catch(() => {});
 });
 
-// Also support the keyboard shortcut
-chrome.commands.onCommand.addListener((command) => {
+// Keyboard shortcut handler (Cmd+Shift+A)
+chrome.commands.onCommand.addListener(async (command) => {
   if (command === '_execute_action') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.sidePanel.open({ tabId: tabs[0].id });
-      }
-    });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      await chrome.sidePanel.open({ tabId: tab.id });
+      chrome.tabs.sendMessage(tab.id, { type: 'ACTIVATE_ANNOTATE' }).catch(() => {});
+    }
   }
 });
 
-// Listen for messages from content script
+// Route messages between content script and side panel
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Forward text selection to side panel
   if (msg.type === 'TEXT_SELECTED') {
-    // Forward to side panel
-    chrome.runtime.sendMessage({ type: 'CLIP_TEXT', text: msg.text, url: msg.url, title: msg.title });
+    chrome.runtime.sendMessage({ type: 'TEXT_SELECTED', ...msg }).catch(() => {});
   }
+
+  // Forward page detection to side panel
   if (msg.type === 'PAGE_INFO') {
-    chrome.runtime.sendMessage({ type: 'PAGE_DETECTED', ...msg });
+    chrome.runtime.sendMessage({ type: 'PAGE_DETECTED', ...msg }).catch(() => {});
+  }
+
+  // Forward post confirmation to side panel
+  if (msg.type === 'ANNOTATION_POSTED') {
+    chrome.runtime.sendMessage({ type: 'ANNOTATION_POSTED', ...msg }).catch(() => {});
   }
 });
