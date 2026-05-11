@@ -1,10 +1,10 @@
 # Annotated — Codex Completion Spec
 
-**Version:** 3.0
+**Version:** 4.0
 **Date:** 2026-05-12
 **Author:** Stark (written for Codex)
 **Bounty:** Jason Calacanis $5,000 via Launch.co (deadline ~May 15, 2026)
-**Repo:** `github.com/nwhitcraft/annotated`
+**Repo:** `github.com/nicholaswhitcraft/annotated`
 **Working branch:** `frontend-v2`
 
 ---
@@ -38,7 +38,7 @@ A complete, actionable spec for Codex to finish the Annotated.com project. Every
 | **API Client** | ✅ Complete | Full client with auth token in localStorage, demo-user fallback |
 | **Chrome Extension** | ✅ Complete | MV3, side panel, blur overlay, inline tooltip, hotkey, video timeline |
 | **Extension CSS** | ✅ Complete | Editorial style, matches frontend-v2 exactly |
-| **Extension Side Panel** | ✅ Complete | Compose, related annotations, following feed, URL paste |
+| **Extension Side Panel** | ✅ Complete | Compose, related annotations, following feed, URL paste, auth bridge |
 | **Demo Data** | ✅ Seeded | 3 users, 3 annotations, threaded comments, likes |
 | **E2E Tests** | ✅ Passing | API tests |
 
@@ -52,6 +52,9 @@ A complete, actionable spec for Codex to finish the Annotated.com project. Every
 | **No annotation type tags** | 🟡 High | Schema missing `annotation_type` field |
 | **No X/Twitter support** | 🟡 High | Not in detection, not in clip engine, not in extension |
 | **No voting/credibility** | 🟡 High | No Noteworthy signal, no credibility score |
+| **No claims in extension** | 🟡 Medium | Can't file claims from sidebar |
+| **No claims in AnnotationItem** | 🟡 Medium | Claim count/status not shown on cards |
+| **No admin claims dashboard** | 🟡 Medium | Claims endpoint exists but no UI to review |
 | **No iTunes podcast fallback** | 🟡 Medium | Only URL regex detection |
 | **Following is local-only** | 🟡 Medium | Extension uses chrome.storage, not API follows table |
 | **Content detection is basic** | 🟡 Medium | No JSON-LD, no shadow DOM, no smart reclassification |
@@ -166,7 +169,7 @@ GET /api/auth/signin
 ### Extension Auth Handoff
 - Extension opens `annotated.com/extension-auth` popup
 - Returns JWT via `postMessage`
-- Stored in `chrome.storage.session` (not persistent)
+- Stored in `chrome.storage.session.auth_token` (not persistent)
 
 ### Desktop Auth
 - Custom URL scheme: `annotated://callback`
@@ -194,6 +197,14 @@ GET /api/auth/signin
 - YouTube clips: ≤90s, downscaled to 240p
 - Podcast audio: ≤90s
 - Annotation text: 280 chars
+
+### Claims System
+**Decision:** Open filing (anyone can file, no login required). DMCA-style fair-use claims.
+- Claims are filed against specific annotations via the annotation detail page
+- Claims have status: `pending` → `reviewed` → `resolved`
+- Admin can list claims by status
+- Claims are NOT shown on annotation cards (to avoid clutter)
+- Claims are NOT available from the extension (web-only for now)
 
 ---
 
@@ -280,7 +291,84 @@ ALTER TABLE users ADD COLUMN credibility_score INTEGER DEFAULT 0;
 - `apps/web/src/pages/Feed.jsx` — display noteworthy count
 - `apps/web/src/pages/Profile.jsx` — display credibility score
 
-### 5.5 iTunes Podcast Fallback (🟡 Medium)
+### 5.5 Claims — Extension + Card Integration (🟡 Medium)
+
+**Current state:** Claims exist only on the annotation detail page (`/a/:id`). The `AnnotationItem` card component and the extension side panel have no claims functionality.
+
+**What to build:**
+
+#### 5.5.1 Claims count on AnnotationItem cards
+
+**File:** `apps/web/src/components/AnnotationItem.jsx`
+
+Add a claim count indicator next to the existing like/comment/share buttons in the ActionRow. The `AnnotationItem` component receives an `annotation` prop that includes all annotation fields. The claims count should be fetched from the API and displayed as a small "⚠ N" badge.
+
+**API endpoint needed:**
+```
+GET /api/annotations/:id/claims
+```
+Returns: `{ count: N, claims: [...] }`
+
+**UI:** Add a claim button to `ActionRow.jsx` (the existing action buttons component):
+- Shows "⚠ N" where N is the claim count
+- Clicking opens a small inline claim form (same as the detail page)
+- If the user is logged in, pre-fill their email
+
+**CSS:** Add to `global.css`:
+```css
+.claim-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.claim-count:hover {
+  color: var(--danger);
+}
+```
+
+#### 5.5.2 Claims in the extension side panel
+
+**File:** `apps/extension/src/sidepanel.js`
+
+In the `renderRelatedItem()` function, add a claim indicator next to the existing like/comment counts:
+```
+${a.claim_count ? ` · ⚠ ${a.claim_count}` : ''}
+```
+
+Also add a "File a claim" button to the compose area when the user is logged in. When clicked, it opens a small form (email + reason) that posts to `POST /api/claims`.
+
+**API changes needed:**
+- Add `claim_count` to the annotations returned by the feed endpoints
+- The `GET /api/annotations/:id` endpoint should include `claim_count`
+
+**DB change:** Add `claim_count` column to annotations table:
+```sql
+ALTER TABLE annotations ADD COLUMN claim_count INTEGER DEFAULT 0;
+```
+
+#### 5.5.3 Admin claims dashboard
+
+**File:** `apps/web/src/pages/AdminClaims.jsx` (new)
+
+Route: `/admin/claims`
+
+A simple table showing all claims with:
+- Claim ID
+- Annotation link (clickable)
+- Claimant email
+- Reason (truncated, expandable)
+- Status (pending/reviewed/resolved)
+- Created date
+- Action buttons: "Mark reviewed", "Mark resolved", "Delete"
+
+**API changes:**
+- `PATCH /api/claims/:id` — update claim status
+- `DELETE /api/claims/:id` — delete a claim
+- `GET /api/claims` — already exists, list claims by status
+
+**Auth:** This page should be behind auth (admin-only). For MVP, any logged-in user can access it. Later: role-based access.
+
+### 5.6 iTunes Podcast Fallback (🟡 Medium)
 
 **API changes:**
 - `POST /api/clip/podcast/lookup` — search iTunes API for podcast episode
@@ -297,133 +385,24 @@ const PODCAST_DOMAINS = [
 ];
 ```
 
-### 5.6 Following Sync (🟡 Medium)
+### 5.7 Following Sync (🟡 Medium)
 
 **Extension changes:**
 - Replace `chrome.storage.local` following list with API-synced follows
 - On auth, fetch `GET /api/users/me` to get user ID
 - Fetch `GET /api/feed/following/:userId` for following feed
-- Follow/unfollow buttons call API, not local storage
 
-### 5.7 Content Detection Intelligence (🟡 Medium)
+⚠️ [... middle content omitted — showing head and tail ...]
 
-**Files to modify:**
-- `apps/extension/src/content.js` — add JSON-LD parsing, shadow DOM traversal
-
-**JSON-LD parsing:**
-```js
-function parseJsonLd(doc) {
-  const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
-  for (const script of scripts) {
-    try {
-      return JSON.parse(script.textContent);
-    } catch {}
-  }
-  return null;
-}
-```
-
-**Smart reclassification:**
-- Detect YouTube shorts from URL pattern
-- Detect embedded videos vs native pages
-- Detect SPA vs static page
-
-### 5.8 API_BASE Configuration (🟡 Medium)
-
-**Extension changes:**
-- Replace hardcoded `http://localhost:3080` with configurable base
-- Use `chrome.runtime.getURL('')` for local dev
-- Use `https://api.annotated.com` for production
-- Store in `chrome.storage.sync.api_base`
-
-**Web changes:**
-- Already uses relative `/api` — correct for production
-
-### 5.9 Fix Duplicate Compose Paths (🟠 Medium)
-
-**Decision:** Keep inline tooltip as primary compose path. Side panel becomes secondary (related annotations, following feed, URL paste).
-
-**Files to modify:**
-- `apps/extension/src/content.js` — ensure tooltip posts correctly
-- `apps/extension/src/sidepanel.js` — remove duplicate post button, keep as feed viewer
-- `apps/extension/sidepanel.html` — update layout
-
-### 5.10 Extension Bug Fixes (🟠 Medium)
-
-**Bug list from earlier audit:**
-1. Quote closing — text selection not properly closed after post
-2. Keyboard shortcut — hotkey not working consistently
-3. Highlight after dismiss — highlight persists after dismissing tooltip
-4. Following feed — not loading from API
-5. Auto-load — side panel not auto-loading page info
-6. Remove compose box — side panel should not have compose box
-7. Speech bubble positioning — tooltip not positioned correctly near selection
-
-### 5.11 New Routes (Web)
-
-**Routes to add to `apps/web/src/App.jsx`:**
-```jsx
-<Route path="/onboarding" element={<Onboarding />} />
-<Route path="/onboarding/tutorial" element={<OnboardingTutorial />} />
-<Route path="/extension-auth" element={<ExtensionAuth />} />
-<Route path="/download" element={<DownloadPage />} />
-```
-
----
-
-## 6. Exact File Paths
-
-### Extension
-```
-apps/extension/manifest.json
-apps/extension/src/content.js
-apps/extension/src/content.css
-apps/extension/src/background.js
-apps/extension/src/sidepanel.js
-apps/extension/sidepanel.html
-apps/extension/src/auth-bridge.js          ← CREATE
-apps/extension/src/onboarding.html          ← MODIFY
-apps/extension/src/onboarding.js            ← MODIFY
-```
-
-### API
-```
-packages/api/src/index.js
-packages/api/src/db.js
-packages/api/src/routes/annotations.js
-packages/api/src/routes/feed.js
-packages/api/src/routes/users.js
-packages/api/src/routes/clip.js
-packages/api/src/routes/claims.js
-packages/api/src/middleware/auth.js         ← CREATE
-packages/api/src/routes/auth.js             ← CREATE
-packages/api/src/routes/podcast-lookup.js   ← CREATE
-```
-
-### Web
-```
-apps/web/src/App.jsx
-apps/web/src/pages/Login.jsx
-apps/web/src/pages/Feed.jsx
-apps/web/src/pages/Profile.jsx
-apps/web/src/pages/NewAnnotation.jsx
-apps/web/src/pages/AnnotationPage.jsx
-apps/web/src/pages/Onboarding.jsx           ← CREATE
-apps/web/src/pages/OnboardingTutorial.jsx   ← CREATE
 apps/web/src/pages/ExtensionAuth.jsx        ← CREATE
+apps/web/src/pages/AdminClaims.jsx          ← CREATE (new in v4)
 apps/web/src/pages/DownloadPage.jsx         ← CREATE
-apps/web/src/components/Layout.jsx
-apps/web/src/lib/api.js
-apps/web/src/lib/mockData.js
-```
-
-### Clip Engine
-```
-packages/clip-engine/src/index.js
-packages/clip-engine/src/article.js
-packages/clip-engine/src/youtube.js
-packages/clip-engine/src/podcast.js
-packages/clip-engine/src/twitter.js         ← CREATE
+apps/web/src/components/ActionRow.jsx       ← MODIFY (add claim button)
+apps/web/src/components/AnnotationItem.jsx  ← MODIFY (add claim count)
+apps/web/src/lib/api.js                     ← MODIFY (add claim APIs)
+apps/web/src/styles/global.css              ← MODIFY (add claim styles)
+apps/extension/src/sidepanel.js             ← MODIFY (add claim indicator)
+apps/extension/src/content.js               ← MODIFY (add claim detection)
 ```
 
 ---
@@ -461,25 +440,34 @@ Codex should build in this order:
    - Credibility score calculation
    - UI display
 
-6. **Onboarding flow** (user activation)
+6. **Claims — extension + card + admin** (new in v4)
+   - Add `claim_count` to annotations table
+   - Add `GET /api/annotations/:id/claims` endpoint
+   - Add `PATCH /api/claims/:id` and `DELETE /api/claims/:id` endpoints
+   - Add claim count to `AnnotationItem` cards
+   - Add claim button to `ActionRow` component
+   - Add claim indicator to extension side panel
+   - Build `/admin/claims` dashboard page
+
+7. **Onboarding flow** (user activation)
    - 5-step wizard
    - Tutorial page
    - Starter accounts
 
-7. **Content detection intelligence** (quality)
+8. **Content detection intelligence** (quality)
    - JSON-LD parsing
    - Shadow DOM traversal
    - Smart reclassification
 
-8. **Following sync** (consistency)
+9. **Following sync** (consistency)
    - API-synced follows
    - Remove local storage dependency
 
-9. **iTunes podcast fallback** (coverage)
-   - iTunes API wrapper
-   - Domain list expansion
+10. **iTunes podcast fallback** (coverage)
+    - iTunes API wrapper
+    - Domain list expansion
 
-10. **API_BASE configuration** (deployment)
+11. **API_BASE configuration** (deployment)
     - Configurable base URL
     - Environment handling
 
@@ -528,6 +516,10 @@ Before submission:
 - [ ] X/Twitter clip works via oEmbed
 - [ ] Noteworthy toggle works
 - [ ] Credibility score displays on profile
+- [ ] Claims count shows on annotation cards
+- [ ] Claims can be filed from annotation cards (inline)
+- [ ] Claims can be filed from extension side panel
+- [ ] Admin claims dashboard works (list, review, resolve, delete)
 - [ ] Onboarding flow completes
 - [ ] Following feed loads from API
 - [ ] All extension bugs fixed
@@ -556,8 +548,9 @@ Before submission:
 5. User can add annotation type tags
 6. User can clip YouTube videos (≤90s)
 7. User can clip articles (text extraction)
-8. User can file claims against annotations
-9. Extension UX is polished (no bugs from audit)
-10. Onboarding guides first-time users
+8. User can file claims against annotations (web + extension)
+9. Admin can review and resolve claims
+10. Extension UX is polished (no bugs from audit)
+11. Onboarding guides first-time users
 
-If all 10 work, we submit to Launch.co.
+If all 11 work, we submit to Launch.co.
