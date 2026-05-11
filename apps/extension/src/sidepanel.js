@@ -119,8 +119,8 @@ function renderFeed(title, items) {
       <a class="source-line" href="${escapeAttr(item.source_url)}" target="_blank" rel="noreferrer">
         ${escapeHtml(sourceLabel(item))}
       </a>
-      ${item.clip_text ? `<blockquote class="feed-quote">${escapeHtml(truncate(item.clip_text, 180))}</blockquote>` : `<p class="feed-quote">${escapeHtml(mediaRange(item))}</p>`}
       <p class="feed-commentary">${escapeHtml(item.commentary || '')}</p>
+      ${item.clip_text ? `<blockquote class="feed-quote">${escapeHtml(truncate(item.clip_text, 180))}</blockquote>` : `<p class="feed-quote">${escapeHtml(mediaRange(item))}</p>`}
     </article>
   `).join('');
 }

@@ -64,6 +64,8 @@ export default function AnnotationItem({ annotation, expanded = false }) {
         )}
       </div>
 
+      <h2 className="annotation-headline">{annotation.commentary}</h2>
+
       {annotation.clip_text && (
         <blockquote className="clip-blockquote">
           {annotation.clip_text}
@@ -88,7 +90,6 @@ export default function AnnotationItem({ annotation, expanded = false }) {
         </audio>
       )}
 
-      <h2 className="annotation-headline">{annotation.commentary}</h2>
       <ActionRow annotation={annotation} onOpenComments={openComments} />
     </article>
   );

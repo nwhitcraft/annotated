@@ -5,32 +5,33 @@
 .annotated-page-composer {
   position: fixed;
   z-index: 2147483647;
-  width: min(760px, calc(100vw - 40px));
+  width: min(620px, calc(100vw - 36px));
   animation: annotated-bubble-in 160ms ease-out;
 }
 
 .quote-annotation-bubble {
   position: fixed;
-  min-height: 300px;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(120px, 1fr) auto;
-  gap: 18px;
-  padding: 34px 32px 28px;
+  grid-template-rows: auto minmax(86px, 1fr) auto;
+  gap: 12px;
+  padding: 24px 26px 22px;
   border: 1px solid #deded9;
   border-radius: 16px;
   background: rgba(255, 255, 253, 0.97);
   box-shadow: 0 20px 58px rgba(26, 26, 26, 0.14);
   color: #1a1a1a;
   box-sizing: border-box;
+  overflow: auto;
 }
 
-.quote-annotation-bubble__quote {
+.quote-annotation-bubble__prompt {
   margin: 0;
   color: #6b6b6b;
   font-family: Newsreader, Georgia, serif;
-  font-size: 27px;
+  font-size: 22px;
   font-style: italic;
-  line-height: 1.28;
+  line-height: 1.2;
 }
 
 .quote-annotation-bubble__label {
@@ -44,13 +45,13 @@
 
 .quote-annotation-bubble__textarea {
   width: 100%;
-  min-height: 118px;
+  min-height: 86px;
   padding: 0;
   border: 0;
   background: transparent;
   color: #1a1a1a;
   font-family: Newsreader, Georgia, serif;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 500;
   line-height: 1.45;
   outline: none;
@@ -73,7 +74,7 @@
   background: transparent;
   color: #4f46e5;
   font-family: Newsreader, Georgia, serif;
-  font-size: 27px;
+  font-size: 24px;
   font-weight: 600;
   line-height: 1;
   cursor: pointer !important;

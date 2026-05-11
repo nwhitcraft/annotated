@@ -236,41 +236,50 @@ function showComposer(rect) {
   composer.id = COMPOSER_ID;
   composer.className = 'quote-annotation-bubble annotated-page-composer';
   composer.setAttribute('aria-label', 'Quote annotation');
+  composer.style.visibility = 'hidden';
   composer.innerHTML = `
-    <blockquote class="quote-annotation-bubble__quote">${escapeHtml(activeClip.text || `${typeLabel(activeClip.sourceType)} excerpt`)}</blockquote>
-    <label class="quote-annotation-bubble__label" for="annotated-page-commentary">Annotation</label>
+    <label class="quote-annotation-bubble__prompt" for="annotated-page-commentary">Your Thoughts Here:</label>
     <textarea
       id="annotated-page-commentary"
       class="quote-annotation-bubble__textarea"
-      placeholder="Write the take people should respond to..."
-      rows="5"
+      rows="4"
     ></textarea>
     <div class="quote-annotation-bubble__actions">
       <button class="quote-annotation-bubble__button" type="button">Annotate</button>
     </div>
   `;
 
-  positionComposer(composer, rect);
-
   composer.addEventListener('mousedown', (event) => event.stopPropagation());
   composer.querySelector('button').addEventListener('click', () => postAnnotation(composer));
 
   document.documentElement.append(composer);
+  positionComposer(composer, rect);
+  composer.style.visibility = '';
   composer.querySelector('textarea').focus();
 }
 
 function positionComposer(composer, rect) {
-  const width = Math.min(760, window.innerWidth - 40);
-  const estimatedHeight = Math.min(340, window.innerHeight - 36);
-  const left = Math.max(20, Math.min(window.innerWidth - width - 20, rect.left + rect.width / 2 - width / 2));
-  const below = rect.bottom + 18;
-  const above = rect.top - estimatedHeight - 18;
-  const hasRoomBelow = below + estimatedHeight <= window.innerHeight - 18;
-  const top = Math.max(18, hasRoomBelow ? below : Math.max(18, above));
+  const margin = 18;
+  const gap = 16;
+  const width = Math.min(620, window.innerWidth - margin * 2);
+  const left = Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
 
   composer.style.width = `${width}px`;
+  composer.style.maxHeight = '';
+
+  const measuredHeight = Math.min(composer.offsetHeight || 224, window.innerHeight - margin * 2);
+  const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+  const spaceAbove = rect.top - gap - margin;
+  const placeBelow = spaceBelow >= measuredHeight || spaceBelow >= spaceAbove;
+  const availableSpace = Math.max(140, placeBelow ? spaceBelow : spaceAbove);
+  const height = Math.min(measuredHeight, availableSpace);
+  const top = placeBelow
+    ? Math.min(rect.bottom + gap, window.innerHeight - height - margin)
+    : Math.max(margin, rect.top - height - gap);
+
   composer.style.left = `${left}px`;
   composer.style.top = `${top}px`;
+  composer.style.maxHeight = `${availableSpace}px`;
 }
 
 function updateAnchoredUi() {
@@ -459,19 +468,4 @@ async function maybeCreateMediaClip(clip) {
   } catch {
     return null;
   }
-}
-
-function typeLabel(type) {
-  if (type === 'youtube') return 'Video';
-  if (type === 'podcast') return 'Audio';
-  return 'Article';
-}
-
-function escapeHtml(value) {
-  return String(value || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 }
