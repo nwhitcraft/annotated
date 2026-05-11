@@ -1,11 +1,12 @@
 const API_BASE = 'http://localhost:3080';
 const USER_ID = 'demo-user';
 const SHORTCUT_KEY = 'annotated.shortcut';
-const DEFAULT_SHORTCUT = 'Ctrl+Shift+X';
-const LEGACY_SHORTCUTS = new Set(['Command+Shift+X']);
+const DEFAULT_SHORTCUT = 'Alt+Shift+X';
+const LEGACY_SHORTCUTS = new Set(['Command+Shift+X', 'Ctrl+Shift+X']);
 
 let currentPage = null;
 let shortcutCapture = false;
+let shortcutCaptureTimer = null;
 
 const statusEl = document.getElementById('status');
 const shortcutBtn = document.getElementById('shortcut-btn');
@@ -30,8 +31,14 @@ chrome.runtime.onMessage.addListener((msg) => {
 });
 
 shortcutBtn.addEventListener('click', () => {
+  if (shortcutCapture) {
+    finishShortcutCapture();
+    return;
+  }
+
   shortcutCapture = true;
-  shortcutBtn.textContent = 'Press keys';
+  shortcutBtn.textContent = 'Cancel';
+  shortcutCaptureTimer = window.setTimeout(finishShortcutCapture, 8000);
 });
 
 document.addEventListener('keydown', (event) => {
@@ -41,26 +48,28 @@ document.addEventListener('keydown', (event) => {
   event.stopPropagation();
 
   if (event.key === 'Escape') {
-    shortcutCapture = false;
-    shortcutBtn.textContent = 'Change';
+    finishShortcutCapture();
     return;
   }
 
   const next = shortcutFromEvent(event);
   if (!next) {
-    shortcutBtn.textContent = 'Use modifier';
-    window.setTimeout(() => {
-      if (shortcutCapture) shortcutBtn.textContent = 'Press keys';
-    }, 1000);
+    finishShortcutCapture();
     return;
   }
 
   chrome.storage.sync.set({ [SHORTCUT_KEY]: next }, () => {
-    shortcutCapture = false;
-    shortcutBtn.textContent = 'Change';
+    finishShortcutCapture();
     renderShortcut(next);
   });
 }, true);
+
+function finishShortcutCapture() {
+  shortcutCapture = false;
+  window.clearTimeout(shortcutCaptureTimer);
+  shortcutCaptureTimer = null;
+  shortcutBtn.textContent = 'Change';
+}
 
 function hydrate() {
   chrome.runtime.sendMessage({ type: 'GET_ACTIVE_STATE' }, (response) => {
@@ -103,17 +112,16 @@ function initShortcut() {
 }
 
 function renderShortcut(shortcut) {
-  shortcutLabelEl.textContent = normalizeShortcut(shortcut);
+  shortcutLabelEl.textContent = formatShortcut(normalizeShortcut(shortcut));
 }
 
 function shortcutFromEvent(event) {
-  if (!event.metaKey && !event.ctrlKey && !event.altKey) return '';
+  if (!event.ctrlKey && !event.altKey) return '';
 
-  const key = normalizeKey(event.key);
+  const key = keyFromCode(event.code) || normalizeKey(event.key);
   if (!key || ['Shift', 'Ctrl', 'Control', 'Alt', 'Option', 'Command', 'Meta', 'Cmd'].includes(key)) return '';
 
   const parts = [];
-  if (event.metaKey) parts.push('Command');
   if (event.ctrlKey) parts.push('Ctrl');
   if (event.altKey) parts.push('Alt');
   if (event.shiftKey) parts.push('Shift');
@@ -281,7 +289,18 @@ function normalizeKey(value) {
   return key.replace(/^Arrow/, '');
 }
 
+function keyFromCode(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.replace(/^Key/, '');
+  if (/^Digit[0-9]$/.test(code)) return code.replace(/^Digit/, '');
+  return '';
+}
+
 function migrateShortcut(value) {
   const normalized = normalizeShortcut(value || DEFAULT_SHORTCUT);
   return LEGACY_SHORTCUTS.has(normalized) ? DEFAULT_SHORTCUT : normalized;
+}
+
+function formatShortcut(shortcut) {
+  if (!/Mac|iPhone|iPad/i.test(navigator.platform)) return shortcut;
+  return shortcut.replace(/\bAlt\b/g, 'Option');
 }
