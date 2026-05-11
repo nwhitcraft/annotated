@@ -59,7 +59,7 @@ A complete, actionable spec for Codex to finish the Annotated.com project. Every
 | **Following is local-only** | 🟡 Medium | Extension uses chrome.storage, not API follows table |
 | **Content detection is basic** | 🟡 Medium | No JSON-LD, no shadow DOM, no smart reclassification |
 | **API_BASE hardcoded** | 🟡 Medium | `localhost:3080` in extension, relative `/api` in web |
-| **Duplicate compose paths** | 🟠 Medium | Inline tooltip AND side panel both post annotations |
+| **Duplicate compose paths** | 🟠 Medium | Inline tooltip AND side panel both post annotations — REMOVE inline tooltip, side panel is the only surface |
 | **Extension bugs** | 🟠 Medium | Quote closing, keyboard shortcut, highlight persistence, etc. |
 
 ---
@@ -223,6 +223,19 @@ GET /api/auth/signin
 - Admin can list claims by status
 - Claims ARE shown on annotation cards (⚠ N badge)
 - Claims ARE available from the extension side panel
+
+### Sidebar UX (🔴 Final Decision)
+**Decision:** The Chrome extension side panel IS the annotation surface. It is final.
+- The side panel handles all annotation composition, clipping, and browsing
+- The inline tooltip (content.js) is a duplicate compose path — REMOVE it
+- The side panel is the single source of truth for annotation UX in the extension
+- The desktop app MUST use the same sidebar UX pattern (not a different flow)
+- The only changes to the side panel are:
+  1. Login function (auth bridge via postMessage)
+  2. Profile picture circle (replaces login button, links to user's full feed)
+- Codex should NOT redesign, restructure, or replace the side panel
+- Codex should NOT add alternative annotation surfaces (no new tooltips, popups, or floating widgets)
+- The side panel's clipping technique (iframe embed + captureStream) is the correct approach
 
 ---
 
@@ -491,7 +504,7 @@ Codex should build in this order. Desktop app work runs **in parallel** with web
 
 ### Phase 1: Foundation (do first, everything depends on it)
 1. **Auth system** — JWT middleware, OAuth routes, `/extension-auth` page, auth bridge in extension, `annotated://callback` handler in desktop
-2. **Fix extension bugs** — quote closing, keyboard shortcut, highlight after dismiss, duplicate compose box, speech bubble positioning
+2. **Fix extension bugs** — quote closing, keyboard shortcut, highlight after dismiss, REMOVE inline tooltip (side panel is the only annotation surface), speech bubble positioning
 3. **Desktop scaffold** — Tauri v2 project, reuse web React components, set up Rust backend structure
 
 ### Phase 2: Core Features (parallel: web + desktop)
