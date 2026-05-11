@@ -142,6 +142,14 @@ export async function detectClip(url) {
   }
 }
 
+export async function createMediaClip({ type, url, start, end }) {
+  if (!['youtube', 'podcast'].includes(type)) return null;
+  return request(`/clip/${type}`, {
+    method: 'POST',
+    body: JSON.stringify({ url, start, end }),
+  });
+}
+
 export async function createAnnotation(payload) {
   return request('/annotations', {
     method: 'POST',

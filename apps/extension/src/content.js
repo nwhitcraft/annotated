@@ -1,457 +1,471 @@
-// Content script — highlight + blur overlay + inline annotation UX
-// Injected on all pages. Activated ONLY by hotkey (Cmd+Shift+A).
+// Content script — shortcut-driven clipping mode, source metadata, and media time.
 
-const MAX_CLIP_CHARS = 280;
-const MAX_COMMENTARY_CHARS = 500;
-const MAX_DURATION = 90; // seconds — per spec
 const API_BASE = 'http://localhost:3080';
+const USER_ID = 'demo-user';
+const COMPOSER_ID = 'annotated-page-composer';
+const OVERLAY_ID = 'annotated-clipping-overlay';
+const SHORT_CLIP_SECONDS = 90;
 
-let annotateMode = false;
-let overlayEl = null;
-let tooltipEl = null;
-let videoTimelineEl = null;
+let lastUrl = window.location.href;
+let clippingMode = false;
+let activeClip = null;
+let activeRange = null;
+let selecting = false;
+let selectionTimer = null;
+let trackingFrame = null;
 
-// ── Page Detection ──────────────────────────────────────────────
-
-function detectPage() {
-  const url = window.location.href;
-  const type = detectSourceType(url);
-
-  chrome.runtime.sendMessage({
-    type: 'PAGE_INFO',
-    url,
-    title: document.title,
-    sourceType: type,
-    domain: window.location.hostname.replace(/^www\./, ''),
-  });
-
-  // Show video timeline for YouTube/podcast pages
-  if (type === 'youtube' || type === 'podcast') {
-    showVideoTimeline(url, type);
-  }
-}
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'START_CLIPPING') enterClippingMode();
+  if (msg.type === 'EXIT_CLIPPING') exitClippingMode();
+});
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
-  if (/spotify\.com|podcasts\.apple\.com|overcast\.fm/i.test(url)) return 'podcast';
+  if (/spotify\.com|podcasts\.apple\.com|overcast\.fm|pocketcasts|castbox|podbean|anchor\.fm|podcasts\.google/i.test(url)) return 'podcast';
+  if (/\.mp3$|\.m4a$|\.wav$|\/audio\//i.test(url)) return 'podcast';
   return 'article';
 }
 
-// ── Video Timeline (YouTube / Podcast) ──────────────────────────
+function getPageInfo() {
+  const canonical = document.querySelector('link[rel="canonical"]')?.href || window.location.href;
+  const title = meta(['og:title', 'twitter:title']) || document.title.replace(/\s+-\s+YouTube$/, '');
+  const siteName = meta(['og:site_name', 'application-name']) || window.location.hostname.replace(/^www\./, '');
+  const publishedAt = meta(['article:published_time', 'datePublished', 'date', 'pubdate']);
+  const author = meta(['author', 'article:author', 'parsely-author', 'byl']);
+  const thumbnail = meta(['og:image', 'twitter:image']);
 
-function showVideoTimeline(url, type) {
-  removeVideoTimeline();
-
-  videoTimelineEl = document.createElement('div');
-  videoTimelineEl.id = 'annotated-timeline';
-  videoTimelineEl.innerHTML = `
-    <div class="annotated-timeline-header">
-      <span class="annotated-timeline-label">Clip this segment</span>
-      <span class="annotated-timeline-duration">0:00 / 0:00</span>
-    </div>
-    <div class="annotated-timeline-track">
-      <div class="annotated-timeline-handle annotated-timeline-handle-start" data-handle="start"></div>
-      <div class="annotated-timeline-range"></div>
-      <div class="annotated-timeline-handle annotated-timeline-handle-end" data-handle="end"></div>
-    </div>
-    <div class="annotated-timeline-controls">
-      <button class="annotated-timeline-btn annotated-timeline-btn-clip" disabled>✦ Clip & Annotate</button>
-      <button class="annotated-timeline-btn annotated-timeline-btn-cancel">Cancel</button>
-    </div>
-  `;
-
-  document.body.appendChild(videoTimelineEl);
-
-  // State
-  let totalDuration = 0;
-  let start = 0;
-  let end = 0;
-  let dragging = null;
-  let trackRect = null;
-
-  // Try to get video duration from the page
-  const videoEl = document.querySelector('video');
-  if (videoEl) {
-    videoEl.addEventListener('loadedmetadata', () => {
-      totalDuration = Math.min(videoEl.duration, MAX_DURATION * 10);
-      updateDurationDisplay();
-      start = 0;
-      end = Math.min(30, totalDuration);
-      updateRange();
-    });
-  }
-
-  // Fallback: if no video element, default to 0-30s
-  if (!videoEl) {
-    totalDuration = 120;
-    start = 0;
-    end = 30;
-    updateDurationDisplay();
-    updateRange();
-  }
-
-  function updateDurationDisplay() {
-    const durEl = videoTimelineEl.querySelector('.annotated-timeline-duration');
-    durEl.textContent = `${formatTime(start)} / ${formatTime(totalDuration)}`;
-  }
-
-  function updateRange() {
-    const range = videoTimelineEl.querySelector('.annotated-timeline-range');
-    const track = videoTimelineEl.querySelector('.annotated-timeline-track');
-    trackRect = track.getBoundingClientRect();
-
-    const startPct = (start / totalDuration) * 100;
-    const endPct = (end / totalDuration) * 100;
-    range.style.left = startPct + '%';
-    range.style.width = (endPct - startPct) + '%';
-
-    updateDurationDisplay();
-
-    const clipBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-clip');
-    const duration = end - start;
-    clipBtn.disabled = duration <= 0 || duration > MAX_DURATION;
-  }
-
-  function formatTime(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  }
-
-  // Drag handles
-  const handles = videoTimelineEl.querySelectorAll('.annotated-timeline-handle');
-  handles.forEach((handle) => {
-    handle.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      dragging = handle.dataset.handle;
-      document.addEventListener('mousemove', onDrag);
-      document.addEventListener('mouseup', stopDrag);
-    });
-  });
-
-  // Click on track to set position
-  const track = videoTimelineEl.querySelector('.annotated-timeline-track');
-  track.addEventListener('mousedown', (e) => {
-    if (e.target.classList.contains('annotated-timeline-handle')) return;
-    const rect = track.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    const time = Math.max(0, Math.min(totalDuration, pct * totalDuration));
-    start = time;
-    end = Math.min(time + 10, totalDuration);
-    updateRange();
-  });
-
-  function onDrag(e) {
-    if (!dragging || !trackRect) return;
-    const rect = track.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const time = pct * totalDuration;
-
-    if (dragging === 'start') {
-      start = Math.min(time, end - 1);
-    } else {
-      end = Math.max(time, start + 1);
-    }
-    updateRange();
-  }
-
-  function stopDrag() {
-    dragging = null;
-    document.removeEventListener('mousemove', onDrag);
-    document.removeEventListener('mouseup', stopDrag);
-  }
-
-  // Clip button
-  const clipBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-clip');
-  clipBtn.addEventListener('click', () => {
-    const duration = end - start;
-    if (duration <= 0 || duration > MAX_DURATION) return;
-
-    chrome.runtime.sendMessage({
-      type: 'CLIP_VIDEO',
-      url,
-      title: document.title,
-      sourceType: type,
-      clipText: `Clip: ${formatTime(start)}–${formatTime(end)} of ${document.title}`,
-      start,
-      end,
-      duration: totalDuration,
-    });
-
-    removeVideoTimeline();
-  });
-
-  // Cancel button
-  const cancelBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-cancel');
-  cancelBtn.addEventListener('click', () => {
-    removeVideoTimeline();
-  });
-}
-
-function removeVideoTimeline() {
-  if (videoTimelineEl) {
-    videoTimelineEl.remove();
-    videoTimelineEl = null;
-  }
-}
-
-// ── Blur Overlay ────────────────────────────────────────────────
-
-function createOverlay() {
-  if (overlayEl) return;
-  overlayEl = document.createElement('div');
-  overlayEl.id = 'annotated-overlay';
-  overlayEl.addEventListener('click', exitAnnotateMode);
-  document.body.appendChild(overlayEl);
-}
-
-function removeOverlay() {
-  if (overlayEl) {
-    overlayEl.remove();
-    overlayEl = null;
-  }
-}
-
-// ── Annotation Tooltip (speech bubble style) ───────────────────
-
-function showAnnotationTooltip(selectedText, range) {
-  removeTooltip();
-
-  const rect = range.getBoundingClientRect();
-  const constrained = constrainText(selectedText);
-
-  tooltipEl = document.createElement('div');
-  tooltipEl.id = 'annotated-tooltip';
-  // Use a template literal with explicit closing quote
-  const quoteText = escapeHtml(constrained.text);
-  tooltipEl.innerHTML = `
-    <div class="annotated-tooltip-quote">"${quoteText}"</div>
-    ${constrained.truncated ? '<div class="annotated-tooltip-truncated">Trimmed to ~2 sentences</div>' : ''}
-    <textarea class="annotated-tooltip-textarea" placeholder="What's your take?" rows="3" maxlength="${MAX_COMMENTARY_CHARS}"></textarea>
-    <div class="annotated-tooltip-actions">
-      <span class="annotated-tooltip-chars"><span class="annotated-tooltip-chars-count">0</span>/${MAX_COMMENTARY_CHARS}</span>
-      <div class="annotated-tooltip-btns">
-        <button class="annotated-tooltip-cancel">Cancel</button>
-        <button class="annotated-tooltip-post" disabled>✦ Post</button>
-      </div>
-    </div>
-  `;
-
-  // Position as a speech bubble pointing at the selection
-  const tooltipHeight = 280;
-  const tooltipWidth = Math.min(340, window.innerWidth - 32);
-  let top = rect.bottom + window.scrollY + 8;
-  let left = Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - tooltipWidth - 16));
-
-  // If tooltip would go below viewport, flip above
-  if (top + tooltipHeight > window.innerHeight + window.scrollY) {
-    top = Math.max(window.scrollY + 8, rect.top + window.scrollY - tooltipHeight);
-  }
-
-  tooltipEl.style.top = `${top}px`;
-  tooltipEl.style.left = `${left}px`;
-
-  document.body.appendChild(tooltipEl);
-
-  const textarea = tooltipEl.querySelector('.annotated-tooltip-textarea');
-  const postBtn = tooltipEl.querySelector('.annotated-tooltip-post');
-  const cancelBtn = tooltipEl.querySelector('.annotated-tooltip-cancel');
-  const charsCount = tooltipEl.querySelector('.annotated-tooltip-chars-count');
-
-  textarea.focus();
-
-  textarea.addEventListener('input', () => {
-    const len = textarea.value.trim().length;
-    charsCount.textContent = len;
-    postBtn.disabled = len === 0;
-  });
-
-  cancelBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    exitAnnotateMode();
-  });
-
-  postBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!textarea.value.trim()) return;
-
-    postBtn.disabled = true;
-    postBtn.textContent = 'Posting…';
-
-    try {
-      const res = await fetch(`${API_BASE}/api/annotations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: 'demo-user',
-          source_url: window.location.href,
-          source_title: document.title,
-          source_type: detectSourceType(window.location.href),
-          source_domain: window.location.hostname.replace(/^www\./, ''),
-          clip_text: constrained.text,
-          commentary: textarea.value.trim(),
-          is_public: 1,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.id) {
-        postBtn.textContent = '✓ Posted!';
-        postBtn.style.background = '#22c55e';
-
-        chrome.runtime.sendMessage({
-          type: 'ANNOTATION_POSTED',
-          annotationId: data.id,
-          clipText: constrained.text,
-          commentary: textarea.value.trim(),
-        });
-
-        setTimeout(() => exitAnnotateMode(), 1500);
-      } else {
-        throw new Error(data.error || 'Unknown error');
-      }
-    } catch (err) {
-      postBtn.textContent = 'Error — retry';
-      postBtn.style.background = '#ef4444';
-      setTimeout(() => {
-        postBtn.textContent = '✦ Post';
-        postBtn.style.background = '';
-        postBtn.disabled = false;
-      }, 2000);
-    }
-  });
-
-  const escHandler = (e) => {
-    if (e.key === 'Escape') {
-      exitAnnotateMode();
-      document.removeEventListener('keydown', escHandler);
-    }
-  };
-  document.addEventListener('keydown', escHandler);
-}
-
-function removeTooltip() {
-  if (tooltipEl) {
-    tooltipEl.remove();
-    tooltipEl = null;
-  }
-}
-
-// ── Annotate Mode ───────────────────────────────────────────────
-
-function enterAnnotateMode() {
-  annotateMode = true;
-  document.body.classList.add('annotated-active');
-  createOverlay();
-}
-
-function exitAnnotateMode() {
-  annotateMode = false;
-  document.body.classList.remove('annotated-active');
-  removeOverlay();
-  removeTooltip();
-  // Clear any existing selection so user can highlight again
-  if (window.getSelection) {
-    window.getSelection().removeAllRanges();
-  }
-  // Notify sidepanel to reset compose state
-  chrome.runtime.sendMessage({ type: 'ANNOTATE_MODE_EXIT' }).catch(() => {});
-}
-
-// ── Selection Handling ──────────────────────────────────────────
-
-// Only intercept selection when in annotate mode (activated by Cmd+Shift+A)
-document.addEventListener('mouseup', (e) => {
-  // Don't intercept if clicking inside tooltip or timeline
-  if (e.target.closest('#annotated-tooltip')) return;
-  if (e.target.closest('#annotated-timeline')) return;
-
-  // Only intercept if in annotate mode (activated by keyboard shortcut)
-  if (!annotateMode) return;
-
-  const sel = window.getSelection();
-  const text = sel?.toString().trim();
-
-  if (text && text.length > 3) {
-    const range = sel.getRangeAt(0);
-
-    try {
-      const highlight = document.createElement('span');
-      highlight.className = 'annotated-highlight';
-      range.surroundContents(highlight);
-    } catch {
-      // surroundContents fails on partial element selections
-    }
-
-    showAnnotationTooltip(text, range);
-
-    chrome.runtime.sendMessage({
-      type: 'TEXT_SELECTED',
-      text: constrainText(text).text,
-      url: window.location.href,
-      title: document.title,
-    });
-  }
-});
-
-// ── Listen for activate message from background ─────────────────
-
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'ACTIVATE_ANNOTATE') {
-    // Toggle annotate mode — enter mode so user can select text
-    if (!annotateMode) {
-      enterAnnotateMode();
-    } else {
-      exitAnnotateMode();
-    }
-  }
-  if (msg.type === 'NAVIGATE_TO_URL') {
-    // User pasted a URL in the sidebar — open it
-    window.location.href = msg.url;
-  }
-});
-
-// ── Helpers ─────────────────────────────────────────────────────
-
-function constrainText(text) {
-  const trimmed = text.trim();
-  if (trimmed.length <= MAX_CLIP_CHARS) {
-    return { text: trimmed, truncated: false };
-  }
-  const cut = trimmed.slice(0, MAX_CLIP_CHARS);
-  const sentenceEnd = Math.max(
-    cut.lastIndexOf('. '),
-    cut.lastIndexOf('! '),
-    cut.lastIndexOf('? ')
-  );
-  const breakAt = sentenceEnd > MAX_CLIP_CHARS * 0.5 ? sentenceEnd + 1 : cut.lastIndexOf(' ');
   return {
-    text: (breakAt > 0 ? cut.slice(0, breakAt) : cut) + '…',
-    truncated: true,
+    type: 'PAGE_INFO',
+    url: canonical,
+    pageUrl: window.location.href,
+    title,
+    sourceType: detectSourceType(window.location.href),
+    domain: new URL(canonical, window.location.href).hostname.replace(/^www\./, ''),
+    siteName,
+    author,
+    publishedAt,
+    thumbnail,
   };
 }
 
-function escapeHtml(str) {
-  const el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
+function meta(names) {
+  for (const name of names) {
+    const node = document.querySelector(`meta[name="${cssEscape(name)}"], meta[property="${cssEscape(name)}"], meta[itemprop="${cssEscape(name)}"]`);
+    const value = node?.getAttribute('content')?.trim();
+    if (value) return value;
+  }
+  return '';
 }
 
-// ── Init ────────────────────────────────────────────────────────
+function cssEscape(value) {
+  return String(value).replace(/["\\]/g, '\\$&');
+}
+
+function currentMedia() {
+  const media = [...document.querySelectorAll('video, audio')]
+    .find((item) => Number.isFinite(item.currentTime) && item.readyState > 0);
+  if (!media) return null;
+
+  const start = Math.max(0, Math.floor(media.currentTime || 0));
+  return {
+    element: media,
+    start,
+    end: start + SHORT_CLIP_SECONDS,
+  };
+}
+
+function clipFromSelection(openPanel = false) {
+  const selection = window.getSelection();
+  const text = selection?.toString().replace(/\s+/g, ' ').trim();
+  if (!selection || !text || selection.rangeCount === 0) return null;
+
+  const page = getPageInfo();
+  const media = currentMedia();
+  return {
+    type: 'TEXT_SELECTED',
+    text,
+    url: page.url,
+    pageUrl: page.pageUrl,
+    title: page.title,
+    sourceType: page.sourceType,
+    domain: page.domain,
+    siteName: page.siteName,
+    author: page.author,
+    publishedAt: page.publishedAt,
+    thumbnail: page.thumbnail,
+    clipStartSec: media?.start ?? null,
+    clipEndSec: media?.end ?? null,
+    selectedAt: Date.now(),
+    openPanel,
+  };
+}
+
+function clipFromMedia(openPanel = false) {
+  const page = getPageInfo();
+  const media = currentMedia();
+  if (!media || page.sourceType === 'article') return null;
+
+  return {
+    type: 'TEXT_SELECTED',
+    text: '',
+    url: page.url,
+    pageUrl: page.pageUrl,
+    title: page.title,
+    sourceType: page.sourceType,
+    domain: page.domain,
+    siteName: page.siteName,
+    author: page.author,
+    publishedAt: page.publishedAt,
+    thumbnail: page.thumbnail,
+    clipStartSec: media.start,
+    clipEndSec: media.end,
+    selectedAt: Date.now(),
+    openPanel,
+  };
+}
+
+function enterClippingMode() {
+  clippingMode = true;
+  activeClip = null;
+  document.documentElement.classList.add('annotated-clipping-mode');
+
+  const mediaClip = clipFromMedia(false);
+  if (mediaClip) {
+    const rect = currentMedia()?.element.getBoundingClientRect();
+    activeClip = mediaClip;
+    activeRange = null;
+    showComposer(rect && rect.width ? rect : centerRect());
+  }
+}
+
+function exitClippingMode() {
+  clippingMode = false;
+  activeClip = null;
+  activeRange = null;
+  window.clearTimeout(selectionTimer);
+  if (trackingFrame) cancelAnimationFrame(trackingFrame);
+  trackingFrame = null;
+  document.documentElement.classList.remove('annotated-clipping-mode');
+  document.getElementById(OVERLAY_ID)?.remove();
+  document.getElementById(COMPOSER_ID)?.remove();
+  window.getSelection()?.removeAllRanges();
+}
+
+function createOverlay(rect) {
+  document.getElementById(OVERLAY_ID)?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = OVERLAY_ID;
+  overlay.innerHTML = `
+    <div class="annotated-pane annotated-pane-top"></div>
+    <div class="annotated-pane annotated-pane-right"></div>
+    <div class="annotated-pane annotated-pane-bottom"></div>
+    <div class="annotated-pane annotated-pane-left"></div>
+  `;
+  document.documentElement.append(overlay);
+  setPaneStyles(rect);
+}
+
+function setPaneStyles(rect) {
+  const overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) return;
+  overlay.classList.add('has-selection');
+
+  const top = overlay.querySelector('.annotated-pane-top');
+  const right = overlay.querySelector('.annotated-pane-right');
+  const bottom = overlay.querySelector('.annotated-pane-bottom');
+  const left = overlay.querySelector('.annotated-pane-left');
+  const pad = 8;
+  const x = Math.max(0, rect.left - pad);
+  const y = Math.max(0, rect.top - pad);
+  const width = Math.min(window.innerWidth - x, rect.width + pad * 2);
+  const height = Math.min(window.innerHeight - y, rect.height + pad * 2);
+
+  top.style.cssText = `left:0;top:0;width:100%;height:${y}px`;
+  right.style.cssText = `left:${x + width}px;top:${y}px;width:${Math.max(0, window.innerWidth - x - width)}px;height:${height}px`;
+  bottom.style.cssText = `left:0;top:${y + height}px;width:100%;height:${Math.max(0, window.innerHeight - y - height)}px`;
+  left.style.cssText = `left:0;top:${y}px;width:${x}px;height:${height}px`;
+}
+
+function scheduleSelectionCapture() {
+  if (!clippingMode) return;
+  window.clearTimeout(selectionTimer);
+  selectionTimer = window.setTimeout(captureCompletedSelection, 120);
+}
+
+function captureCompletedSelection() {
+  if (!clippingMode) return;
+  const clip = clipFromSelection(false);
+  if (!clip) return;
+
+  const selection = window.getSelection();
+  activeRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+  const rect = getSelectionRect();
+  if (!rect) return;
+
+  activeClip = clip;
+  showComposer(rect);
+}
+
+function getSelectionRect() {
+  const selection = window.getSelection();
+  const range = activeRange || (selection?.rangeCount ? selection.getRangeAt(0) : null);
+  if (!range) return null;
+
+  return rectFromRange(range);
+}
+
+function rectFromRange(range) {
+  const rects = [...range.getClientRects()]
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  if (!rects.length) return null;
+
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function showComposer(rect) {
+  if (!activeClip) return;
+
+  createOverlay(rect);
+  document.getElementById(COMPOSER_ID)?.remove();
+
+  const composer = document.createElement('section');
+  composer.id = COMPOSER_ID;
+  composer.className = 'quote-annotation-bubble annotated-page-composer';
+  composer.setAttribute('aria-label', 'Quote annotation');
+  composer.style.visibility = 'hidden';
+  composer.innerHTML = `
+    <label class="quote-annotation-bubble__prompt" for="annotated-page-commentary">Your Thoughts Here:</label>
+    <textarea
+      id="annotated-page-commentary"
+      class="quote-annotation-bubble__textarea"
+      rows="4"
+    ></textarea>
+    <div class="quote-annotation-bubble__actions">
+      <button class="quote-annotation-bubble__button" type="button">Annotate</button>
+    </div>
+  `;
+
+  composer.addEventListener('mousedown', (event) => event.stopPropagation());
+  composer.querySelector('button').addEventListener('click', () => postAnnotation(composer));
+
+  document.documentElement.append(composer);
+  positionComposer(composer, rect);
+  composer.style.visibility = '';
+  composer.querySelector('textarea').focus();
+}
+
+function positionComposer(composer, rect) {
+  const margin = 18;
+  const gap = 16;
+  const width = Math.min(620, window.innerWidth - margin * 2);
+  const left = Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
+
+  composer.style.width = `${width}px`;
+  composer.style.maxHeight = '';
+
+  const measuredHeight = Math.min(composer.offsetHeight || 224, window.innerHeight - margin * 2);
+  const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+  const spaceAbove = rect.top - gap - margin;
+  const placeBelow = spaceBelow >= measuredHeight || spaceBelow >= spaceAbove;
+  const availableSpace = Math.max(140, placeBelow ? spaceBelow : spaceAbove);
+  const height = Math.min(measuredHeight, availableSpace);
+  const top = placeBelow
+    ? Math.min(rect.bottom + gap, window.innerHeight - height - margin)
+    : Math.max(margin, rect.top - height - gap);
+
+  composer.style.left = `${left}px`;
+  composer.style.top = `${top}px`;
+  composer.style.maxHeight = `${availableSpace}px`;
+}
+
+function updateAnchoredUi() {
+  trackingFrame = null;
+  if (!clippingMode || !activeClip || !activeRange) return;
+
+  const rect = rectFromRange(activeRange);
+  if (!rect) return;
+
+  setPaneStyles(rect);
+  const composer = document.getElementById(COMPOSER_ID);
+  if (composer) positionComposer(composer, rect);
+}
+
+function scheduleAnchoredUiUpdate() {
+  if (!clippingMode || !activeRange || trackingFrame) return;
+  trackingFrame = requestAnimationFrame(updateAnchoredUi);
+}
+
+async function postAnnotation(composer) {
+  const textarea = composer.querySelector('textarea');
+  const button = composer.querySelector('button');
+  const commentary = textarea.value.trim();
+  if (!commentary || !activeClip) return;
+
+  button.disabled = true;
+  button.textContent = 'Posting';
+
+  try {
+    await ensureUser();
+    const mediaClip = await maybeCreateMediaClip(activeClip);
+    const response = await fetch(`${API_BASE}/api/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: USER_ID,
+        source_url: activeClip.url,
+        source_title: mediaClip?.title || activeClip.title || '',
+        source_type: activeClip.sourceType || 'article',
+        source_domain: activeClip.domain || '',
+        source_site_name: activeClip.siteName || null,
+        source_author: activeClip.author || null,
+        source_published_at: activeClip.publishedAt || null,
+        source_thumbnail: mediaClip?.thumbnail || activeClip.thumbnail || null,
+        clip_text: activeClip.text || null,
+        clip_start_sec: mediaClip?.startSec ?? activeClip.clipStartSec ?? null,
+        clip_end_sec: mediaClip?.endSec ?? activeClip.clipEndSec ?? null,
+        clip_media_path: mediaClip?.mediaPath || null,
+        commentary,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.id) throw new Error(data.error || 'Post failed');
+
+    button.textContent = 'Posted';
+    safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
+    window.setTimeout(exitClippingMode, 600);
+  } catch {
+    button.disabled = false;
+    button.textContent = 'Error - try again';
+  }
+}
+
+function centerRect() {
+  return {
+    left: Math.round(window.innerWidth * 0.18),
+    top: Math.round(window.innerHeight * 0.26),
+    width: Math.round(window.innerWidth * 0.64),
+    height: Math.max(80, Math.round(window.innerHeight * 0.18)),
+  };
+}
+
+function safeSend(message) {
+  chrome.runtime.sendMessage(message, () => {
+    void chrome.runtime.lastError;
+  });
+}
+
+function detectPage() {
+  safeSend(getPageInfo());
+}
+
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && clippingMode) {
+    exitClippingMode();
+    return;
+  }
+
+  if (!event.repeat && isClippingShortcut(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+    enterClippingMode();
+  }
+
+  if (clippingMode && event.key.startsWith('Arrow')) {
+    scheduleSelectionCapture();
+  }
+}, true);
+
+window.addEventListener('keyup', (event) => {
+  if (!clippingMode) return;
+  if (event.key === 'Shift' || event.key.startsWith('Arrow')) scheduleSelectionCapture();
+}, true);
+
+document.addEventListener('mousedown', (event) => {
+  if (!clippingMode) return;
+  const composer = document.getElementById(COMPOSER_ID);
+  if (composer?.contains(event.target)) return;
+  if (composer && !composer.contains(event.target)) {
+    exitClippingMode();
+    return;
+  }
+  selecting = true;
+  document.getElementById(COMPOSER_ID)?.remove();
+  document.getElementById(OVERLAY_ID)?.remove();
+}, true);
+
+document.addEventListener('mouseup', () => {
+  if (!clippingMode || !selecting) return;
+  selecting = false;
+  scheduleSelectionCapture();
+}, true);
+
+window.addEventListener('scroll', scheduleAnchoredUiUpdate, true);
+window.addEventListener('resize', scheduleAnchoredUiUpdate);
 
 detectPage();
 
-let lastUrl = window.location.href;
-let navCheckTimer = null;
-const observer = new MutationObserver(() => {
-  if (navCheckTimer) return;
-  navCheckTimer = setTimeout(() => {
-    navCheckTimer = null;
-    const newUrl = window.location.href;
-    if (newUrl !== lastUrl) {
-      lastUrl = newUrl;
+const startObserver = () => {
+  const target = document.body || document.documentElement;
+  if (!target) return;
+
+  const observer = new MutationObserver(() => {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      exitClippingMode();
       detectPage();
     }
-  }, 500);
-});
-observer.observe(document.body, { childList: true, subtree: true });
+  });
+  observer.observe(target, { childList: true, subtree: true });
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+} else {
+  startObserver();
+}
+
+function isClippingShortcut(event) {
+  return event.shiftKey
+    && event.code === 'KeyX'
+    && (event.metaKey || event.ctrlKey || event.altKey);
+}
+
+async function ensureUser() {
+  await fetch(`${API_BASE}/api/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'demo',
+      display_name: 'Demo User',
+      provider: 'local',
+      provider_id: USER_ID,
+    }),
+  });
+}
+
+async function maybeCreateMediaClip(clip) {
+  const type = clip.sourceType;
+  if (!['youtube', 'podcast'].includes(type) || clip.clipStartSec == null || clip.clipEndSec == null) return null;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/clip/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: clip.pageUrl || clip.url,
+        start: clip.clipStartSec,
+        end: clip.clipEndSec,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(data.error || 'Clip failed');
+    return data;
+  } catch {
+    return null;
+  }
+}

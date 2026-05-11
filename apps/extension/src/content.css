@@ -1,319 +1,131 @@
-/* Annotated — Content Script Styles
-   Injected into every page. Scoped via #annotated- prefixes.
-   Newspaper editorial aesthetic: warm, serif, restrained.
-   Matches frontend-v2 CSS variables exactly. */
-
-/* ── Selection highlight ─────────────────────────────────────── */
-
 ::selection {
   background: rgba(99, 102, 241, 0.16) !important;
 }
 
-.annotated-highlight {
-  background: rgba(99, 102, 241, 0.12);
-  border-bottom: 2px solid rgba(99, 102, 241, 0.4);
-  border-radius: 2px;
-  padding: 1px 0;
-  position: relative;
-  z-index: 10001;
-}
-
-/* ── Blur overlay ────────────────────────────────────────────── */
-
-#annotated-overlay {
+.annotated-page-composer {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  z-index: 10000;
-  cursor: default;
-  transition: opacity 0.2s ease;
-  pointer-events: all;
+  z-index: 2147483647;
+  width: min(620px, calc(100vw - 36px));
+  animation: annotated-bubble-in 160ms ease-out;
 }
 
-body.annotated-active ::selection {
-  background: rgba(99, 102, 241, 0.3) !important;
-}
-
-/* Lift selected content above overlay */
-body.annotated-active .annotated-highlight {
-  position: relative;
-  z-index: 10001;
-  background: rgba(99, 102, 241, 0.12);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
-}
-
-/* ── Annotation tooltip ──────────────────────────────────────── */
-
-#annotated-tooltip {
-  position: absolute;
-  z-index: 10002;
-  width: 340px;
-  max-width: calc(100vw - 32px);
-  background: #fafaf8;
+.quote-annotation-bubble {
+  position: fixed;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(86px, 1fr) auto;
+  gap: 12px;
+  padding: 24px 26px 22px;
   border: 1px solid #deded9;
-  border-radius: 0;
-  padding: 16px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  animation: annotated-fade-in 0.15s ease;
+  border-radius: 16px;
+  background: rgba(255, 255, 253, 0.97);
+  box-shadow: 0 20px 58px rgba(26, 26, 26, 0.14);
+  color: #1a1a1a;
+  box-sizing: border-box;
+  overflow: auto;
 }
 
-@keyframes annotated-fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Quote preview */
-.annotated-tooltip-quote {
-  font-family: 'Newsreader', 'Georgia', serif;
+.quote-annotation-bubble__prompt {
+  margin: 0;
+  color: #6b6b6b;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 22px;
   font-style: italic;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #333333;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border-left: 1px solid #bfbfba;
-  background: transparent;
-  border-radius: 0;
+  line-height: 1.2;
 }
 
-.annotated-tooltip-truncated {
-  font-size: 11px;
-  color: #999999;
-  margin-bottom: 8px;
-  font-style: italic;
+.quote-annotation-bubble__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
-/* Commentary textarea */
-.annotated-tooltip-textarea {
+.quote-annotation-bubble__textarea {
   width: 100%;
-  min-height: 72px;
-  padding: 10px 12px;
-  border: 1px solid #deded9;
-  border-radius: 0;
-  background: #fff;
-  color: #1a1a1a;
-  font-family: 'Newsreader', 'Georgia', serif;
-  font-size: 15px;
-  line-height: 1.5;
-  resize: vertical;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.annotated-tooltip-textarea:focus {
-  border-color: #6366f1;
-  box-shadow: none;
-}
-
-.annotated-tooltip-textarea::placeholder {
-  color: #999999;
-  font-style: italic;
-}
-
-/* Action row */
-.annotated-tooltip-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 10px;
-}
-
-.annotated-tooltip-chars {
-  font-size: 11px;
-  color: #999999;
-}
-
-.annotated-tooltip-btns {
-  display: flex;
-  gap: 8px;
-}
-
-.annotated-tooltip-cancel {
-  padding: 6px 14px;
-  border: 1px solid #deded9;
-  border-radius: 0;
+  min-height: 86px;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: #1a1a1a;
-  font-size: 13px;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 20px;
   font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s;
+  line-height: 1.45;
+  outline: none;
+  resize: vertical;
 }
 
-.annotated-tooltip-cancel:hover {
-  background: #f0f0ee;
-  border-color: #1a1a1a;
-}
-
-.annotated-tooltip-post {
-  padding: 6px 16px;
-  border: 1px solid #1a1a1a;
-  border-radius: 0;
-  background: #fff;
-  color: #1a1a1a;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.annotated-tooltip-post:hover:not(:disabled) {
-  background: #f0f0ee;
-}
-
-.annotated-tooltip-post:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ── Annotated logo watermark (subtle) ───────────────────────── */
-
-#annotated-tooltip::before {
-  content: '✦ annotated';
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
+.quote-annotation-bubble__textarea::placeholder {
   color: #999999;
-  margin-bottom: 10px;
-  letter-spacing: 0.02em;
 }
 
-/* ── Video Timeline (YouTube / Podcast) ──────────────────────── */
-
-#annotated-timeline {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10003;
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  background: #fafaf8;
-  border: 1px solid #deded9;
-  border-radius: 0;
-  padding: 16px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  animation: annotated-fade-in 0.2s ease;
-}
-
-.annotated-timeline-header {
+.quote-annotation-bubble__actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  justify-content: flex-end;
 }
 
-.annotated-timeline-label {
-  font-size: 12px;
+.quote-annotation-bubble__button {
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4f46e5;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 24px;
   font-weight: 600;
-  color: var(--text, #1a1a1a);
+  line-height: 1;
+  cursor: pointer !important;
 }
 
-.annotated-timeline-duration {
-  font-size: 11px;
-  color: #999999;
-  font-variant-numeric: tabular-nums;
+.quote-annotation-bubble__button:hover:not(:disabled) {
+  color: #6366f1;
 }
 
-.annotated-timeline-track {
-  position: relative;
-  height: 24px;
-  background: #f0f0ee;
-  border-radius: 0;
-  margin-bottom: 12px;
-  cursor: pointer;
-  user-select: none;
+.quote-annotation-bubble__button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55;
 }
 
-.annotated-timeline-range {
-  position: absolute;
-  top: 4px;
-  height: 16px;
-  background: rgba(99, 102, 241, 0.16);
-  border: 1px solid rgba(99, 102, 241, 0.4);
+#annotated-clipping-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
   pointer-events: none;
 }
 
-.annotated-timeline-handle {
-  position: absolute;
-  top: 2px;
-  width: 16px;
-  height: 20px;
-  background: #6366f1;
-  border: 2px solid #fff;
-  cursor: ew-resize;
-  z-index: 2;
-  transition: background 0.1s;
+.annotated-pane {
+  position: fixed;
+  background: rgba(250, 250, 248, 0.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 160ms ease, backdrop-filter 160ms ease;
 }
 
-.annotated-timeline-handle:hover {
-  background: #4f46e5;
+#annotated-clipping-overlay.has-selection .annotated-pane {
+  opacity: 1;
 }
 
-.annotated-timeline-handle-start {
-  border-radius: 2px 0 0 2px;
+.annotated-clipping-mode * {
+  cursor: text !important;
 }
 
-.annotated-timeline-handle-end {
-  border-radius: 0 2px 2px 0;
+.annotated-clipping-mode .quote-annotation-bubble,
+.annotated-clipping-mode .quote-annotation-bubble * {
+  cursor: auto !important;
 }
 
-.annotated-timeline-controls {
-  display: flex;
-  gap: 8px;
-}
+@keyframes annotated-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 
-.annotated-timeline-btn {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid #deded9;
-  border-radius: 0;
-  background: #fff;
-  color: #1a1a1a;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.annotated-timeline-btn:hover:not(:disabled) {
-  background: #f0f0ee;
-}
-
-.annotated-timeline-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.annotated-timeline-btn-clip {
-  border-color: #1a1a1a;
-}
-
-.annotated-timeline-btn-clip:hover:not(:disabled) {
-  background: #1a1a1a;
-  color: #fff;
-}
-
-/* ── Follow buttons (sidepanel) ─────────────────────────────── */
-
-.follow-btn {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.follow-btn:hover {
-  background: var(--accent);
-  color: #fff;
-}
-.follow-btn-following {
-  border-color: var(--border);
-  color: var(--text-muted);
-}
-.follow-btn-following:hover {
-  border-color: var(--error);
-  color: var(--error);
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

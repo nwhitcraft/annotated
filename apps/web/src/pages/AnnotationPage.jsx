@@ -111,7 +111,7 @@ export default function AnnotationPage() {
         <div className="empty-state">
           <strong>Annotation not found.</strong>
           <p>It may have been removed or made private.</p>
-          <Link className="button button-outline" to="/">Back to feed</Link>
+          <Link className="button button-outline" to="/feed">Back to feed</Link>
         </div>
       </div>
     );
@@ -119,7 +119,7 @@ export default function AnnotationPage() {
 
   return (
     <div className="page">
-      <Link to="/" className="back-link">← Feed</Link>
+      <Link to="/feed" className="back-link">← Feed</Link>
       <div className="ruled-list detail-list">
         <AnnotationItem annotation={{ ...annotation, comment_count: annotation.comment_count || commentCount }} expanded />
       </div>

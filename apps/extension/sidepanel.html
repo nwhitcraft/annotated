@@ -6,374 +6,245 @@
   <title>Annotated</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #fafaf8;
+      --bg-primary: #fafaf8;
       --bg-surface: #f7f7f5;
       --bg-hover: #f0f0ee;
       --border: #deded9;
-      --text: #1a1a1a;
-      --text-dim: #6b6b6b;
-      --text-muted: #999999;
+      --border-subtle: #eeeeec;
+      --text-primary: #1a1a1a;
+      --text-secondary: #6b6b6b;
+      --text-tertiary: #999999;
       --accent: #6366f1;
       --accent-hover: #4f46e5;
-      --success: #22c55e;
-      --error: #dc2626;
+      --danger: #dc2626;
+      --article: #2563eb;
+      --youtube: #dc2626;
+      --podcast: #7c3aed;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
 
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+    html, body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
       font-size: 13px;
       line-height: 1.5;
-      padding: 20px 16px;
-      min-width: 300px;
-      -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Header ── */
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 20px;
-      color: var(--text);
-    }
-    .logo-mark { color: var(--accent); }
+    body { padding: 16px 18px 22px; }
 
-    /* ── Status bar ── */
-    .status {
-      padding: 10px 14px;
-      margin-bottom: 16px;
-      font-size: 12px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text-dim);
-    }
-    .status-type::before {
-      content: '';
-      display: inline-block;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      margin-right: 5px;
-      vertical-align: middle;
-    }
-    .status-type.article::before { background: #2563eb; }
-    .status-type.youtube::before { background: #dc2626; }
-    .status-type.podcast::before { background: #7c3aed; }
+    button, textarea { font: inherit; }
 
-    /* ── URL input ── */
-    .url-row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 16px;
-    }
-    .url-input {
-      flex: 1;
-      padding: 8px 10px;
-      border: 1px solid var(--border);
-      border-radius: 0;
-      background: #fff;
-      color: var(--text);
-      font-size: 12px;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      outline: none;
-    }
-    .url-input:focus { border-color: var(--accent); }
-    .url-input::placeholder { color: var(--text-muted); }
-    .url-submit {
-      padding: 8px 12px;
-      border: 1px solid var(--text);
-      border-radius: 0;
-      background: #fff;
-      color: var(--text);
-      font-size: 12px;
-      font-weight: 500;
+    button {
+      border: 0;
+      background: transparent;
+      color: inherit;
       cursor: pointer;
-      transition: background 0.15s;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    [hidden] { display: none !important; }
+
+    .shell {
+      display: grid;
+      gap: 18px;
+    }
+
+    .topline {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wordmark {
+      font-family: var(--font-serif);
+      font-size: 32px;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .shortcut-line {
+      padding: 0 0 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .shortcut-line kbd {
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr);
+      gap: 7px;
+      align-items: center;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--article);
+    }
+
+    .status-dot.youtube { background: var(--youtube); }
+    .status-dot.podcast { background: var(--podcast); }
+
+    .status-source {
+      color: var(--text-primary);
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .status-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .url-submit:hover { background: var(--bg-hover); }
 
-    /* ── Clip preview ── */
-    .clip-preview {
-      font-family: 'Newsreader', Georgia, serif;
-      font-style: italic;
-      font-size: 14px;
-      line-height: 1.5;
-      color: #333333;
-      padding: 10px 12px;
-      margin-bottom: 16px;
-      border-left: 1px solid #bfbfba;
-      background: transparent;
-      border-radius: 0;
-    }
-
-    /* ── Compose ── */
-    textarea {
-      width: 100%;
-      min-height: 80px;
-      padding: 10px 12px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 0;
-      color: var(--text);
-      font-family: 'Newsreader', Georgia, serif;
-      font-size: 15px;
-      line-height: 1.5;
-      resize: vertical;
-      outline: none;
-      margin-bottom: 12px;
-      transition: border-color 0.15s;
-    }
-    textarea:focus {
-      border-color: var(--accent);
-    }
-    textarea::placeholder { color: var(--text-muted); font-style: italic; }
-
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 10px;
-      border: 1px solid var(--text);
-      border-radius: 0;
-      background: #fff;
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn:hover:not(:disabled) { background: var(--bg-hover); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    /* ── Empty state ── */
-    .empty {
-      text-align: center;
-      padding: 40px 16px;
-      color: var(--text-muted);
-    }
-    .empty-icon {
-      font-size: 28px;
-      margin-bottom: 12px;
-      color: var(--accent);
-      opacity: 0.4;
-    }
-    .empty p { margin-bottom: 6px; }
-    .empty .hint {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 12px;
-      line-height: 1.5;
-    }
-
-    /* ── Related annotations (same page) ── */
-    .related-header {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
-      margin-top: 24px;
-      margin-bottom: 8px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid var(--border);
-    }
-    .related-header::before {
-      content: '💬 ';
-    }
-    .related-item {
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-    }
-    .related-item > div:last-child {
-      margin-top: 4px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .related-item-quote {
-      font-family: 'Newsreader', Georgia, serif;
-      font-style: italic;
-      color: var(--text-dim);
-      margin-bottom: 4px;
-    }
-    .related-item-commentary {
-      font-family: 'Newsreader', Georgia, serif;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    /* ── Header row ── */
-    .header-row {
+    .feed-header {
       display: flex;
-      align-items: center;
+      align-items: end;
       justify-content: space-between;
-      margin-bottom: 20px;
+      gap: 14px;
+      padding-top: 4px;
+      border-top: 1px solid var(--border);
     }
 
-    /* ── Sign-in button (unauthenticated) ── */
-    .auth-btn {
-      padding: 5px 14px;
-      border: 1px solid var(--accent);
-      border-radius: 0;
-      background: transparent;
-      color: var(--accent);
+    .feed-header h2 {
+      margin: 0;
+      font-family: var(--font-serif);
+      font-size: 25px;
+      font-weight: 400;
+      line-height: 1.05;
+    }
+
+    .feed-header span,
+    .feed-empty,
+    .source-line {
+      color: var(--text-tertiary);
       font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .auth-btn:hover {
-      background: var(--accent);
-      color: #fff;
     }
 
-    /* ── Avatar (authenticated) ── */
-    .avatar-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      border: 2px solid var(--accent);
-      cursor: pointer;
-      object-fit: cover;
-      transition: border-color 0.15s;
-      background: var(--bg-surface);
-    }
-    .avatar-btn:hover {
-      border-color: var(--text);
-    }
-    .avatar-placeholder {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      border: 2px solid var(--accent);
-      background: var(--accent);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: border-color 0.15s;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .avatar-placeholder:hover {
-      border-color: var(--text);
+    .feed-list {
+      display: grid;
+      border-top: 1px solid var(--border);
     }
 
-    /* ── Auth status bar ── */
-    .auth-status {
-      display: flex;
-      align-items: center;
+    .feed-item {
+      display: grid;
       gap: 8px;
-      font-size: 11px;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .auth-status .username {
-      font-weight: 600;
-      color: var(--text);
-    }
-    .auth-status .logout {
-      color: var(--error);
-      cursor: pointer;
-      text-decoration: underline;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--border-subtle);
     }
 
-    /* ── Following feed ── */
-    .following-header {
+    .feed-item a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .feed-item a:hover {
+      color: var(--accent-hover);
+    }
+
+    .feed-byline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--text-tertiary);
       font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
-      margin-top: 24px;
-      margin-bottom: 8px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid var(--border);
     }
-    .following-header::before {
-      content: '🔔 ';
+
+    .feed-commentary {
+      margin: 0;
+      color: var(--text-primary);
+      font-family: var(--font-serif);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1.22;
     }
-    .recent-item {
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
+
+    .feed-quote {
+      margin: 0;
+      color: var(--text-secondary);
+      font-family: var(--font-serif);
+      font-size: 16px;
+      font-style: italic;
+      line-height: 1.36;
+    }
+
+    .feed-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--text-tertiary);
       font-size: 12px;
     }
-    .recent-item > div:last-child {
-      margin-top: 4px;
-      font-size: 11px;
-      color: var(--text-muted);
+
+    .feed-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0;
+      color: inherit;
+      line-height: 1.2;
     }
-    .recent-item-quote {
-      font-family: 'Newsreader', Georgia, serif;
-      font-style: italic;
-      color: var(--text-dim);
-      margin-bottom: 4px;
+
+    .feed-action:hover {
+      color: var(--accent-hover);
     }
-    .recent-item-commentary {
-      font-family: 'Newsreader', Georgia, serif;
-      font-weight: 600;
-      color: var(--text);
+
+    .feed-empty {
+      margin: 0;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-subtle);
     }
   </style>
 </head>
 <body>
-  <div class="header-row">
-    <div class="logo">
-      <span class="logo-mark">✦</span> annotated
+  <main class="shell">
+    <header class="topline">
+      <div class="wordmark">annotated</div>
+    </header>
+
+    <div id="status" class="status" hidden></div>
+
+    <div class="shortcut-line">
+      <kbd>Command+Shift+X</kbd> to Annotate
     </div>
-    <button id="auth-btn" class="auth-btn">Sign In</button>
-    <img id="avatar-img" class="avatar-btn" style="display:none" alt="Profile">
-    <div id="avatar-placeholder" class="avatar-placeholder" style="display:none"></div>
-  </div>
-  <div id="auth-status" class="auth-status" style="display:none"></div>
 
-  <!-- Paste URL input -->
-  <div id="url-row" class="url-row">
-    <input id="url-input" class="url-input" type="text" placeholder="Paste a URL to annotate…">
-    <button id="url-submit" class="url-submit">Go</button>
-  </div>
-
-  <div id="status" class="status" style="display:none"></div>
-  <div id="clip" class="clip-preview" style="display:none"></div>
-
-  <div id="empty" class="empty">
-    <div class="empty-icon">✦</div>
-    <p>Select text on any page to clip it.</p>
-    <p class="hint">
-      Highlight a sentence or two → add your take → post.<br>
-      <strong>⌘⇧A</strong> to toggle annotate mode.
-    </p>
-  </div>
-
-  <div id="compose" style="display:none">
-    <textarea id="commentary" placeholder="What's your take?"></textarea>
-    <button id="post-btn" class="btn" disabled>✦ Post Annotation</button>
-  </div>
-
-  <!-- Related annotations on the same page -->
-  <div id="related" style="display:none">
-    <div class="related-header">On this page</div>
-    <div id="related-list"></div>
-  </div>
-
-  <!-- Following feed (activity from followed users) -->
-  <div id="following" style="display:none">
-    <div class="following-header">Following</div>
-    <div id="following-list"></div>
-  </div>
+    <section id="feed-section">
+      <header class="feed-header">
+        <h2 id="feed-title">Feed</h2>
+        <span id="feed-count"></span>
+      </header>
+      <div id="feed-list" class="feed-list"></div>
+    </section>
+  </main>
 
   <script src="src/sidepanel.js"></script>
 </body>
