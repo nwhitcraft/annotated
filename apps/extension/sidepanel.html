@@ -75,18 +75,14 @@
       line-height: 1;
     }
 
-    .shortcut-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
+    .shortcut-line {
       padding: 0 0 14px;
       border-bottom: 1px solid var(--border-subtle);
       color: var(--text-secondary);
       font-size: 12px;
     }
 
-    .shortcut-row kbd {
+    .shortcut-line kbd {
       padding: 2px 6px;
       border: 1px solid var(--border);
       border-radius: 3px;
@@ -95,15 +91,6 @@
       font-family: var(--font-sans);
       font-size: 11px;
       font-weight: 600;
-    }
-
-    .shortcut-row button {
-      padding: 3px 0 1px;
-      border-bottom: 1px solid currentColor;
-      color: var(--accent-hover);
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
     }
 
     .status {
@@ -225,9 +212,8 @@
 
     <div id="status" class="status" hidden></div>
 
-    <div class="shortcut-row">
-      <span><kbd id="shortcut-label">Option+Shift+X</kbd> to Annotate</span>
-      <button id="shortcut-btn">Change</button>
+    <div class="shortcut-line">
+      <kbd>Command+Shift+X</kbd> to Annotate
     </div>
 
     <section id="feed-section">

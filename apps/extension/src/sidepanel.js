@@ -1,23 +1,15 @@
 const API_BASE = 'http://localhost:3080';
 const USER_ID = 'demo-user';
-const SHORTCUT_KEY = 'annotated.shortcut';
-const DEFAULT_SHORTCUT = 'Alt+Shift+X';
-const LEGACY_SHORTCUTS = new Set(['Command+Shift+X', 'Ctrl+Shift+X']);
 
 let currentPage = null;
-let shortcutCapture = false;
-let shortcutCaptureTimer = null;
 
 const statusEl = document.getElementById('status');
-const shortcutBtn = document.getElementById('shortcut-btn');
-const shortcutLabelEl = document.getElementById('shortcut-label');
 const feedTitleEl = document.getElementById('feed-title');
 const feedCountEl = document.getElementById('feed-count');
 const feedListEl = document.getElementById('feed-list');
 
 hydrate();
 ensureUser();
-initShortcut();
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'PAGE_DETECTED' || msg.type === 'STATE_UPDATED') {
@@ -29,47 +21,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     else loadFeed();
   }
 });
-
-shortcutBtn.addEventListener('click', () => {
-  if (shortcutCapture) {
-    finishShortcutCapture();
-    return;
-  }
-
-  shortcutCapture = true;
-  shortcutBtn.textContent = 'Cancel';
-  shortcutCaptureTimer = window.setTimeout(finishShortcutCapture, 8000);
-});
-
-document.addEventListener('keydown', (event) => {
-  if (!shortcutCapture) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-
-  if (event.key === 'Escape') {
-    finishShortcutCapture();
-    return;
-  }
-
-  const next = shortcutFromEvent(event);
-  if (!next) {
-    finishShortcutCapture();
-    return;
-  }
-
-  chrome.storage.sync.set({ [SHORTCUT_KEY]: next }, () => {
-    finishShortcutCapture();
-    renderShortcut(next);
-  });
-}, true);
-
-function finishShortcutCapture() {
-  shortcutCapture = false;
-  window.clearTimeout(shortcutCaptureTimer);
-  shortcutCaptureTimer = null;
-  shortcutBtn.textContent = 'Change';
-}
 
 function hydrate() {
   chrome.runtime.sendMessage({ type: 'GET_ACTIVE_STATE' }, (response) => {
@@ -93,40 +44,6 @@ async function ensureUser() {
   } catch {
     // The API seeds this user at startup; sidebar creation should not block on it.
   }
-}
-
-function initShortcut() {
-  chrome.storage.sync.get({ [SHORTCUT_KEY]: DEFAULT_SHORTCUT }, (items) => {
-    if (chrome.runtime.lastError) {
-      renderShortcut(DEFAULT_SHORTCUT);
-      return;
-    }
-    const shortcut = migrateShortcut(items[SHORTCUT_KEY]);
-    renderShortcut(shortcut);
-    if (shortcut !== items[SHORTCUT_KEY]) chrome.storage.sync.set({ [SHORTCUT_KEY]: shortcut });
-  });
-
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes[SHORTCUT_KEY]) renderShortcut(migrateShortcut(changes[SHORTCUT_KEY].newValue));
-  });
-}
-
-function renderShortcut(shortcut) {
-  shortcutLabelEl.textContent = formatShortcut(normalizeShortcut(shortcut));
-}
-
-function shortcutFromEvent(event) {
-  if (!event.ctrlKey && !event.altKey) return '';
-
-  const key = keyFromCode(event.code) || normalizeKey(event.key);
-  if (!key || ['Shift', 'Ctrl', 'Control', 'Alt', 'Option', 'Command', 'Meta', 'Cmd'].includes(key)) return '';
-
-  const parts = [];
-  if (event.ctrlKey) parts.push('Ctrl');
-  if (event.altKey) parts.push('Alt');
-  if (event.shiftKey) parts.push('Shift');
-  parts.push(key);
-  return parts.join('+');
 }
 
 function renderState(state) {
@@ -265,42 +182,4 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value).replaceAll('`', '&#096;');
-}
-
-function normalizeShortcut(value) {
-  return String(value || DEFAULT_SHORTCUT)
-    .split('+')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const lower = part.toLowerCase();
-      if (['cmd', 'command', 'meta'].includes(lower)) return 'Command';
-      if (['ctrl', 'control'].includes(lower)) return 'Ctrl';
-      if (['alt', 'option'].includes(lower)) return 'Alt';
-      if (lower === 'shift') return 'Shift';
-      return normalizeKey(part);
-    })
-    .join('+');
-}
-
-function normalizeKey(value) {
-  const key = String(value || '').trim();
-  if (key.length === 1) return key.toUpperCase();
-  return key.replace(/^Arrow/, '');
-}
-
-function keyFromCode(code) {
-  if (/^Key[A-Z]$/.test(code)) return code.replace(/^Key/, '');
-  if (/^Digit[0-9]$/.test(code)) return code.replace(/^Digit/, '');
-  return '';
-}
-
-function migrateShortcut(value) {
-  const normalized = normalizeShortcut(value || DEFAULT_SHORTCUT);
-  return LEGACY_SHORTCUTS.has(normalized) ? DEFAULT_SHORTCUT : normalized;
-}
-
-function formatShortcut(shortcut) {
-  if (!/Mac|iPhone|iPad/i.test(navigator.platform)) return shortcut;
-  return shortcut.replace(/\bAlt\b/g, 'Option');
 }

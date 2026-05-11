@@ -5,9 +5,6 @@ const USER_ID = 'demo-user';
 const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const SHORT_CLIP_SECONDS = 90;
-const SHORTCUT_KEY = 'annotated.shortcut';
-const DEFAULT_SHORTCUT = 'Alt+Shift+X';
-const LEGACY_SHORTCUTS = new Set(['Command+Shift+X', 'Ctrl+Shift+X']);
 
 let lastUrl = window.location.href;
 let clippingMode = false;
@@ -16,15 +13,6 @@ let activeRange = null;
 let selecting = false;
 let selectionTimer = null;
 let trackingFrame = null;
-let clippingShortcut = DEFAULT_SHORTCUT;
-
-loadShortcut();
-
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes[SHORTCUT_KEY]) {
-    clippingShortcut = normalizeShortcut(migrateShortcut(changes[SHORTCUT_KEY].newValue));
-  }
-});
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'START_CLIPPING') enterClippingMode();
@@ -366,13 +354,13 @@ function detectPage() {
   safeSend(getPageInfo());
 }
 
-document.addEventListener('keydown', (event) => {
+window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && clippingMode) {
     exitClippingMode();
     return;
   }
 
-  if (!event.repeat && shortcutMatches(event, clippingShortcut)) {
+  if (!event.repeat && isClippingShortcut(event)) {
     event.preventDefault();
     event.stopPropagation();
     enterClippingMode();
@@ -383,7 +371,7 @@ document.addEventListener('keydown', (event) => {
   }
 }, true);
 
-document.addEventListener('keyup', (event) => {
+window.addEventListener('keyup', (event) => {
   if (!clippingMode) return;
   if (event.key === 'Shift' || event.key.startsWith('Arrow')) scheduleSelectionCapture();
 }, true);
@@ -432,72 +420,10 @@ if (document.readyState === 'loading') {
   startObserver();
 }
 
-function loadShortcut() {
-  chrome.storage.sync.get({ [SHORTCUT_KEY]: DEFAULT_SHORTCUT }, (items) => {
-    if (chrome.runtime.lastError) return;
-    const shortcut = migrateShortcut(items[SHORTCUT_KEY]);
-    clippingShortcut = normalizeShortcut(shortcut);
-    if (shortcut !== items[SHORTCUT_KEY]) chrome.storage.sync.set({ [SHORTCUT_KEY]: shortcut });
-  });
-}
-
-function shortcutMatches(event, shortcut) {
-  const wanted = parseShortcut(shortcut);
-  if (!wanted.code) return false;
-  return event.metaKey === wanted.meta
-    && event.ctrlKey === wanted.ctrl
-    && event.altKey === wanted.alt
-    && event.shiftKey === wanted.shift
-    && event.code === wanted.code;
-}
-
-function parseShortcut(shortcut) {
-  const parts = normalizeShortcut(shortcut).split('+');
-  const config = { meta: false, ctrl: false, alt: false, shift: false, code: '' };
-
-  for (const part of parts) {
-    if (part === 'Command' || part === 'Meta' || part === 'Cmd') config.meta = true;
-    else if (part === 'Ctrl' || part === 'Control') config.ctrl = true;
-    else if (part === 'Alt' || part === 'Option') config.alt = true;
-    else if (part === 'Shift') config.shift = true;
-    else config.code = codeFromKey(part);
-  }
-
-  return config;
-}
-
-function normalizeShortcut(value) {
-  return String(value || DEFAULT_SHORTCUT)
-    .split('+')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const lower = part.toLowerCase();
-      if (['cmd', 'command', 'meta'].includes(lower)) return 'Command';
-      if (['ctrl', 'control'].includes(lower)) return 'Ctrl';
-      if (['alt', 'option'].includes(lower)) return 'Alt';
-      if (lower === 'shift') return 'Shift';
-      return normalizeKey(part);
-    })
-    .join('+');
-}
-
-function normalizeKey(value) {
-  const key = String(value || '').trim();
-  if (key.length === 1) return key.toUpperCase();
-  return key.replace(/^Arrow/, '');
-}
-
-function codeFromKey(value) {
-  const key = normalizeKey(value);
-  if (/^[A-Z]$/.test(key)) return `Key${key}`;
-  if (/^[0-9]$/.test(key)) return `Digit${key}`;
-  return key;
-}
-
-function migrateShortcut(value) {
-  const normalized = normalizeShortcut(value || DEFAULT_SHORTCUT);
-  return LEGACY_SHORTCUTS.has(normalized) ? DEFAULT_SHORTCUT : normalized;
+function isClippingShortcut(event) {
+  return event.shiftKey
+    && event.code === 'KeyX'
+    && (event.metaKey || event.ctrlKey || event.altKey);
 }
 
 async function ensureUser() {
