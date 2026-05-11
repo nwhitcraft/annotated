@@ -3,11 +3,22 @@
 const TOOLTIP_ID = 'annotated-selection-tooltip';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const SHORT_CLIP_SECONDS = 90;
+const SHORTCUT_KEY = 'annotated.shortcut';
+const DEFAULT_SHORTCUT = /Mac|iPhone|iPad/i.test(navigator.platform) ? 'Command+Shift+X' : 'Ctrl+Shift+X';
 
 let lastUrl = window.location.href;
 let clippingMode = false;
 let activeClip = null;
 let selectionTimer = null;
+let clippingShortcut = DEFAULT_SHORTCUT;
+
+loadShortcut();
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes[SHORTCUT_KEY]) {
+    clippingShortcut = normalizeShortcut(changes[SHORTCUT_KEY].newValue || DEFAULT_SHORTCUT);
+  }
+});
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'START_CLIPPING') enterClippingMode();
@@ -247,7 +258,16 @@ function detectPage() {
 document.addEventListener('selectionchange', handleSelectionChange);
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && clippingMode) exitClippingMode();
+  if (event.key === 'Escape' && clippingMode) {
+    exitClippingMode();
+    return;
+  }
+
+  if (!event.repeat && shortcutMatches(event, clippingShortcut)) {
+    event.preventDefault();
+    event.stopPropagation();
+    enterClippingMode();
+  }
 }, true);
 
 document.addEventListener('mousedown', (event) => {
@@ -276,4 +296,58 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', startObserver, { once: true });
 } else {
   startObserver();
+}
+
+function loadShortcut() {
+  chrome.storage.sync.get({ [SHORTCUT_KEY]: DEFAULT_SHORTCUT }, (items) => {
+    if (chrome.runtime.lastError) return;
+    clippingShortcut = normalizeShortcut(items[SHORTCUT_KEY] || DEFAULT_SHORTCUT);
+  });
+}
+
+function shortcutMatches(event, shortcut) {
+  const wanted = parseShortcut(shortcut);
+  if (!wanted.key) return false;
+  return event.metaKey === wanted.meta
+    && event.ctrlKey === wanted.ctrl
+    && event.altKey === wanted.alt
+    && event.shiftKey === wanted.shift
+    && normalizeKey(event.key) === wanted.key;
+}
+
+function parseShortcut(shortcut) {
+  const parts = normalizeShortcut(shortcut).split('+');
+  const config = { meta: false, ctrl: false, alt: false, shift: false, key: '' };
+
+  for (const part of parts) {
+    if (part === 'Command' || part === 'Meta' || part === 'Cmd') config.meta = true;
+    else if (part === 'Ctrl' || part === 'Control') config.ctrl = true;
+    else if (part === 'Alt' || part === 'Option') config.alt = true;
+    else if (part === 'Shift') config.shift = true;
+    else config.key = normalizeKey(part);
+  }
+
+  return config;
+}
+
+function normalizeShortcut(value) {
+  return String(value || DEFAULT_SHORTCUT)
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (['cmd', 'command', 'meta'].includes(lower)) return 'Command';
+      if (['ctrl', 'control'].includes(lower)) return 'Ctrl';
+      if (['alt', 'option'].includes(lower)) return 'Alt';
+      if (lower === 'shift') return 'Shift';
+      return normalizeKey(part);
+    })
+    .join('+');
+}
+
+function normalizeKey(value) {
+  const key = String(value || '').trim();
+  if (key.length === 1) return key.toUpperCase();
+  return key.replace(/^Arrow/, '');
 }

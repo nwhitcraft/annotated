@@ -86,6 +86,37 @@
       font-weight: 600;
     }
 
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 0 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .shortcut-row kbd {
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .shortcut-row button {
+      padding: 3px 0 1px;
+      border-bottom: 1px solid currentColor;
+      color: var(--accent-hover);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
     .status {
       display: grid;
       grid-template-columns: auto auto minmax(0, 1fr);
@@ -291,9 +322,14 @@
 
     <div id="status" class="status" hidden></div>
 
+    <div class="shortcut-row">
+      <span><kbd id="shortcut-label">Command+Shift+X</kbd> to Annotate</span>
+      <button id="shortcut-btn">Change</button>
+    </div>
+
     <section id="empty" class="empty">
-      <strong>No active clip.</strong>
-      <p>Press the clipping shortcut or use Clip.</p>
+      <strong><span id="empty-shortcut">Command+Shift+X</span> to Annotate.</strong>
+      <p>Or use Clip above to start clipping mode.</p>
     </section>
 
     <blockquote id="clip" class="clip-preview" hidden></blockquote>
