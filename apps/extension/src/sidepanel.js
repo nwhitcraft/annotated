@@ -9,6 +9,8 @@ let currentUser = null; // { id, username, token }
 // ── Auth UI elements ─────────────────────────────────────────
 const authBtn = document.getElementById('auth-btn');
 const authStatusEl = document.getElementById('auth-status');
+const avatarImg = document.getElementById('avatar-img');
+const avatarPlaceholder = document.getElementById('avatar-placeholder');
 
 // ── Auth helpers ───────────────────────────────────────────────
 
@@ -22,8 +24,10 @@ function readWebAuth() {
     // Same-origin: can read localStorage directly
     const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
     const userId = window.localStorage.getItem(USER_ID_KEY);
+    const username = window.localStorage.getItem('annotated.username');
+    const avatarUrl = window.localStorage.getItem('annotated.avatar_url');
     if (token && userId) {
-      return { token, userId };
+      return { token, userId, username, avatarUrl };
     }
   } catch (err) {
     // Cross-origin or localStorage blocked — fall through
@@ -64,6 +68,8 @@ function setAuthenticatedUser(auth) {
   currentUser = {
     id: auth.userId,
     token: auth.token,
+    username: auth.username || null,
+    avatarUrl: auth.avatarUrl || null,
   };
   updateAuthUI();
   // Reload feeds with real user
@@ -76,24 +82,52 @@ function setAuthenticatedUser(auth) {
  */
 function updateAuthUI() {
   if (currentUser) {
-    authBtn.textContent = '✦ ' + currentUser.id.slice(0, 8);
-    authBtn.classList.add('authenticated');
-    authBtn.title = 'Signed in';
-    authBtn.onclick = logout;
+    // Hide sign-in button, show avatar
+    authBtn.style.display = 'none';
+    avatarImg.style.display = 'none';
+    avatarPlaceholder.style.display = 'none';
 
-    authStatusEl.style.display = 'block';
+    // Try to show avatar image from web app
+    if (currentUser.avatarUrl) {
+      avatarImg.src = currentUser.avatarUrl;
+      avatarImg.style.display = 'block';
+    } else {
+      // Fallback: initials placeholder
+      const initials = (currentUser.username || currentUser.id).slice(0, 2).toUpperCase();
+      avatarPlaceholder.textContent = initials;
+      avatarPlaceholder.style.display = 'flex';
+    }
+
+    // Click avatar → open profile page
+    avatarImg.onclick = () => openProfile();
+    avatarPlaceholder.onclick = () => openProfile();
+
+    // Status bar with username + logout
+    authStatusEl.style.display = 'flex';
     authStatusEl.innerHTML = `
-      <span class="username">Signed in as ${currentUser.id.slice(0, 12)}</span>
+      <span class="username">${escapeHtml(currentUser.username || currentUser.id.slice(0, 12))}</span>
       <span class="logout" onclick="logout()">sign out</span>
     `;
   } else {
+    // Show sign-in button, hide avatar
+    authBtn.style.display = 'block';
     authBtn.textContent = 'Sign In';
-    authBtn.classList.remove('authenticated');
     authBtn.title = 'Sign in to post annotations';
     authBtn.onclick = openLogin;
 
+    avatarImg.style.display = 'none';
+    avatarPlaceholder.style.display = 'none';
     authStatusEl.style.display = 'none';
   }
+}
+
+/**
+ * Open the user's profile page in a new browser tab.
+ */
+function openProfile() {
+  if (!currentUser) return;
+  const profileUrl = `${WEB_BASE}/u/${encodeURIComponent(currentUser.username || currentUser.id)}`;
+  chrome.tabs.create({ url: profileUrl, active: true });
 }
 
 /**
@@ -101,6 +135,13 @@ function updateAuthUI() {
  */
 function logout() {
   currentUser = null;
+  // Clear web app auth too
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.localStorage.removeItem(USER_ID_KEY);
+    window.localStorage.removeItem('annotated.username');
+    window.localStorage.removeItem('annotated.avatar_url');
+  } catch {}
   updateAuthUI();
   if (currentUrl) loadRelatedAnnotations(currentUrl);
   loadFollowingFeed();

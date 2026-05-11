@@ -210,13 +210,15 @@
       color: var(--text);
     }
 
-    /* ── Auth button ── */
+    /* ── Header row ── */
     .header-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-bottom: 20px;
     }
+
+    /* ── Sign-in button (unauthenticated) ── */
     .auth-btn {
       padding: 5px 14px;
       border: 1px solid var(--accent);
@@ -233,15 +235,46 @@
       background: var(--accent);
       color: #fff;
     }
-    .auth-btn.authenticated {
-      border-color: var(--success);
-      color: var(--success);
+
+    /* ── Avatar (authenticated) ── */
+    .avatar-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      cursor: pointer;
+      object-fit: cover;
+      transition: border-color 0.15s;
+      background: var(--bg-surface);
     }
-    .auth-btn.authenticated:hover {
-      background: var(--success);
+    .avatar-btn:hover {
+      border-color: var(--text);
+    }
+    .avatar-placeholder {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      background: var(--accent);
       color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
+    .avatar-placeholder:hover {
+      border-color: var(--text);
+    }
+
+    /* ── Auth status bar ── */
     .auth-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 11px;
       color: var(--text-muted);
       padding: 6px 10px;
@@ -253,7 +286,6 @@
       color: var(--text);
     }
     .auth-status .logout {
-      margin-left: 8px;
       color: var(--error);
       cursor: pointer;
       text-decoration: underline;
@@ -303,6 +335,8 @@
       <span class="logo-mark">✦</span> annotated
     </div>
     <button id="auth-btn" class="auth-btn">Sign In</button>
+    <img id="avatar-img" class="avatar-btn" style="display:none" alt="Profile">
+    <div id="avatar-placeholder" class="avatar-placeholder" style="display:none"></div>
   </div>
   <div id="auth-status" class="auth-status" style="display:none"></div>
 

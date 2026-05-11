@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authUrl, setCurrentUserId, setToken } from '../lib/api.js';
+import { authUrl, setCurrentUserId, setToken, setUsername, setAvatarUrl } from '../lib/api.js';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -9,9 +9,13 @@ export default function Login() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || params.get('jwt');
     const userId = params.get('user_id') || params.get('userId');
+    const username = params.get('username');
+    const avatarUrl = params.get('avatar_url');
     if (token) {
       setToken(token);
       setCurrentUserId(userId);
+      if (username) setUsername(username);
+      if (avatarUrl) setAvatarUrl(avatarUrl);
       navigate('/', { replace: true });
     }
   }, [navigate]);

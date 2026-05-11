@@ -1,6 +1,8 @@
 const API_BASE = '/api';
 const TOKEN_KEY = 'annotated.jwt';
 const USER_ID_KEY = 'annotated.user_id';
+const USERNAME_KEY = 'annotated.username';
+const AVATAR_URL_KEY = 'annotated.avatar_url';
 
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
@@ -20,6 +22,22 @@ export function getCurrentUserId() {
 
 export function setCurrentUserId(userId) {
   if (userId) window.localStorage.setItem(USER_ID_KEY, userId);
+}
+
+export function getUsername() {
+  return window.localStorage.getItem(USERNAME_KEY);
+}
+
+export function setUsername(username) {
+  if (username) window.localStorage.setItem(USERNAME_KEY, username);
+}
+
+export function getAvatarUrl() {
+  return window.localStorage.getItem(AVATAR_URL_KEY);
+}
+
+export function setAvatarUrl(avatarUrl) {
+  if (avatarUrl) window.localStorage.setItem(AVATAR_URL_KEY, avatarUrl);
 }
 
 export function authUrl(provider) {
