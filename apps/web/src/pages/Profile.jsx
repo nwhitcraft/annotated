@@ -73,7 +73,7 @@ export default function Profile() {
         <button className="button button-outline" onClick={follow}>{following ? 'Following' : 'Follow'}</button>
         {user.bio && <p className="profile-bio">{user.bio}</p>}
         <p className="profile-stats">
-          <strong>{Number(user.stats?.annotations || 0).toLocaleString()}</strong> annotations · <strong>{Number(user.stats?.followers || 0).toLocaleString()}</strong> followers · <strong>{Number(user.stats?.following || 0).toLocaleString()}</strong> following
+          <strong>{Number(user.stats?.annotations || 0).toLocaleString()}</strong> annotations · <strong>{Number(user.stats?.followers || 0).toLocaleString()}</strong> followers · <strong>{Number(user.stats?.following || 0).toLocaleString()}</strong> following · <strong>{Number(user.stats?.credibility || user.credibility_score || 0).toLocaleString()}</strong> credibility
         </p>
       </section>
 

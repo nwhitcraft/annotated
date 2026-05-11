@@ -2,7 +2,8 @@
 export function detectSourceType(url) {
   if (!url) return 'article';
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
-  if (/spotify\.com|podcasts\.apple\.com|overcast\.fm|pocketcasts|castbox|podbean|anchor\.fm|podcasts\.google/i.test(url)) return 'podcast';
+  if (/twitter\.com|x\.com/i.test(url)) return 'twitter';
+  if (/spotify\.com|podcasts\.apple\.com|soundcloud\.com|overcast\.fm|pca\.st|pocketcasts|castro\.fm|castbox|podbean|anchor\.fm|podcasts\.google/i.test(url)) return 'podcast';
   if (/\.mp3$|\.m4a$|\.wav$|\/audio\//i.test(url)) return 'podcast';
   return 'article';
 }

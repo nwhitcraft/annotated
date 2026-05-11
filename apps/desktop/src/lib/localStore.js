@@ -31,6 +31,7 @@ const demoAnnotations = [
     clip_end_sec: null,
     clip_media_path: null,
     commentary: 'Pessimism sells, but it is not a strategy. The real story is adaptation.',
+    annotation_type: 'Analysis',
     tags: ['economy', 'briefing'],
     is_public: 0,
     synced_at: null,
@@ -134,6 +135,7 @@ export async function syncAnnotation(annotation) {
       clip_start_sec: annotation.clip_start_sec || null,
       clip_end_sec: annotation.clip_end_sec || null,
       commentary: annotation.commentary,
+      annotation_type: annotation.annotation_type || 'Opinion',
       tags: tags,
       is_public: annotation.is_public ? 1 : 0,
     };
@@ -174,6 +176,29 @@ export async function saveSettings(settings) {
   if (isTauri) return invoke('save_settings', { settings });
   window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   return settings;
+}
+
+export async function runDesktopDiagnostics() {
+  if (!isTauri) {
+    return {
+      youtube: { ok: false, blocker: 'Run inside Tauri to exercise yt-dlp.' },
+      podcast: { ok: false, blocker: 'Run inside Tauri to exercise ffmpeg.' },
+      whisper: { ok: false, blocker: 'Run inside Tauri to exercise Whisper.' },
+      screen: { ok: false, blocker: 'Screen capture requires Tauri permissions.' },
+      auth: { ok: true, stdout: 'annotated://callback parser available in Tauri build.' },
+    };
+  }
+  const [screen, auth] = await Promise.all([
+    invoke('screen_clip_diagnostic'),
+    invoke('handle_auth_callback', { callbackUrl: 'annotated://callback?token=diagnostic' }).then((stdout) => ({ ok: true, stdout })).catch((error) => ({ ok: false, blocker: String(error) })),
+  ]);
+  return {
+    youtube: { ok: false, blocker: 'Provide a YouTube URL in a clipping workflow to run yt-dlp.' },
+    podcast: { ok: false, blocker: 'Provide an audio URL/file in a clipping workflow to run ffmpeg.' },
+    whisper: { ok: false, blocker: 'Provide an audio file and local whisper binary to transcribe.' },
+    screen,
+    auth,
+  };
 }
 
 export async function exportAnnotation(annotation) {

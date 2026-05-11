@@ -28,7 +28,7 @@ app.get('/page', (c) => {
 
 // Public feed — latest annotations from everyone
 app.get('/', (c) => {
-  const { limit = '20', offset = '0', type } = c.req.query();
+  const { limit = '20', offset = '0', type, annotation_type } = c.req.query();
   
   let sql = `
     SELECT a.*, u.username, u.display_name, u.avatar_url 
@@ -41,6 +41,10 @@ app.get('/', (c) => {
   if (type) {
     sql += ' AND a.source_type = ?';
     params.push(type);
+  }
+  if (annotation_type) {
+    sql += ' AND a.annotation_type = ?';
+    params.push(annotation_type);
   }
 
   sql += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?';
@@ -76,7 +80,7 @@ app.get('/trending', (c) => {
     FROM annotations a 
     JOIN users u ON a.user_id = u.id 
     WHERE a.is_public = 1 AND a.created_at >= datetime('now', '-7 days')
-    ORDER BY a.pin_count DESC, a.comment_count DESC
+    ORDER BY a.noteworthy_count DESC, a.pin_count DESC, a.comment_count DESC
     LIMIT ?
   `).all(Number(limit));
 

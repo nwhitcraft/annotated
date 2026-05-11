@@ -8,6 +8,8 @@ const tabs = [
   { key: 'article', label: 'Articles' },
   { key: 'youtube', label: 'Videos' },
   { key: 'podcast', label: 'Podcasts' },
+  { key: 'twitter', label: 'X' },
+  { key: 'tag:Fact Check', label: 'Fact checks' },
   { key: 'following', label: 'Following' },
 ];
 

@@ -563,6 +563,16 @@ textarea {
   color: var(--podcast);
 }
 
+.source-twitter {
+  color: var(--text-primary);
+}
+
+.annotation-type-tag {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 .source-title {
   width: fit-content;
   color: var(--accent-hover);
@@ -682,6 +692,20 @@ textarea {
 .action-row button:hover,
 .action-row button.is-active {
   color: var(--text-primary);
+}
+
+.claim-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.claim-count:hover {
+  color: var(--danger);
+}
+
+.inline-claim-form {
+  margin-top: 10px;
 }
 
 .back-link {
@@ -921,6 +945,77 @@ textarea {
 .form-actions {
   display: flex;
   gap: 8px;
+}
+
+.tag-picker,
+.suggested-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-picker.compact {
+  margin-bottom: 10px;
+}
+
+.tag-picker button,
+.suggested-list button {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.tag-picker button.active,
+.suggested-list button.active,
+.tag-picker button:hover,
+.suggested-list button:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.suggested-list button {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  text-align: left;
+}
+
+.suggested-list small {
+  color: var(--text-tertiary);
+}
+
+.claims-table {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.claim-row {
+  display: grid;
+  grid-template-columns: 95px minmax(160px, 1fr) minmax(150px, 0.8fr) minmax(220px, 1.2fr) 90px minmax(220px, auto);
+  gap: 12px;
+  align-items: start;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.claim-row p {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.claim-row div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.claim-row button {
+  padding: 0;
+  color: var(--accent-hover);
 }
 
 .profile-header {

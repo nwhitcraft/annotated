@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authUrl, setCurrentUserId, setToken, setUsername, setAvatarUrl } from '../lib/api.js';
+import { authUrl, hydrateCurrentUser, setCurrentUserId, setToken, setUsername, setAvatarUrl } from '../lib/api.js';
 
-export default function Login() {
+export function AuthCallback() {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -16,9 +16,21 @@ export default function Login() {
       setCurrentUserId(userId);
       if (username) setUsername(username);
       if (avatarUrl) setAvatarUrl(avatarUrl);
-      navigate('/', { replace: true });
+      hydrateCurrentUser().finally(() => navigate('/', { replace: true }));
     }
   }, [navigate]);
+
+  return (
+    <main className="login-page">
+      <section className="login-panel">
+        <Link to="/" className="wordmark">annotated</Link>
+        <p>Signing you in...</p>
+      </section>
+    </main>
+  );
+}
+
+export default function Login() {
 
   function go(provider) {
     window.location.href = authUrl(provider);

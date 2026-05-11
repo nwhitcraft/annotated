@@ -3,6 +3,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use uuid::Uuid;
@@ -28,6 +29,7 @@ struct Annotation {
     clip_end_sec: Option<i64>,
     clip_media_path: Option<String>,
     commentary: String,
+    annotation_type: Option<String>,
     tags: Option<Vec<String>>,
     is_public: Option<i64>,
     synced_at: Option<String>,
@@ -44,6 +46,16 @@ struct Settings {
     hotkey: String,
     #[serde(rename = "storageLocation")]
     storage_location: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ToolResult {
+    ok: bool,
+    status: Option<i32>,
+    stdout: String,
+    stderr: String,
+    output_path: Option<String>,
+    blocker: Option<String>,
 }
 
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -92,6 +104,7 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           clip_end_sec INTEGER,
           clip_media_path TEXT,
           commentary TEXT NOT NULL,
+          annotation_type TEXT DEFAULT 'Opinion',
           tags TEXT NOT NULL DEFAULT '[]',
           is_public INTEGER NOT NULL DEFAULT 0,
           synced_at TEXT,
@@ -144,12 +157,15 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_annotations_public ON annotations(is_public);
+        CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type);
         CREATE INDEX IF NOT EXISTS idx_annotations_synced ON annotations(synced_at);
         CREATE INDEX IF NOT EXISTS idx_comments_annotation ON comments(annotation_id);
         CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
         "#,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    let _ = conn.execute("ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'", []);
+    Ok(())
 }
 
 fn row_to_annotation(row: &rusqlite::Row<'_>, comments: Vec<LocalComment>) -> rusqlite::Result<Annotation> {
@@ -168,6 +184,7 @@ fn row_to_annotation(row: &rusqlite::Row<'_>, comments: Vec<LocalComment>) -> ru
         clip_end_sec: row.get("clip_end_sec")?,
         clip_media_path: row.get("clip_media_path")?,
         commentary: row.get("commentary")?,
+        annotation_type: row.get("annotation_type")?,
         tags: Some(tags),
         is_public: Some(row.get("is_public")?),
         synced_at: row.get("synced_at")?,
@@ -251,9 +268,9 @@ fn save_annotation(app: AppHandle, annotation: Annotation) -> Result<Annotation,
         r#"
         INSERT INTO annotations (
           id, user_id, source_url, source_type, source_title, source_domain, source_thumbnail,
-          clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary, tags,
+          clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary, annotation_type, tags,
           is_public, synced_at, conflict_version, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           source_url = excluded.source_url,
           source_type = excluded.source_type,
@@ -265,6 +282,7 @@ fn save_annotation(app: AppHandle, annotation: Annotation) -> Result<Annotation,
           clip_end_sec = excluded.clip_end_sec,
           clip_media_path = excluded.clip_media_path,
           commentary = excluded.commentary,
+          annotation_type = excluded.annotation_type,
           tags = excluded.tags,
           is_public = excluded.is_public,
           synced_at = excluded.synced_at,
@@ -284,6 +302,7 @@ fn save_annotation(app: AppHandle, annotation: Annotation) -> Result<Annotation,
             annotation.clip_end_sec,
             annotation.clip_media_path,
             annotation.commentary,
+            annotation.annotation_type.unwrap_or_else(|| "Opinion".to_string()),
             tags,
             annotation.is_public.unwrap_or(0),
             annotation.synced_at,
@@ -364,6 +383,94 @@ fn save_settings(app: AppHandle, settings: Settings) -> Result<Settings, String>
     Ok(settings)
 }
 
+fn run_tool(mut command: Command, output_path: Option<String>) -> ToolResult {
+    match command.output() {
+        Ok(output) => ToolResult {
+            ok: output.status.success(),
+            status: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            output_path,
+            blocker: if output.status.success() { None } else { Some("tool exited with a non-zero status".to_string()) },
+        },
+        Err(error) => ToolResult {
+            ok: false,
+            status: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            output_path,
+            blocker: Some(error.to_string()),
+        },
+    }
+}
+
+#[tauri::command]
+fn clip_youtube(app: AppHandle, url: String, start: i64, end: i64) -> Result<ToolResult, String> {
+    let media_dir = app.path().app_data_dir().map_err(|error| error.to_string())?.join("media");
+    fs::create_dir_all(&media_dir).map_err(|error| error.to_string())?;
+    let duration = (end - start).clamp(1, 90);
+    let output = media_dir.join(format!("youtube-{}.mp4", Uuid::new_v4()));
+    let mut command = Command::new("yt-dlp");
+    command
+        .arg("--download-sections")
+        .arg(format!("*{}-{}", start, start + duration))
+        .arg("-f")
+        .arg("mp4[height<=240]/mp4")
+        .arg("-o")
+        .arg(output.to_string_lossy().to_string())
+        .arg(url);
+    Ok(run_tool(command, Some(output.to_string_lossy().to_string())))
+}
+
+#[tauri::command]
+fn extract_podcast_audio(app: AppHandle, input: String, start: i64, end: i64) -> Result<ToolResult, String> {
+    let media_dir = app.path().app_data_dir().map_err(|error| error.to_string())?.join("media");
+    fs::create_dir_all(&media_dir).map_err(|error| error.to_string())?;
+    let duration = (end - start).clamp(1, 90);
+    let output = media_dir.join(format!("podcast-{}.mp3", Uuid::new_v4()));
+    let mut command = Command::new("ffmpeg");
+    command
+        .arg("-y")
+        .arg("-ss")
+        .arg(start.to_string())
+        .arg("-i")
+        .arg(input)
+        .arg("-t")
+        .arg(duration.to_string())
+        .arg("-vn")
+        .arg("-acodec")
+        .arg("libmp3lame")
+        .arg(output.to_string_lossy().to_string());
+    Ok(run_tool(command, Some(output.to_string_lossy().to_string())))
+}
+
+#[tauri::command]
+fn transcribe_with_whisper(input: String) -> Result<ToolResult, String> {
+    let mut command = Command::new("whisper");
+    command.arg(input).arg("--output_format").arg("txt");
+    Ok(run_tool(command, None))
+}
+
+#[tauri::command]
+fn screen_clip_diagnostic() -> ToolResult {
+    ToolResult {
+        ok: false,
+        status: None,
+        stdout: String::new(),
+        stderr: String::new(),
+        output_path: None,
+        blocker: Some("screen capture requires platform permission UX; scaffold is present but capture is not enabled in this build".to_string()),
+    }
+}
+
+#[tauri::command]
+fn handle_auth_callback(callback_url: String) -> Result<String, String> {
+    if !callback_url.starts_with("annotated://callback") {
+        return Err("unsupported callback scheme".to_string());
+    }
+    Ok(callback_url)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -385,6 +492,11 @@ pub fn run() {
             post_annotation,
             load_settings,
             save_settings,
+            clip_youtube,
+            extract_podcast_audio,
+            transcribe_with_whisper,
+            screen_clip_diagnostic,
+            handle_auth_callback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Annotated desktop app");

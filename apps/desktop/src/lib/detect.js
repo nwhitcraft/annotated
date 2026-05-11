@@ -9,11 +9,12 @@ export function detectSource(url) {
 
   const host = parsed.hostname.replace(/^www\./, '');
   const isVideo = /youtube\.com|youtu\.be|vimeo\.com/i.test(host);
-  const isPodcast = /spotify\.com|podcasts\.apple\.com|overcast\.fm|pocketcasts|podbean|anchor\.fm/i.test(value);
+  const isTwitter = /twitter\.com|x\.com/i.test(host);
+  const isPodcast = /spotify\.com|podcasts\.apple\.com|soundcloud\.com|overcast\.fm|pca\.st|pocketcasts|castro\.fm|podbean|anchor\.fm/i.test(value);
 
   return {
     source_url: value,
-    source_type: isVideo ? 'youtube' : isPodcast ? 'podcast' : 'article',
+    source_type: isVideo ? 'youtube' : isTwitter ? 'twitter' : isPodcast ? 'podcast' : 'article',
     source_domain: host,
     source_title: titleFromUrl(parsed),
   };
@@ -70,6 +71,7 @@ function titleFromUrl(parsed) {
 export function typeLabel(type) {
   if (type === 'youtube') return 'video';
   if (type === 'podcast') return 'podcast';
+  if (type === 'twitter') return 'x post';
   return 'article';
 }
 

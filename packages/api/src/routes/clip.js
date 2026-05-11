@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { extractArticle, constrainTextClip } from '@annotated/clip-engine';
 import { extractYouTubeClip } from '@annotated/clip-engine';
 import { extractPodcastClip } from '@annotated/clip-engine';
+import { extractTweet } from '@annotated/clip-engine';
 import { detectSourceType } from '@annotated/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,49 @@ app.post('/podcast', async (c) => {
     return c.json(clip);
   } catch (err) {
     return c.json({ error: 'Failed to clip audio', detail: err.message }, 500);
+  }
+});
+
+// ── Podcast lookup via iTunes Search API ───────────────────────
+app.post('/podcast/lookup', async (c) => {
+  const { term, url } = await c.req.json();
+  const query = term || url;
+  if (!query) return c.json({ error: 'term or url required' }, 400);
+
+  const endpoint = new URL('https://itunes.apple.com/search');
+  endpoint.searchParams.set('term', query);
+  endpoint.searchParams.set('entity', 'podcastEpisode');
+  endpoint.searchParams.set('limit', '10');
+
+  try {
+    const response = await fetch(endpoint);
+    const data = await response.json();
+    if (!response.ok) throw new Error(`iTunes lookup failed: ${response.status}`);
+    return c.json({
+      items: (data.results || []).map((item) => ({
+        title: item.trackName,
+        podcast: item.collectionName,
+        author: item.artistName,
+        url: item.trackViewUrl || item.collectionViewUrl,
+        audioUrl: item.episodeUrl,
+        thumbnail: item.artworkUrl600 || item.artworkUrl100,
+        publishedAt: item.releaseDate,
+      })),
+    });
+  } catch (err) {
+    return c.json({ error: 'Failed to look up podcast', detail: err.message }, 502);
+  }
+});
+
+// ── X/Twitter oEmbed ───────────────────────────────────────────
+app.post('/twitter', async (c) => {
+  const { url } = await c.req.json();
+  if (!url) return c.json({ error: 'url required' }, 400);
+
+  try {
+    return c.json(await extractTweet(url));
+  } catch (err) {
+    return c.json({ error: 'Failed to extract tweet', detail: err.message }, 502);
   }
 });
 

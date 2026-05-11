@@ -251,9 +251,23 @@ kbd {
 }
 
 .composer-actions,
-.detail-actions {
+.detail-actions,
+.settings-actions {
   display: flex;
   gap: 10px;
+}
+
+.diagnostic-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.diagnostic-list p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .button {

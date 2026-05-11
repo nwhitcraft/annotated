@@ -6,6 +6,7 @@ import { createAnnotation, createMediaClip, detectClip } from '../lib/api.js';
 import { domainFromUrl, formatTime } from '../lib/format.js';
 
 const steps = ['URL', 'Clip', 'Commentary', 'Post'];
+const annotationTypes = ['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'];
 
 export default function NewAnnotation() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function NewAnnotation() {
   const [clipStart, setClipStart] = useState(0);
   const [clipEnd, setClipEnd] = useState(90);
   const [commentary, setCommentary] = useState('');
+  const [annotationType, setAnnotationType] = useState('Opinion');
   const [detecting, setDetecting] = useState(false);
   const [posting, setPosting] = useState(false);
   const [clipping, setClipping] = useState(false);
@@ -104,6 +106,7 @@ export default function NewAnnotation() {
         clip_end_sec: detected.type === 'article' ? null : (mediaClip?.endSec ?? clipEnd),
         clip_media_path: mediaClip?.mediaPath || null,
         commentary: commentary.trim(),
+        annotation_type: annotationType,
       });
       navigate(`/a/${data.id}`);
     } catch {
@@ -176,6 +179,13 @@ export default function NewAnnotation() {
         {detected && (
           <section className="form-section">
             <label htmlFor="commentary">Commentary</label>
+            <div className="tag-picker compact" aria-label="Annotation type">
+              {annotationTypes.map((type) => (
+                <button key={type} type="button" className={annotationType === type ? 'active' : ''} onClick={() => setAnnotationType(type)}>
+                  {type}
+                </button>
+              ))}
+            </div>
             {detected.type === 'article' && clipText.trim() ? (
               <QuoteAnnotationBubble
                 quote={`“${clipText.trim()}”`}
@@ -206,6 +216,7 @@ export default function NewAnnotation() {
 
 function inferType(value) {
   if (/youtube\.com|youtu\.be/i.test(value)) return 'youtube';
+  if (/twitter\.com|x\.com/i.test(value)) return 'twitter';
   if (/podcast|spotify|apple\.com\/.*podcast/i.test(value)) return 'podcast';
   return 'article';
 }

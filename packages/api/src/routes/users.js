@@ -4,6 +4,18 @@ import db from '../db.js';
 
 const app = new Hono();
 
+// Starter accounts for onboarding
+app.get('/suggested', (c) => {
+  const { limit = '6' } = c.req.query();
+  const items = db.prepare(`
+    SELECT id, username, display_name, avatar_url, bio, credibility_score
+    FROM users
+    ORDER BY credibility_score DESC, created_at ASC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit) || 6, 1), 12));
+  return c.json({ items });
+});
+
 // Get user profile
 app.get('/:id', (c) => {
   const { id } = c.req.param();
@@ -17,6 +29,7 @@ app.get('/:id', (c) => {
     annotations: db.prepare('SELECT COUNT(*) as count FROM annotations WHERE user_id = ?').get(user.id).count,
     followers: db.prepare('SELECT COUNT(*) as count FROM follows WHERE following_id = ?').get(user.id).count,
     following: db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(user.id).count,
+    credibility: user.credibility_score || calculateCredibility(user.id),
   };
 
   const { provider_id, email, ...safe } = user;
@@ -88,3 +101,17 @@ app.get('/:id/annotations', (c) => {
 });
 
 export default app;
+
+function calculateCredibility(userId) {
+  const stats = db.prepare(`
+    SELECT
+      COUNT(*) AS annotations,
+      COALESCE(SUM(noteworthy_count), 0) AS noteworthy,
+      COALESCE(SUM(CASE WHEN annotation_type = 'Fact Check' THEN 1 ELSE 0 END), 0) AS fact_checks
+    FROM annotations
+    WHERE user_id = ?
+  `).get(userId);
+  return Number(stats.noteworthy || 0) * 5
+    + Number(stats.fact_checks || 0) * 3
+    + Number(stats.annotations || 0);
+}

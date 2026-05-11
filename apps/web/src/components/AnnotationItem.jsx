@@ -35,6 +35,7 @@ export default function AnnotationItem({ annotation, expanded = false }) {
           <span>@{annotation.username || 'anon'}</span>
           <span>{domain}</span>
           <span>{timeAgo(annotation.created_at)}</span>
+          <span className="annotation-type-tag">{annotation.annotation_type || 'Opinion'}</span>
           <SourceType type={annotation.source_type} />
         </div>
       </div>

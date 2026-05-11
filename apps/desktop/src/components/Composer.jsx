@@ -12,6 +12,7 @@ const emptyDraft = {
   clip_start_sec: '',
   clip_end_sec: '',
   commentary: '',
+  annotation_type: 'Opinion',
   tags: [],
   is_public: 0,
 };
@@ -95,6 +96,15 @@ export default function Composer({ editing, onSave, onPost }) {
       <label>
         Commentary
         <textarea className="commentary-input" value={draft.commentary} onChange={(event) => setDraft({ ...draft, commentary: event.target.value })} placeholder="Write the argument..." />
+      </label>
+
+      <label>
+        Annotation type
+        <select value={draft.annotation_type || 'Opinion'} onChange={(event) => setDraft({ ...draft, annotation_type: event.target.value })}>
+          {['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'].map((type) => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
       </label>
 
       <label>

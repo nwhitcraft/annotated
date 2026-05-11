@@ -1,4 +1,5 @@
-const API_BASE = '/api';
+const API_ORIGIN = import.meta.env.VITE_API_BASE || '';
+const API_BASE = `${API_ORIGIN}/api`;
 const TOKEN_KEY = 'annotated.jwt';
 const USER_ID_KEY = 'annotated.user_id';
 const USERNAME_KEY = 'annotated.username';
@@ -44,6 +45,14 @@ export function authUrl(provider) {
   return `${API_BASE}/auth/${provider}`;
 }
 
+export async function hydrateCurrentUser() {
+  const user = await request('/auth/me');
+  setCurrentUserId(user.id);
+  setUsername(user.username);
+  setAvatarUrl(user.avatar_url);
+  return user;
+}
+
 async function request(path, options = {}) {
   const token = getToken();
   const headers = new Headers(options.headers || {});
@@ -66,7 +75,8 @@ async function request(path, options = {}) {
 export async function getFeed(tab) {
   let path = '/feed';
   if (tab === 'trending') path = '/feed/trending';
-  if (['article', 'youtube', 'podcast'].includes(tab)) path = `/feed?type=${tab}`;
+  if (['article', 'youtube', 'podcast', 'twitter'].includes(tab)) path = `/feed?type=${tab}`;
+  if (tab?.startsWith('tag:')) path = `/feed?annotation_type=${encodeURIComponent(tab.slice(4))}`;
   if (tab === 'following') path = `/feed/following/${encodeURIComponent(getCurrentUserId())}`;
   const data = await request(path);
   return data.items || data.annotations || data || [];
@@ -105,6 +115,43 @@ export async function toggleLike(id) {
   });
 }
 
+export async function toggleNoteworthy(id) {
+  return request(`/annotations/${encodeURIComponent(id)}/noteworthy`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
+  });
+}
+
+export async function getAnnotationClaims(id) {
+  return request(`/annotations/${encodeURIComponent(id)}/claims`);
+}
+
+export async function fileClaim(annotationId, payload) {
+  return request('/claims', {
+    method: 'POST',
+    body: JSON.stringify({
+      annotation_id: annotationId,
+      claimant_email: payload.claimant_email || payload.email,
+      reason: payload.reason,
+    }),
+  });
+}
+
+export async function getClaims(status = 'pending') {
+  return request(`/claims?status=${encodeURIComponent(status)}`);
+}
+
+export async function updateClaim(id, status) {
+  return request(`/claims/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function deleteClaim(id) {
+  return request(`/claims/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 export async function postComment(annotationId, body, parentId) {
   return request(`/annotations/${encodeURIComponent(annotationId)}/comments`, {
     method: 'POST',
@@ -128,6 +175,18 @@ export async function detectClip(url) {
     method: 'POST',
     body: JSON.stringify({ url }),
   });
+
+  if (data.type === 'twitter') {
+    try {
+      const tweet = await request('/clip/twitter', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      });
+      return { ...data, ...tweet };
+    } catch {
+      return data;
+    }
+  }
 
   if (data.type !== 'article') return data;
 
@@ -156,3 +215,10 @@ export async function createAnnotation(payload) {
     body: JSON.stringify({ user_id: getCurrentUserId(), ...payload }),
   });
 }
+
+export async function getSuggestedUsers() {
+  const data = await request('/users/suggested');
+  return data.items || [];
+}
+
+export { API_ORIGIN, API_BASE };

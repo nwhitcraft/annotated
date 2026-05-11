@@ -35,7 +35,7 @@ db.exec(`
     user_id TEXT NOT NULL REFERENCES users(id),
     source_url TEXT NOT NULL,
     source_title TEXT,
-    source_type TEXT NOT NULL,       -- 'article', 'youtube', 'podcast'
+    source_type TEXT NOT NULL,       -- 'article', 'youtube', 'podcast', 'twitter'
     source_domain TEXT,
     source_site_name TEXT,
     source_author TEXT,
@@ -50,10 +50,13 @@ db.exec(`
 
     -- The annotation
     commentary TEXT NOT NULL,
+    annotation_type TEXT DEFAULT 'Opinion',
     
     -- Metadata
     is_public INTEGER DEFAULT 1,
     pin_count INTEGER DEFAULT 0,
+    noteworthy_count INTEGER DEFAULT 0,
+    claim_count INTEGER DEFAULT 0,
     comment_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
@@ -90,6 +93,13 @@ db.exec(`
     PRIMARY KEY (user_id, annotation_id)
   );
 
+  CREATE TABLE IF NOT EXISTS noteworthy (
+    user_id TEXT NOT NULL REFERENCES users(id),
+    annotation_id TEXT NOT NULL REFERENCES annotations(id) ON DELETE CASCADE,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, annotation_id)
+  );
+
   CREATE TABLE IF NOT EXISTS claims (
     id TEXT PRIMARY KEY,
     annotation_id TEXT NOT NULL REFERENCES annotations(id),
@@ -103,9 +113,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_annotations_user ON annotations(user_id);
   CREATE INDEX IF NOT EXISTS idx_annotations_created ON annotations(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_annotations_source_type ON annotations(source_type);
+  CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type);
   CREATE INDEX IF NOT EXISTS idx_comments_annotation ON comments(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
   CREATE INDEX IF NOT EXISTS idx_likes_annotation ON likes(annotation_id);
+  CREATE INDEX IF NOT EXISTS idx_noteworthy_annotation ON noteworthy(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC);
 `);
 
@@ -118,11 +130,26 @@ for (const statement of [
   `ALTER TABLE annotations ADD COLUMN source_site_name TEXT`,
   `ALTER TABLE annotations ADD COLUMN source_author TEXT`,
   `ALTER TABLE annotations ADD COLUMN source_published_at TEXT`,
+  `ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'`,
+  `ALTER TABLE annotations ADD COLUMN noteworthy_count INTEGER DEFAULT 0`,
+  `ALTER TABLE annotations ADD COLUMN claim_count INTEGER DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN credibility_score INTEGER DEFAULT 0`,
 ]) {
   try {
     db.exec(statement);
   } catch { /* column already exists */ }
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS noteworthy (
+    user_id TEXT NOT NULL REFERENCES users(id),
+    annotation_id TEXT NOT NULL REFERENCES annotations(id) ON DELETE CASCADE,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, annotation_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_noteworthy_annotation ON noteworthy(annotation_id);
+  CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type);
+`);
 
 // Add parent_id to comments for nested replies if missing
 try {
