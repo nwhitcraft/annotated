@@ -41,6 +41,9 @@ export default function NewAnnotation() {
         title: data.title || data.source_title || 'Untitled source',
         domain: data.domain || domainFromUrl(value),
         thumbnail: data.thumbnail || data.source_thumbnail || '',
+        siteName: data.siteName || data.source_site_name || '',
+        author: data.author || data.source_author || '',
+        publishedAt: data.publishedAt || data.source_published_at || '',
       });
       if (data.excerpt) setClipText(data.excerpt);
     } catch {
@@ -92,6 +95,9 @@ export default function NewAnnotation() {
         source_type: detected.type,
         source_title: mediaClip?.title || detected.title,
         source_domain: detected.domain,
+        source_site_name: detected.siteName || null,
+        source_author: detected.author || null,
+        source_published_at: detected.publishedAt || null,
         source_thumbnail: mediaClip?.thumbnail || detected.thumbnail || null,
         clip_text: detected.type === 'article' ? clipText.trim() : null,
         clip_start_sec: detected.type === 'article' ? null : (mediaClip?.startSec ?? clipStart),

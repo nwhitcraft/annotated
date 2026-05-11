@@ -37,14 +37,28 @@ async function openPanel(tabId) {
   if (state) safeBroadcast({ type: 'STATE_UPDATED', state });
 }
 
+function sendToTab(tabId, message) {
+  if (!tabId) return;
+  chrome.tabs.sendMessage(tabId, message, () => {
+    void chrome.runtime.lastError;
+  });
+}
+
 chrome.action.onClicked.addListener((tab) => {
   openPanel(tab.id);
 });
 
 chrome.commands.onCommand.addListener((command) => {
-  if (command !== '_execute_action') return;
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) openPanel(tabs[0].id);
+    const tab = tabs[0];
+    if (!tab) return;
+
+    if (command === 'start_clipping') {
+      sendToTab(tab.id, { type: 'START_CLIPPING' });
+      return;
+    }
+
+    if (command === '_execute_action') openPanel(tab.id);
   });
 });
 
@@ -55,9 +69,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     saveTabState(tabId, {
       page: {
         url: msg.url,
+        pageUrl: msg.pageUrl,
         title: msg.title,
         sourceType: msg.sourceType,
         domain: msg.domain,
+        siteName: msg.siteName,
+        author: msg.author,
+        publishedAt: msg.publishedAt,
+        thumbnail: msg.thumbnail,
       },
     }).then((state) => {
       safeBroadcast({ type: 'PAGE_DETECTED', state });
@@ -69,15 +88,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const clip = {
       text: msg.text,
       url: msg.url,
+      pageUrl: msg.pageUrl,
       title: msg.title,
       sourceType: msg.sourceType,
       domain: msg.domain,
+      siteName: msg.siteName,
+      author: msg.author,
+      publishedAt: msg.publishedAt,
+      thumbnail: msg.thumbnail,
       clipStartSec: msg.clipStartSec,
       clipEndSec: msg.clipEndSec,
       selectedAt: msg.selectedAt,
     };
 
-    saveTabState(tabId, { clip, page: { url: msg.url, title: msg.title, sourceType: msg.sourceType, domain: msg.domain } })
+    saveTabState(tabId, {
+      clip,
+      page: {
+        url: msg.url,
+        pageUrl: msg.pageUrl,
+        title: msg.title,
+        sourceType: msg.sourceType,
+        domain: msg.domain,
+        siteName: msg.siteName,
+        author: msg.author,
+        publishedAt: msg.publishedAt,
+        thumbnail: msg.thumbnail,
+      },
+    })
       .then((state) => {
         safeBroadcast({ type: 'CLIP_TEXT', state });
         if (msg.openPanel) openPanel(tabId);
@@ -92,5 +129,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ state: state || null });
     });
     return true;
+  }
+
+  if (msg.type === 'START_CLIPPING_ACTIVE_TAB') {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      sendToTab(tabs[0]?.id, { type: 'START_CLIPPING' });
+    });
   }
 });

@@ -5,9 +5,9 @@
 #annotated-selection-tooltip {
   position: fixed;
   z-index: 2147483647;
-  min-width: 90px;
-  height: 32px;
-  padding: 0 12px;
+  min-width: 148px;
+  height: 38px;
+  padding: 0 16px;
   border: 1px solid #deded9;
   border-radius: 4px;
   background: #fafaf8;
@@ -16,12 +16,72 @@
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 12px;
   font-weight: 600;
-  line-height: 30px;
+  line-height: 36px;
   letter-spacing: 0;
-  cursor: pointer;
+  cursor: pointer !important;
+  animation: annotated-bubble-in 160ms ease-out;
 }
 
 #annotated-selection-tooltip:hover {
   border-color: #4f46e5;
   color: #4f46e5;
+}
+
+#annotated-clipping-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+
+.annotated-pane {
+  position: fixed;
+  background: rgba(250, 250, 248, 0.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 160ms ease, backdrop-filter 160ms ease;
+}
+
+#annotated-clipping-overlay.has-selection .annotated-pane {
+  opacity: 1;
+}
+
+.annotated-clipping-hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: min(360px, calc(100vw - 48px));
+  transform: translate(-50%, -50%);
+  padding: 16px 0;
+  border-top: 1px solid #deded9;
+  border-bottom: 1px solid #deded9;
+  background: rgba(250, 250, 248, 0.86);
+  color: #1a1a1a;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 28px;
+  line-height: 1.05;
+  text-align: center;
+  opacity: 1;
+  transition: opacity 120ms ease;
+}
+
+#annotated-clipping-overlay.has-selection .annotated-clipping-hint {
+  opacity: 0;
+}
+
+.annotated-clipping-mode * {
+  cursor: text !important;
+}
+
+@keyframes annotated-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

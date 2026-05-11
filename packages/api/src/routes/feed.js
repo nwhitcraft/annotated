@@ -3,6 +3,29 @@ import db from '../db.js';
 
 const app = new Hono();
 
+// Page feed — annotations on the active source, followed users first.
+app.get('/page', (c) => {
+  const { url, viewer_id = 'demo-user', limit = '50' } = c.req.query();
+  if (!url) return c.json({ error: 'url required' }, 400);
+
+  const variants = sourceUrlVariants(url);
+  const cappedLimit = Math.min(Math.max(Number(limit) || 50, 1), 50);
+  const placeholders = variants.map(() => '?').join(', ');
+
+  const items = db.prepare(`
+    SELECT a.*, u.username, u.display_name, u.avatar_url,
+      CASE WHEN f.follower_id IS NOT NULL THEN 1 ELSE 0 END AS followed_by_viewer
+    FROM annotations a
+    JOIN users u ON a.user_id = u.id
+    LEFT JOIN follows f ON f.following_id = a.user_id AND f.follower_id = ?
+    WHERE a.is_public = 1 AND a.source_url IN (${placeholders})
+    ORDER BY followed_by_viewer DESC, a.created_at DESC
+    LIMIT ?
+  `).all(viewer_id, ...variants, cappedLimit);
+
+  return c.json({ items, page_url: url, matched: items.length > 0 });
+});
+
 // Public feed — latest annotations from everyone
 app.get('/', (c) => {
   const { limit = '20', offset = '0', type } = c.req.query();
@@ -59,5 +82,21 @@ app.get('/trending', (c) => {
 
   return c.json({ items });
 });
+
+function sourceUrlVariants(value) {
+  const variants = new Set([value]);
+  try {
+    const parsed = new URL(value);
+    parsed.hash = '';
+    variants.add(parsed.toString());
+    parsed.search = '';
+    variants.add(parsed.toString());
+    const noTrailingSlash = parsed.toString().replace(/\/$/, '');
+    variants.add(noTrailingSlash);
+  } catch {
+    variants.add(value.replace(/#.*$/, '').replace(/\?.*$/, '').replace(/\/$/, ''));
+  }
+  return [...variants].filter(Boolean);
+}
 
 export default app;

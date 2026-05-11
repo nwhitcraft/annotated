@@ -67,7 +67,8 @@ app.get('/:id', (c) => {
 // Create annotation
 app.post('/', async (c) => {
   const body = await c.req.json();
-  const { user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+  const { user_id, source_url, source_title, source_type, source_domain, source_site_name,
+          source_author, source_published_at, source_thumbnail,
           clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary } = body;
 
   if (!user_id || !source_url || !source_type || !commentary) {
@@ -76,10 +77,12 @@ app.post('/', async (c) => {
 
   const id = nanoid(12);
   db.prepare(`
-    INSERT INTO annotations (id, user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+    INSERT INTO annotations (id, user_id, source_url, source_title, source_type, source_domain,
+      source_site_name, source_author, source_published_at, source_thumbnail,
       clip_text, clip_start_sec, clip_end_sec, clip_media_path, commentary)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, user_id, source_url, source_title, source_type, source_domain, source_thumbnail,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, user_id, source_url, source_title, source_type, source_domain,
+    source_site_name || null, source_author || null, source_published_at || null, source_thumbnail,
     clip_text || null, clip_start_sec ?? null, clip_end_sec ?? null, clip_media_path || null, commentary);
 
   return c.json({ id, created: true }, 201);

@@ -37,6 +37,9 @@ db.exec(`
     source_title TEXT,
     source_type TEXT NOT NULL,       -- 'article', 'youtube', 'podcast'
     source_domain TEXT,
+    source_site_name TEXT,
+    source_author TEXT,
+    source_published_at TEXT,
     source_thumbnail TEXT,
 
     -- The clip
@@ -111,9 +114,30 @@ try {
   db.exec(`ALTER TABLE annotations ADD COLUMN like_count INTEGER DEFAULT 0`);
 } catch { /* column already exists */ }
 
+for (const statement of [
+  `ALTER TABLE annotations ADD COLUMN source_site_name TEXT`,
+  `ALTER TABLE annotations ADD COLUMN source_author TEXT`,
+  `ALTER TABLE annotations ADD COLUMN source_published_at TEXT`,
+]) {
+  try {
+    db.exec(statement);
+  } catch { /* column already exists */ }
+}
+
 // Add parent_id to comments for nested replies if missing
 try {
   db.exec(`ALTER TABLE comments ADD COLUMN parent_id TEXT REFERENCES comments(id)`);
 } catch { /* column already exists */ }
+
+db.prepare(`
+  INSERT INTO users (id, username, display_name, avatar_url, bio, provider, provider_id, email)
+  VALUES ('demo-user', 'demo', 'Demo User', null, 'Local extension testing account', 'local', 'demo-user', null)
+  ON CONFLICT(id) DO UPDATE SET
+    username = excluded.username,
+    display_name = excluded.display_name,
+    provider = excluded.provider,
+    provider_id = excluded.provider_id,
+    updated_at = datetime('now')
+`).run();
 
 export default db;

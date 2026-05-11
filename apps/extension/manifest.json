@@ -36,11 +36,14 @@
   ],
   "commands": {
     "_execute_action": {
+      "description": "Open Annotated sidebar"
+    },
+    "start_clipping": {
       "suggested_key": {
         "default": "Ctrl+Shift+A",
         "mac": "Command+Shift+A"
       },
-      "description": "Open Annotated sidebar"
+      "description": "Start Annotated clipping mode"
     }
   },
   "icons": {

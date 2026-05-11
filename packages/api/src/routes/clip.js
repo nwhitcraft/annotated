@@ -24,19 +24,26 @@ app.post('/article', async (c) => {
     const res = await fetch(url);
     const html = await res.text();
     
-    // Extract basic metadata from HTML
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
-    const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
-    const domainMatch = url.match(/https?:\/\/([^\/]+)/);
+    const title = getMeta(html, ['og:title', 'twitter:title']) || titleMatch?.[1]?.trim() || '';
+    const description = getMeta(html, ['description', 'og:description', 'twitter:description']);
+    const thumbnail = getMeta(html, ['og:image', 'twitter:image']);
+    const author = getMeta(html, ['author', 'article:author', 'parsely-author', 'byl']);
+    const publishedAt = getMeta(html, ['article:published_time', 'datePublished', 'date', 'pubdate']);
+    const siteName = getMeta(html, ['og:site_name', 'application-name']);
+    const canonical = new URL(html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)?.[1] || url, url).toString();
+    const domain = new URL(canonical).hostname.replace(/^www\./, '');
 
     return c.json({
-      url,
-      title: titleMatch?.[1]?.trim() || '',
-      description: descMatch?.[1]?.trim() || '',
-      excerpt: descMatch?.[1]?.trim() || '',
-      thumbnail: ogImageMatch?.[1] || '',
-      domain: domainMatch?.[1] || '',
+      url: canonical,
+      title: decodeHtml(title),
+      description: decodeHtml(description),
+      excerpt: decodeHtml(description),
+      thumbnail,
+      author: decodeHtml(author),
+      publishedAt,
+      siteName: decodeHtml(siteName),
+      domain,
       type: 'article',
     });
   } catch (err) {
@@ -163,6 +170,29 @@ function formatTimestamp(totalSeconds) {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = Math.floor(totalSeconds % 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function getMeta(html, names) {
+  for (const name of names) {
+    const pattern = new RegExp(`<meta[^>]*(?:name|property|itemprop)=["']${escapeRegExp(name)}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
+    const alternate = new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*(?:name|property|itemprop)=["']${escapeRegExp(name)}["'][^>]*>`, 'i');
+    const value = html.match(pattern)?.[1] || html.match(alternate)?.[1];
+    if (value) return value.trim();
+  }
+  return '';
+}
+
+function decodeHtml(value) {
+  return String(value || '')
+    .replaceAll('&amp;', '&')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>');
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export default app;
