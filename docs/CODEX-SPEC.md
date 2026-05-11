@@ -1,6 +1,6 @@
 # Annotated — Codex Completion Spec
 
-**Version:** 5.1
+**Version:** 5.2
 **Date:** 2026-05-12
 **Author:** Stark (written for Codex)
 **Bounty:** Jason Calacanis $5,000 via Launch.co (deadline ~May 15, 2026)
