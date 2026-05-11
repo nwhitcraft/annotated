@@ -11,8 +11,10 @@ const DEFAULT_SHORTCUT = /Mac|iPhone|iPad/i.test(navigator.platform) ? 'Command+
 let lastUrl = window.location.href;
 let clippingMode = false;
 let activeClip = null;
+let activeRange = null;
 let selecting = false;
 let selectionTimer = null;
+let trackingFrame = null;
 let clippingShortcut = DEFAULT_SHORTCUT;
 
 loadShortcut();
@@ -142,6 +144,7 @@ function enterClippingMode() {
   if (mediaClip) {
     const rect = currentMedia()?.element.getBoundingClientRect();
     activeClip = mediaClip;
+    activeRange = null;
     showComposer(rect && rect.width ? rect : centerRect());
   }
 }
@@ -149,7 +152,10 @@ function enterClippingMode() {
 function exitClippingMode() {
   clippingMode = false;
   activeClip = null;
+  activeRange = null;
   window.clearTimeout(selectionTimer);
+  if (trackingFrame) cancelAnimationFrame(trackingFrame);
+  trackingFrame = null;
   document.documentElement.classList.remove('annotated-clipping-mode');
   document.getElementById(OVERLAY_ID)?.remove();
   document.getElementById(COMPOSER_ID)?.remove();
@@ -202,6 +208,8 @@ function captureCompletedSelection() {
   const clip = clipFromSelection(false);
   if (!clip) return;
 
+  const selection = window.getSelection();
+  activeRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
   const rect = getSelectionRect();
   if (!rect) return;
 
@@ -211,9 +219,14 @@ function captureCompletedSelection() {
 
 function getSelectionRect() {
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return null;
+  const range = activeRange || (selection?.rangeCount ? selection.getRangeAt(0) : null);
+  if (!range) return null;
 
-  const rects = [...selection.getRangeAt(0).getClientRects()]
+  return rectFromRange(range);
+}
+
+function rectFromRange(range) {
+  const rects = [...range.getClientRects()]
     .filter((rect) => rect.width > 0 && rect.height > 0);
   if (!rects.length) return null;
 
@@ -244,20 +257,48 @@ function showComposer(rect) {
       rows="5"
     ></textarea>
     <div class="quote-annotation-bubble__actions">
-      <button class="quote-annotation-bubble__button" type="button">Post annotation</button>
+      <button class="quote-annotation-bubble__button" type="button">Annotate</button>
     </div>
   `;
 
-  const left = Math.max(18, Math.min(window.innerWidth - 440, rect.left + rect.width / 2 - 210));
-  const top = Math.max(18, Math.min(window.innerHeight - 320, rect.bottom + 18));
-  composer.style.left = `${left}px`;
-  composer.style.top = `${top}px`;
+  positionComposer(composer, rect);
 
   composer.addEventListener('mousedown', (event) => event.stopPropagation());
   composer.querySelector('button').addEventListener('click', () => postAnnotation(composer));
 
   document.documentElement.append(composer);
   composer.querySelector('textarea').focus();
+}
+
+function positionComposer(composer, rect) {
+  const width = Math.min(760, window.innerWidth - 40);
+  const estimatedHeight = Math.min(340, window.innerHeight - 36);
+  const left = Math.max(20, Math.min(window.innerWidth - width - 20, rect.left + rect.width / 2 - width / 2));
+  const below = rect.bottom + 18;
+  const above = rect.top - estimatedHeight - 18;
+  const hasRoomBelow = below + estimatedHeight <= window.innerHeight - 18;
+  const top = Math.max(18, hasRoomBelow ? below : Math.max(18, above));
+
+  composer.style.width = `${width}px`;
+  composer.style.left = `${left}px`;
+  composer.style.top = `${top}px`;
+}
+
+function updateAnchoredUi() {
+  trackingFrame = null;
+  if (!clippingMode || !activeClip || !activeRange) return;
+
+  const rect = rectFromRange(activeRange);
+  if (!rect) return;
+
+  setPaneStyles(rect);
+  const composer = document.getElementById(COMPOSER_ID);
+  if (composer) positionComposer(composer, rect);
+}
+
+function scheduleAnchoredUiUpdate() {
+  if (!clippingMode || !activeRange || trackingFrame) return;
+  trackingFrame = requestAnimationFrame(updateAnchoredUi);
 }
 
 async function postAnnotation(composer) {
@@ -364,6 +405,9 @@ document.addEventListener('mouseup', () => {
   selecting = false;
   scheduleSelectionCapture();
 }, true);
+
+window.addEventListener('scroll', scheduleAnchoredUiUpdate, true);
+window.addEventListener('resize', scheduleAnchoredUiUpdate);
 
 detectPage();
 
