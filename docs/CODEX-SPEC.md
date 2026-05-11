@@ -635,3 +635,23 @@ Codex should build in this order. Desktop app work runs **in parallel** with web
 21. Desktop app has voice notes
 
 If all 21 work, we ship.
+
+### Codex status after `codex/frontend-v2` pass (2026-05-12)
+
+**Implemented or wired for MVP validation:**
+- Web auth callbacks, JWT `/me`, extension auth handoff page, side-panel token storage, profile avatar/login state.
+- Side panel is now the only extension compose path; the inline content-script composer has been removed.
+- Annotation type tags across API, web, extension side panel, and desktop composer.
+- X/Twitter detection and API oEmbed extraction.
+- Noteworthy signal, credibility score, claim counts, inline claim filing, extension claim filing, and `/admin/claims`.
+- Onboarding and first-clip tutorial routes.
+- API-synced following feed in the extension when authenticated.
+- iTunes podcast lookup endpoint and expanded podcast detection domains.
+- Configurable web API base via `VITE_API_BASE`.
+- Desktop Rust commands/scaffolding for yt-dlp, ffmpeg, Whisper, auth callback parsing, local SQLite, sync diagnostics, collections/search UI scaffolding, AI/voice-note diagnostic paths.
+
+**Blockers with evidence:**
+- Real Google/X sign-up requires Nick-provided OAuth credentials; dev fallback routes remain available.
+- Full desktop media operations require local `yt-dlp`, `ffmpeg`, and `whisper` binaries plus real source URLs/files.
+- Screen clipping requires platform permission UX; current desktop command reports this blocker explicitly.
+- Web and desktop Vite builds hang before diagnostics in this environment after dependencies install; extension validation, API syntax checks, API smoke checks, and `cargo check` pass.
