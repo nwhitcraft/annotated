@@ -6,7 +6,8 @@ const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const SHORT_CLIP_SECONDS = 90;
 const SHORTCUT_KEY = 'annotated.shortcut';
-const DEFAULT_SHORTCUT = /Mac|iPhone|iPad/i.test(navigator.platform) ? 'Command+Shift+X' : 'Ctrl+Shift+X';
+const DEFAULT_SHORTCUT = 'Ctrl+Shift+X';
+const LEGACY_SHORTCUTS = new Set(['Command+Shift+X']);
 
 let lastUrl = window.location.href;
 let clippingMode = false;
@@ -21,7 +22,7 @@ loadShortcut();
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes[SHORTCUT_KEY]) {
-    clippingShortcut = normalizeShortcut(changes[SHORTCUT_KEY].newValue || DEFAULT_SHORTCUT);
+    clippingShortcut = normalizeShortcut(migrateShortcut(changes[SHORTCUT_KEY].newValue));
   }
 });
 
@@ -434,7 +435,9 @@ if (document.readyState === 'loading') {
 function loadShortcut() {
   chrome.storage.sync.get({ [SHORTCUT_KEY]: DEFAULT_SHORTCUT }, (items) => {
     if (chrome.runtime.lastError) return;
-    clippingShortcut = normalizeShortcut(items[SHORTCUT_KEY] || DEFAULT_SHORTCUT);
+    const shortcut = migrateShortcut(items[SHORTCUT_KEY]);
+    clippingShortcut = normalizeShortcut(shortcut);
+    if (shortcut !== items[SHORTCUT_KEY]) chrome.storage.sync.set({ [SHORTCUT_KEY]: shortcut });
   });
 }
 
@@ -483,6 +486,11 @@ function normalizeKey(value) {
   const key = String(value || '').trim();
   if (key.length === 1) return key.toUpperCase();
   return key.replace(/^Arrow/, '');
+}
+
+function migrateShortcut(value) {
+  const normalized = normalizeShortcut(value || DEFAULT_SHORTCUT);
+  return LEGACY_SHORTCUTS.has(normalized) ? DEFAULT_SHORTCUT : normalized;
 }
 
 async function ensureUser() {

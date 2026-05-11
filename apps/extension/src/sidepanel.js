@@ -1,7 +1,8 @@
 const API_BASE = 'http://localhost:3080';
 const USER_ID = 'demo-user';
 const SHORTCUT_KEY = 'annotated.shortcut';
-const DEFAULT_SHORTCUT = /Mac|iPhone|iPad/i.test(navigator.platform) ? 'Command+Shift+X' : 'Ctrl+Shift+X';
+const DEFAULT_SHORTCUT = 'Ctrl+Shift+X';
+const LEGACY_SHORTCUTS = new Set(['Command+Shift+X']);
 
 let currentPage = null;
 let shortcutCapture = false;
@@ -91,11 +92,13 @@ function initShortcut() {
       renderShortcut(DEFAULT_SHORTCUT);
       return;
     }
-    renderShortcut(items[SHORTCUT_KEY] || DEFAULT_SHORTCUT);
+    const shortcut = migrateShortcut(items[SHORTCUT_KEY]);
+    renderShortcut(shortcut);
+    if (shortcut !== items[SHORTCUT_KEY]) chrome.storage.sync.set({ [SHORTCUT_KEY]: shortcut });
   });
 
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes[SHORTCUT_KEY]) renderShortcut(changes[SHORTCUT_KEY].newValue || DEFAULT_SHORTCUT);
+    if (changes[SHORTCUT_KEY]) renderShortcut(migrateShortcut(changes[SHORTCUT_KEY].newValue));
   });
 }
 
@@ -276,4 +279,9 @@ function normalizeKey(value) {
   const key = String(value || '').trim();
   if (key.length === 1) return key.toUpperCase();
   return key.replace(/^Arrow/, '');
+}
+
+function migrateShortcut(value) {
+  const normalized = normalizeShortcut(value || DEFAULT_SHORTCUT);
+  return LEGACY_SHORTCUTS.has(normalized) ? DEFAULT_SHORTCUT : normalized;
 }

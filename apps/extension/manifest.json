@@ -41,7 +41,7 @@
     "start_clipping": {
       "suggested_key": {
         "default": "Ctrl+Shift+X",
-        "mac": "Command+Shift+X"
+        "mac": "MacCtrl+Shift+X"
       },
       "description": "Start Annotated clipping mode"
     }
