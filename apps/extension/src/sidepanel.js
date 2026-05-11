@@ -1,6 +1,126 @@
 const API_BASE = 'http://localhost:3080';
-const USER_ID = 'demo-user';
+const WEB_BASE = 'http://localhost:3090';
 const STORAGE_KEY = 'annotated-following';
+const AUTH_TOKEN_KEY = 'annotated.jwt';
+const USER_ID_KEY = 'annotated.user_id';
+
+let currentUser = null; // { id, username, token }
+
+// ── Auth UI elements ─────────────────────────────────────────
+const authBtn = document.getElementById('auth-btn');
+const authStatusEl = document.getElementById('auth-status');
+
+// ── Auth helpers ───────────────────────────────────────────────
+
+/**
+ * Try to read auth from the web app's localStorage.
+ * Works when extension and web app share the same origin (localhost).
+ * For production, this will use postMessage from a hidden iframe.
+ */
+function readWebAuth() {
+  try {
+    // Same-origin: can read localStorage directly
+    const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    const userId = window.localStorage.getItem(USER_ID_KEY);
+    if (token && userId) {
+      return { token, userId };
+    }
+  } catch (err) {
+    // Cross-origin or localStorage blocked — fall through
+    console.warn('Could not read web auth:', err);
+  }
+  return null;
+}
+
+/**
+ * Open the web login page in a new tab.
+ * After login, the web app stores JWT + user_id in localStorage.
+ * We poll for the auth state change.
+ */
+function openLogin() {
+  // Open the web app's login page
+  const loginUrl = `${WEB_BASE}/login`;
+  chrome.tabs.create({ url: loginUrl, active: true });
+
+  // Poll for auth state change (user just logged in)
+  let checks = 0;
+  const pollInterval = setInterval(() => {
+    checks++;
+    const auth = readWebAuth();
+    if (auth) {
+      clearInterval(pollInterval);
+      setAuthenticatedUser(auth);
+    } else if (checks > 60) {
+      // 60 * 500ms = 30s timeout — stop polling
+      clearInterval(pollInterval);
+    }
+  }, 500);
+}
+
+/**
+ * Set the authenticated user state and update UI.
+ */
+function setAuthenticatedUser(auth) {
+  currentUser = {
+    id: auth.userId,
+    token: auth.token,
+  };
+  updateAuthUI();
+  // Reload feeds with real user
+  if (currentUrl) loadRelatedAnnotations(currentUrl);
+  loadFollowingFeed();
+}
+
+/**
+ * Update the auth button/status UI based on current state.
+ */
+function updateAuthUI() {
+  if (currentUser) {
+    authBtn.textContent = '✦ ' + currentUser.id.slice(0, 8);
+    authBtn.classList.add('authenticated');
+    authBtn.title = 'Signed in';
+    authBtn.onclick = logout;
+
+    authStatusEl.style.display = 'block';
+    authStatusEl.innerHTML = `
+      <span class="username">Signed in as ${currentUser.id.slice(0, 12)}</span>
+      <span class="logout" onclick="logout()">sign out</span>
+    `;
+  } else {
+    authBtn.textContent = 'Sign In';
+    authBtn.classList.remove('authenticated');
+    authBtn.title = 'Sign in to post annotations';
+    authBtn.onclick = openLogin;
+
+    authStatusEl.style.display = 'none';
+  }
+}
+
+/**
+ * Clear auth state and reset to demo mode.
+ */
+function logout() {
+  currentUser = null;
+  updateAuthUI();
+  if (currentUrl) loadRelatedAnnotations(currentUrl);
+  loadFollowingFeed();
+}
+
+// ── Init auth check ────────────────────────────────────────────
+
+updateAuthUI();
+
+// Listen for storage changes (e.g., user logs in from another tab)
+window.addEventListener('storage', (e) => {
+  if (e.key === AUTH_TOKEN_KEY || e.key === USER_ID_KEY) {
+    const auth = readWebAuth();
+    if (auth) {
+      setAuthenticatedUser(auth);
+    } else if (!currentUser) {
+      updateAuthUI();
+    }
+  }
+});
 
 let currentClip = null;
 let currentPage = null;
@@ -134,15 +254,28 @@ commentaryEl.addEventListener('input', () => {
 postBtn.addEventListener('click', async () => {
   if (!currentClip || !commentaryEl.value.trim()) return;
 
+  // Require auth for posting
+  if (!currentUser) {
+    postBtn.textContent = 'Sign in to post';
+    postBtn.disabled = false;
+    setTimeout(() => {
+      postBtn.textContent = '✦ Post Annotation';
+    }, 2000);
+    return;
+  }
+
   postBtn.disabled = true;
   postBtn.textContent = 'Posting…';
 
   try {
     const res = await fetch(`${API_BASE}/api/annotations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser.token}`,
+      },
       body: JSON.stringify({
-        user_id: USER_ID,
+        user_id: currentUser.id,
         source_url: currentClip.url,
         source_title: currentClip.title || currentPage?.title || '',
         source_type: currentClip.sourceType || currentPage?.sourceType || detectSourceType(currentClip.url),
@@ -196,8 +329,9 @@ async function loadRelatedAnnotations(url) {
     const allItems = data.items || [];
 
     // Filter to annotations on the same source URL (exclude self)
+    const myId = currentUser?.id;
     const allRelated = allItems.filter(
-      (a) => a.source_url === url && a.user_id !== USER_ID
+      (a) => a.source_url === url && a.user_id !== myId
     );
 
     if (allRelated.length === 0) {

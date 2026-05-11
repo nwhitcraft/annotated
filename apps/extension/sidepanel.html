@@ -210,6 +210,55 @@
       color: var(--text);
     }
 
+    /* ── Auth button ── */
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .auth-btn {
+      padding: 5px 14px;
+      border: 1px solid var(--accent);
+      border-radius: 0;
+      background: transparent;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .auth-btn:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+    .auth-btn.authenticated {
+      border-color: var(--success);
+      color: var(--success);
+    }
+    .auth-btn.authenticated:hover {
+      background: var(--success);
+      color: #fff;
+    }
+    .auth-status {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .auth-status .username {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .auth-status .logout {
+      margin-left: 8px;
+      color: var(--error);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
     /* ── Following feed ── */
     .following-header {
       font-size: 11px;
@@ -249,9 +298,13 @@
   </style>
 </head>
 <body>
-  <div class="logo">
-    <span class="logo-mark">✦</span> annotated
+  <div class="header-row">
+    <div class="logo">
+      <span class="logo-mark">✦</span> annotated
+    </div>
+    <button id="auth-btn" class="auth-btn">Sign In</button>
   </div>
+  <div id="auth-status" class="auth-status" style="display:none"></div>
 
   <!-- Paste URL input -->
   <div id="url-row" class="url-row">
