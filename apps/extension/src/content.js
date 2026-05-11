@@ -1,6 +1,8 @@
 // Content script — shortcut-driven clipping mode, source metadata, and media time.
 
-const TOOLTIP_ID = 'annotated-selection-tooltip';
+const API_BASE = 'http://localhost:3080';
+const USER_ID = 'demo-user';
+const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const SHORT_CLIP_SECONDS = 90;
 const SHORTCUT_KEY = 'annotated.shortcut';
@@ -9,6 +11,7 @@ const DEFAULT_SHORTCUT = /Mac|iPhone|iPad/i.test(navigator.platform) ? 'Command+
 let lastUrl = window.location.href;
 let clippingMode = false;
 let activeClip = null;
+let selecting = false;
 let selectionTimer = null;
 let clippingShortcut = DEFAULT_SHORTCUT;
 
@@ -134,14 +137,12 @@ function enterClippingMode() {
   clippingMode = true;
   activeClip = null;
   document.documentElement.classList.add('annotated-clipping-mode');
-  createOverlay();
-  showWaitingHint();
 
   const mediaClip = clipFromMedia(false);
   if (mediaClip) {
     const rect = currentMedia()?.element.getBoundingClientRect();
     activeClip = mediaClip;
-    showAnnotateBubble(rect && rect.width ? rect : centerRect(), 'Annotate current moment');
+    showComposer(rect && rect.width ? rect : centerRect());
   }
 }
 
@@ -151,11 +152,11 @@ function exitClippingMode() {
   window.clearTimeout(selectionTimer);
   document.documentElement.classList.remove('annotated-clipping-mode');
   document.getElementById(OVERLAY_ID)?.remove();
-  document.getElementById(TOOLTIP_ID)?.remove();
+  document.getElementById(COMPOSER_ID)?.remove();
   window.getSelection()?.removeAllRanges();
 }
 
-function createOverlay() {
+function createOverlay(rect) {
   document.getElementById(OVERLAY_ID)?.remove();
   const overlay = document.createElement('div');
   overlay.id = OVERLAY_ID;
@@ -164,39 +165,9 @@ function createOverlay() {
     <div class="annotated-pane annotated-pane-right"></div>
     <div class="annotated-pane annotated-pane-bottom"></div>
     <div class="annotated-pane annotated-pane-left"></div>
-    <div class="annotated-clipping-hint">Highlight the passage or capture this moment.</div>
   `;
   document.documentElement.append(overlay);
-}
-
-function showWaitingHint() {
-  const overlay = document.getElementById(OVERLAY_ID);
-  if (!overlay) return;
-  overlay.classList.remove('has-selection');
-  setPaneStyles(centerRect());
-}
-
-function showAnnotateBubble(rect, label = 'Annotate') {
   setPaneStyles(rect);
-
-  let button = document.getElementById(TOOLTIP_ID);
-  if (!button) {
-    button = document.createElement('button');
-    button.id = TOOLTIP_ID;
-    button.type = 'button';
-    button.addEventListener('mousedown', (event) => event.preventDefault());
-    button.addEventListener('click', () => {
-      if (!activeClip) return;
-      safeSend({ ...activeClip, openPanel: true });
-      exitClippingMode();
-    });
-    document.documentElement.append(button);
-  }
-
-  button.textContent = label;
-  button.setAttribute('aria-label', label);
-  button.style.left = `${Math.min(window.innerWidth - 180, Math.max(12, rect.left + rect.width / 2 - 74))}px`;
-  button.style.top = `${Math.max(12, rect.top - 46)}px`;
 }
 
 function setPaneStyles(rect) {
@@ -220,20 +191,118 @@ function setPaneStyles(rect) {
   left.style.cssText = `left:0;top:${y}px;width:${x}px;height:${height}px`;
 }
 
-function handleSelectionChange() {
+function scheduleSelectionCapture() {
   if (!clippingMode) return;
   window.clearTimeout(selectionTimer);
-  selectionTimer = window.setTimeout(() => {
-    const clip = clipFromSelection(false);
-    if (!clip) return;
+  selectionTimer = window.setTimeout(captureCompletedSelection, 120);
+}
 
-    const selection = window.getSelection();
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
-    if (!rect.width && !rect.height) return;
+function captureCompletedSelection() {
+  if (!clippingMode) return;
+  const clip = clipFromSelection(false);
+  if (!clip) return;
 
-    activeClip = clip;
-    showAnnotateBubble(rect);
-  }, 80);
+  const rect = getSelectionRect();
+  if (!rect) return;
+
+  activeClip = clip;
+  showComposer(rect);
+}
+
+function getSelectionRect() {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+
+  const rects = [...selection.getRangeAt(0).getClientRects()]
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  if (!rects.length) return null;
+
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function showComposer(rect) {
+  if (!activeClip) return;
+
+  createOverlay(rect);
+  document.getElementById(COMPOSER_ID)?.remove();
+
+  const composer = document.createElement('section');
+  composer.id = COMPOSER_ID;
+  composer.className = 'quote-annotation-bubble annotated-page-composer';
+  composer.setAttribute('aria-label', 'Quote annotation');
+  composer.innerHTML = `
+    <blockquote class="quote-annotation-bubble__quote">${escapeHtml(activeClip.text || `${typeLabel(activeClip.sourceType)} excerpt`)}</blockquote>
+    <label class="quote-annotation-bubble__label" for="annotated-page-commentary">Annotation</label>
+    <textarea
+      id="annotated-page-commentary"
+      class="quote-annotation-bubble__textarea"
+      placeholder="Write the take people should respond to..."
+      rows="5"
+    ></textarea>
+    <div class="quote-annotation-bubble__actions">
+      <button class="quote-annotation-bubble__button" type="button">Post annotation</button>
+    </div>
+  `;
+
+  const left = Math.max(18, Math.min(window.innerWidth - 440, rect.left + rect.width / 2 - 210));
+  const top = Math.max(18, Math.min(window.innerHeight - 320, rect.bottom + 18));
+  composer.style.left = `${left}px`;
+  composer.style.top = `${top}px`;
+
+  composer.addEventListener('mousedown', (event) => event.stopPropagation());
+  composer.querySelector('button').addEventListener('click', () => postAnnotation(composer));
+
+  document.documentElement.append(composer);
+  composer.querySelector('textarea').focus();
+}
+
+async function postAnnotation(composer) {
+  const textarea = composer.querySelector('textarea');
+  const button = composer.querySelector('button');
+  const commentary = textarea.value.trim();
+  if (!commentary || !activeClip) return;
+
+  button.disabled = true;
+  button.textContent = 'Posting';
+
+  try {
+    await ensureUser();
+    const mediaClip = await maybeCreateMediaClip(activeClip);
+    const response = await fetch(`${API_BASE}/api/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: USER_ID,
+        source_url: activeClip.url,
+        source_title: mediaClip?.title || activeClip.title || '',
+        source_type: activeClip.sourceType || 'article',
+        source_domain: activeClip.domain || '',
+        source_site_name: activeClip.siteName || null,
+        source_author: activeClip.author || null,
+        source_published_at: activeClip.publishedAt || null,
+        source_thumbnail: mediaClip?.thumbnail || activeClip.thumbnail || null,
+        clip_text: activeClip.text || null,
+        clip_start_sec: mediaClip?.startSec ?? activeClip.clipStartSec ?? null,
+        clip_end_sec: mediaClip?.endSec ?? activeClip.clipEndSec ?? null,
+        clip_media_path: mediaClip?.mediaPath || null,
+        commentary,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.id) throw new Error(data.error || 'Post failed');
+
+    button.textContent = 'Posted';
+    safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
+    window.setTimeout(exitClippingMode, 600);
+  } catch {
+    button.disabled = false;
+    button.textContent = 'Error - try again';
+  }
 }
 
 function centerRect() {
@@ -255,8 +324,6 @@ function detectPage() {
   safeSend(getPageInfo());
 }
 
-document.addEventListener('selectionchange', handleSelectionChange);
-
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && clippingMode) {
     exitClippingMode();
@@ -268,12 +335,34 @@ document.addEventListener('keydown', (event) => {
     event.stopPropagation();
     enterClippingMode();
   }
+
+  if (clippingMode && event.key.startsWith('Arrow')) {
+    scheduleSelectionCapture();
+  }
+}, true);
+
+document.addEventListener('keyup', (event) => {
+  if (!clippingMode) return;
+  if (event.key === 'Shift' || event.key.startsWith('Arrow')) scheduleSelectionCapture();
 }, true);
 
 document.addEventListener('mousedown', (event) => {
-  if (!clippingMode || !activeClip) return;
-  const bubble = document.getElementById(TOOLTIP_ID);
-  if (bubble && !bubble.contains(event.target)) exitClippingMode();
+  if (!clippingMode) return;
+  const composer = document.getElementById(COMPOSER_ID);
+  if (composer?.contains(event.target)) return;
+  if (composer && !composer.contains(event.target)) {
+    exitClippingMode();
+    return;
+  }
+  selecting = true;
+  document.getElementById(COMPOSER_ID)?.remove();
+  document.getElementById(OVERLAY_ID)?.remove();
+}, true);
+
+document.addEventListener('mouseup', () => {
+  if (!clippingMode || !selecting) return;
+  selecting = false;
+  scheduleSelectionCapture();
 }, true);
 
 detectPage();
@@ -350,4 +439,54 @@ function normalizeKey(value) {
   const key = String(value || '').trim();
   if (key.length === 1) return key.toUpperCase();
   return key.replace(/^Arrow/, '');
+}
+
+async function ensureUser() {
+  await fetch(`${API_BASE}/api/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'demo',
+      display_name: 'Demo User',
+      provider: 'local',
+      provider_id: USER_ID,
+    }),
+  });
+}
+
+async function maybeCreateMediaClip(clip) {
+  const type = clip.sourceType;
+  if (!['youtube', 'podcast'].includes(type) || clip.clipStartSec == null || clip.clipEndSec == null) return null;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/clip/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: clip.pageUrl || clip.url,
+        start: clip.clipStartSec,
+        end: clip.clipEndSec,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(data.error || 'Clip failed');
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function typeLabel(type) {
+  if (type === 'youtube') return 'Video';
+  if (type === 'podcast') return 'Audio';
+  return 'Article';
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }

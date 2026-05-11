@@ -131,6 +131,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'ANNOTATION_POSTED') {
+    saveTabState(tabId, { page: msg.page })
+      .then((state) => safeBroadcast({ type: 'ANNOTATION_POSTED', state }));
+    return;
+  }
+
   if (msg.type === 'START_CLIPPING_ACTIVE_TAB') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       sendToTab(tabs[0]?.id, { type: 'START_CLIPPING' });

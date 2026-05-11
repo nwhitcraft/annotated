@@ -3,21 +3,12 @@ const USER_ID = 'demo-user';
 const SHORTCUT_KEY = 'annotated.shortcut';
 const DEFAULT_SHORTCUT = /Mac|iPhone|iPad/i.test(navigator.platform) ? 'Command+Shift+X' : 'Ctrl+Shift+X';
 
-let currentClip = null;
 let currentPage = null;
 let shortcutCapture = false;
 
 const statusEl = document.getElementById('status');
-const clipEl = document.getElementById('clip');
-const emptyEl = document.getElementById('empty');
-const composeEl = document.getElementById('compose');
-const commentaryEl = document.getElementById('commentary');
-const postBtn = document.getElementById('post-btn');
-const metaEl = document.getElementById('clip-meta');
-const clipModeBtn = document.getElementById('clip-mode-btn');
 const shortcutBtn = document.getElementById('shortcut-btn');
 const shortcutLabelEl = document.getElementById('shortcut-label');
-const emptyShortcutEl = document.getElementById('empty-shortcut');
 const feedTitleEl = document.getElementById('feed-title');
 const feedCountEl = document.getElementById('feed-count');
 const feedListEl = document.getElementById('feed-list');
@@ -27,13 +18,14 @@ ensureUser();
 initShortcut();
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'PAGE_DETECTED' || msg.type === 'CLIP_TEXT' || msg.type === 'STATE_UPDATED') {
+  if (msg.type === 'PAGE_DETECTED' || msg.type === 'STATE_UPDATED') {
     renderState(msg.state);
   }
-});
 
-clipModeBtn.addEventListener('click', () => {
-  chrome.runtime.sendMessage({ type: 'START_CLIPPING_ACTIVE_TAB' });
+  if (msg.type === 'ANNOTATION_POSTED') {
+    if (msg.state) renderState(msg.state);
+    else loadFeed();
+  }
 });
 
 shortcutBtn.addEventListener('click', () => {
@@ -69,60 +61,6 @@ document.addEventListener('keydown', (event) => {
   });
 }, true);
 
-commentaryEl.addEventListener('input', updatePostState);
-
-postBtn.addEventListener('click', async () => {
-  if (!currentClip || !commentaryEl.value.trim()) return;
-
-  postBtn.disabled = true;
-  postBtn.textContent = 'Posting...';
-
-  try {
-    await ensureUser();
-    const mediaClip = await maybeCreateMediaClip(currentClip);
-    const res = await fetch(`${API_BASE}/api/annotations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: USER_ID,
-        source_url: currentClip.url,
-        source_title: mediaClip?.title || currentClip.title || currentPage?.title || '',
-        source_type: currentPage?.sourceType || currentClip.sourceType || 'article',
-        source_domain: currentPage?.domain || currentClip.domain || '',
-        source_site_name: currentPage?.siteName || currentClip.siteName || null,
-        source_author: currentPage?.author || currentClip.author || null,
-        source_published_at: currentPage?.publishedAt || currentClip.publishedAt || null,
-        source_thumbnail: mediaClip?.thumbnail || currentPage?.thumbnail || currentClip.thumbnail || null,
-        clip_text: currentClip.text || null,
-        clip_start_sec: mediaClip?.startSec ?? currentClip.clipStartSec ?? null,
-        clip_end_sec: mediaClip?.endSec ?? currentClip.clipEndSec ?? null,
-        clip_media_path: mediaClip?.mediaPath || null,
-        commentary: commentaryEl.value.trim(),
-      }),
-    });
-
-    const data = await res.json();
-    if (!data.id) throw new Error(data.error || 'Post failed');
-
-    postBtn.textContent = 'Posted';
-    commentaryEl.value = '';
-    currentClip = null;
-    renderComposer();
-    await loadFeed();
-
-    window.setTimeout(() => {
-      postBtn.textContent = 'Post annotation';
-      updatePostState();
-    }, 1200);
-  } catch (err) {
-    postBtn.textContent = 'Error - try again';
-    window.setTimeout(() => {
-      postBtn.textContent = 'Post annotation';
-      updatePostState();
-    }, 1800);
-  }
-});
-
 function hydrate() {
   chrome.runtime.sendMessage({ type: 'GET_ACTIVE_STATE' }, (response) => {
     if (chrome.runtime.lastError) return;
@@ -143,7 +81,7 @@ async function ensureUser() {
       }),
     });
   } catch {
-    // The API also seeds this user at startup. This is just a belt-and-braces path.
+    // The API seeds this user at startup; sidebar creation should not block on it.
   }
 }
 
@@ -153,8 +91,7 @@ function initShortcut() {
       renderShortcut(DEFAULT_SHORTCUT);
       return;
     }
-    const shortcut = items[SHORTCUT_KEY] || DEFAULT_SHORTCUT;
-    renderShortcut(shortcut);
+    renderShortcut(items[SHORTCUT_KEY] || DEFAULT_SHORTCUT);
   });
 
   chrome.storage.onChanged.addListener((changes) => {
@@ -163,9 +100,7 @@ function initShortcut() {
 }
 
 function renderShortcut(shortcut) {
-  const label = normalizeShortcut(shortcut);
-  shortcutLabelEl.textContent = label;
-  emptyShortcutEl.textContent = label;
+  shortcutLabelEl.textContent = normalizeShortcut(shortcut);
 }
 
 function shortcutFromEvent(event) {
@@ -184,12 +119,13 @@ function shortcutFromEvent(event) {
 }
 
 function renderState(state) {
-  if (!state) return;
-  currentPage = state.page || currentPage;
-  currentClip = state.clip || currentClip;
+  if (!state) {
+    loadFeed();
+    return;
+  }
 
+  currentPage = state.page || currentPage;
   renderPageStatus();
-  renderComposer();
   loadFeed();
 }
 
@@ -202,21 +138,6 @@ function renderPageStatus() {
     <span class="status-source">${escapeHtml(currentPage.sourceType || 'article')}</span>
     <span class="status-title">${escapeHtml(sourceLabel(currentPage))}</span>
   `;
-}
-
-function renderComposer() {
-  const hasClip = Boolean(currentClip);
-  emptyEl.hidden = hasClip;
-  clipEl.hidden = !hasClip;
-  metaEl.hidden = !hasClip;
-  composeEl.hidden = !hasClip;
-
-  if (hasClip) {
-    clipEl.textContent = currentClip.text || `${typeLabel(currentClip.sourceType)} excerpt`;
-    metaEl.textContent = clipMeta(currentClip, currentPage);
-  }
-
-  updatePostState();
 }
 
 async function loadFeed() {
@@ -276,24 +197,6 @@ function renderFeed(title, items) {
   `).join('');
 }
 
-async function maybeCreateMediaClip(clip) {
-  const type = currentPage?.sourceType || clip.sourceType;
-  if (!['youtube', 'podcast'].includes(type) || clip.clipStartSec == null || clip.clipEndSec == null) return null;
-
-  try {
-    return await fetchJson(`/api/clip/${type}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        url: clip.pageUrl || clip.url,
-        start: clip.clipStartSec,
-        end: clip.clipEndSec,
-      }),
-    });
-  } catch {
-    return null;
-  }
-}
-
 async function fetchJson(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -301,22 +204,6 @@ async function fetchJson(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.error) throw new Error(data.error || `Request failed: ${response.status}`);
   return data;
-}
-
-function updatePostState() {
-  postBtn.disabled = !currentClip || !commentaryEl.value.trim();
-}
-
-function clipMeta(clip, page) {
-  const parts = [
-    sourceLabel(page || clip),
-    clip.author || page?.author,
-  ].filter(Boolean);
-
-  if (clip.clipStartSec != null && clip.clipEndSec != null) {
-    parts.push(`${formatTime(clip.clipStartSec)}-${formatTime(clip.clipEndSec)}`);
-  }
-  return parts.join(' / ');
 }
 
 function sourceLabel(source) {

@@ -64,9 +64,6 @@
     }
 
     .topline {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
       padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
@@ -76,14 +73,6 @@
       font-size: 32px;
       font-weight: 400;
       line-height: 1;
-    }
-
-    .clip-mode-button {
-      padding: 4px 0 2px;
-      border-bottom: 1px solid currentColor;
-      color: var(--accent-hover);
-      font-size: 12px;
-      font-weight: 600;
     }
 
     .shortcut-row {
@@ -148,91 +137,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .clip-preview {
-      margin: 0;
-      padding: 16px 0;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      color: var(--text-secondary);
-      font-family: var(--font-serif);
-      font-size: 21px;
-      font-style: italic;
-      line-height: 1.32;
-    }
-
-    .clip-meta {
-      margin: -10px 0 0;
-      color: var(--text-tertiary);
-      font-size: 12px;
-    }
-
-    .compose {
-      display: grid;
-      gap: 12px;
-    }
-
-    label {
-      color: var(--text-secondary);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0;
-      text-transform: uppercase;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 132px;
-      padding: 14px 0;
-      border: 0;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      border-radius: 0;
-      background: transparent;
-      color: var(--text-primary);
-      font-family: var(--font-serif);
-      font-size: 20px;
-      line-height: 1.42;
-      outline: none;
-      resize: vertical;
-    }
-
-    textarea::placeholder { color: var(--text-tertiary); }
-
-    textarea:focus { border-bottom-color: var(--accent-hover); }
-
-    .btn {
-      justify-self: end;
-      padding: 8px 0 3px;
-      border-bottom: 1px solid currentColor;
-      color: var(--accent-hover);
-      font-family: var(--font-serif);
-      font-size: 24px;
-      font-weight: 600;
-      line-height: 1;
-    }
-
-    .btn:hover:not(:disabled) { color: var(--accent); }
-
-    .empty {
-      display: grid;
-      gap: 12px;
-      padding: 28px 0;
-      border-bottom: 1px solid var(--border);
-      color: var(--text-secondary);
-    }
-
-    .empty strong {
-      color: var(--text-primary);
-      font-family: var(--font-serif);
-      font-size: 27px;
-      font-weight: 400;
-      line-height: 1.05;
-    }
-
-    .empty p {
-      margin: 0;
     }
 
     .feed-header {
@@ -317,7 +221,6 @@
   <main class="shell">
     <header class="topline">
       <div class="wordmark">annotated</div>
-      <button id="clip-mode-btn" class="clip-mode-button">Clip</button>
     </header>
 
     <div id="status" class="status" hidden></div>
@@ -326,20 +229,6 @@
       <span><kbd id="shortcut-label">Command+Shift+X</kbd> to Annotate</span>
       <button id="shortcut-btn">Change</button>
     </div>
-
-    <section id="empty" class="empty">
-      <strong><span id="empty-shortcut">Command+Shift+X</span> to Annotate.</strong>
-      <p>Or use Clip above to start clipping mode.</p>
-    </section>
-
-    <blockquote id="clip" class="clip-preview" hidden></blockquote>
-    <p id="clip-meta" class="clip-meta" hidden></p>
-
-    <section id="compose" class="compose" hidden>
-      <label for="commentary">Commentary</label>
-      <textarea id="commentary" placeholder="Write the take people should respond to..."></textarea>
-      <button id="post-btn" class="btn" disabled>Post annotation</button>
-    </section>
 
     <section id="feed-section">
       <header class="feed-header">
