@@ -13,7 +13,7 @@
 
 A complete, actionable spec for Codex to finish the Annotated.com project. Everything Codex needs: current codebase state, what's built, what's missing, what to build, exact file paths, and design decisions.
 
-**Goal:** Ship a working MVP that beats ByteTalk on the core annotation experience, with a clear path to the desktop app (paid tier).
+**Goal:** Ship a working MVP that beats ByteTalk on the core annotation experience, with a full desktop app (Tauri) as the flagship product.
 
 ---
 
@@ -135,10 +135,10 @@ GET /api/auth/signin
 - Stored as `annotation_type` field in annotations table
 
 ### AI Summaries
-**Decision:** PARKED. Nick said "Not sure if I want to get there yet."
+**Decision:** Build it. Use local models (Qwen 3.6 35B) for summarization when available, fall back to hosted models.
 
 ### Voice Note Annotations
-**Decision:** NOT core. Architecture documented from ByteTalk analysis (offscreen doc + MediaRecorder).
+**Decision:** Build it. Architecture documented from ByteTalk analysis (offscreen doc + MediaRecorder). Core feature for desktop tier.
 
 ### X/Twitter Clip Support
 **Decision:** YES, via Twitter oEmbed API (public, no auth required).
@@ -151,13 +151,29 @@ GET /api/auth/signin
 - `Credibility` — earned through engagement, accurate fact checks, helpful annotations
 - Displayed on profile card
 
-### YouTube Clipping — HYBRID APPROACH
-**Decision:**
-- **v1 / Free tier:** iframe embeds with `?start=X&end=Y` (no file download)
-- **Desktop / Paid tier:** Real yt-dlp extraction (full media files)
-- **Podcasts:** ffmpeg extraction (audio only)
-- **Articles:** Readability extraction
-- **X/Twitter:** oEmbed
+### YouTube Clipping
+**Decision:** Real yt-dlp extraction (full media files) everywhere. Desktop app gets full media pipeline. Web tier uses iframe embeds with `?start=X&end=Y` for playback.
+
+### Podcasts
+**Decision:** ffmpeg extraction (audio only). Desktop app gets full media pipeline.
+
+### Articles
+**Decision:** Readability extraction.
+
+### X/Twitter
+**Decision:** oEmbed API (public, no auth required).
+
+### Desktop App (Tauri)
+**Decision:** BUILD IT. This is the flagship product.
+- Tauri v2, Rust backend
+- Custom URL scheme: `annotated://callback` for auth
+- Full media pipeline: yt-dlp, ffmpeg, Whisper ASR
+- Screen clipping (clip anything on screen)
+- Private annotations
+- Collections
+- Full-text search
+- Paid tier (separate from free web tier)
+- Auth via `annotated://callback` redirect to Tauri app
 
 ### Onboarding Flow (5 steps)
 1. Username pick
@@ -185,6 +201,8 @@ GET /api/auth/signin
 | Collections | ❌ | ✅ |
 | Full-text search | ❌ | ✅ |
 | Clip anything on screen | ❌ | ✅ |
+| AI summaries | ❌ | ✅ |
+| Voice notes | ❌ | ✅ |
 | Public annotations | ✅ | ✅ |
 
 ### CSS Style
@@ -203,8 +221,8 @@ GET /api/auth/signin
 - Claims are filed against specific annotations via the annotation detail page
 - Claims have status: `pending` → `reviewed` → `resolved`
 - Admin can list claims by status
-- Claims are NOT shown on annotation cards (to avoid clutter)
-- Claims are NOT available from the extension (web-only for now)
+- Claims ARE shown on annotation cards (⚠ N badge)
+- Claims ARE available from the extension side panel
 
 ---
 
@@ -366,7 +384,67 @@ A simple table showing all claims with:
 - `DELETE /api/claims/:id` — delete a claim
 - `GET /api/claims` — already exists, list claims by status
 
-**Auth:** This page should be behind auth (admin-only). For MVP, any logged-in user can access it. Later: role-based access.
+**Auth:** Behind auth. For MVP, any logged-in user can access it. Later: role-based access.
+
+### 5.8 Desktop App — Tauri (🔴 Critical)
+
+**This is the flagship product. Build it.**
+
+**Files to create:**
+- `apps/desktop/` — Tauri v2 project
+- `apps/desktop/src-tauri/` — Rust backend
+- `apps/desktop/src/` — Tauri frontend (can reuse web components)
+
+**Architecture:**
+- Tauri v2 with Rust backend
+- Frontend: React (reuse web components from `apps/web/src/`)
+- Backend: Rust for media processing (yt-dlp, ffmpeg, Whisper)
+- Auth: Custom URL scheme `annotated://callback` for OAuth
+- Storage: Local SQLite for offline annotations
+- Screen clipping: Full screen capture (not just browser tabs)
+
+**Features:**
+- Full media pipeline: yt-dlp for YouTube, ffmpeg for podcasts
+- Whisper ASR for automatic transcription
+- Screen clipping (clip anything on screen, not just browser)
+- Private annotations (stored locally, sync when online)
+- Collections (organize annotations into groups)
+- Full-text search (local + cloud)
+- AI summaries (local Qwen 3.6 35B when available)
+- Voice note annotations (MediaRecorder → WebM/Opus)
+- OAuth via `annotated://callback` redirect
+- Sync with web app (cloud annotations)
+
+**Rust backend tasks:**
+- `yt-dlp` wrapper for YouTube video extraction
+- `ffmpeg` wrapper for podcast audio extraction
+- `whisper` wrapper for ASR transcription
+- Screen capture API (macOS + Windows)
+- Local SQLite database (via `rusqlite`)
+- Sync engine (conflict resolution with web app)
+- `annotated://` URL scheme handler
+
+**Tauri config:**
+- Bundle: `.dmg` (macOS), `.msi` (Windows)
+- Code signing: optional for MVP
+- Auto-updater: `tauri-updater` for OTA updates
+- Permissions: `media-recorder`, `screen-capture`, `fs` (full access)
+
+**Build order for desktop:**
+1. Tauri project scaffold
+2. Reuse web frontend (React components)
+3. Rust backend: yt-dlp wrapper
+4. Rust backend: ffmpeg wrapper
+5. Rust backend: Whisper ASR
+6. Rust backend: screen capture
+7. Rust backend: local SQLite
+8. Auth: `annotated://callback` handler
+9. Sync engine
+10. Collections + full-text search
+11. AI summaries (local model integration)
+12. Voice notes (MediaRecorder + upload)
+13. Private annotations
+14. Polish + bundle
 
 ### 5.6 iTunes Podcast Fallback (🟡 Medium)
 
@@ -473,19 +551,16 @@ Codex should build in this order:
 
 ---
 
-## 8. Constraints & Rules
+## 8. Rules & Context
 
 ### PomPom Workstream
 - **PARKED** — safe commit: `5073ad1` on `origin/codex/openclaw-pompom-copy`
 - Do NOT touch without explicit confirmation
 
-### Search Backend
-- DuckDuckGo disabled (bot-blocked)
-- Perplexity via OpenRouter is sole search backend
-
 ### Model Infrastructure
 - Local models: Qwen 3.6 35B A3B 8-bit via MLX on `127.0.0.1:8081`
 - Mac Studio with 256GB RAM available
+- Use local models for AI summaries when available, fall back to hosted
 
 ### Extension Publishing
 - Chrome Web Store ($5 dev fee) — to be done after MVP
@@ -499,16 +574,14 @@ Codex should build in this order:
 - Nick needs to provide Google + X OAuth credentials
 - Until then, stub endpoints that return 501
 
-### Submission
-- Submit to: `oliver@launch.co`
-- Spec page: `https://annotated.lovable.app`
-- Lovable project ID: `4444cbb7-7741-47c9-b3f2-e8d14148a4d4`
+### Search
+- DuckDuckGo is useless for Codex — use Perplexity via OpenRouter for web lookups
+- For code analysis, read the actual files
 
 ---
 
 ## 9. Testing Checklist
 
-Before submission:
 - [ ] Auth flow works (login → JWT → extension auth)
 - [ ] Extension can post annotation with auth
 - [ ] Feed shows annotations from followed users
@@ -525,15 +598,22 @@ Before submission:
 - [ ] All extension bugs fixed
 - [ ] API_BASE configurable
 - [ ] E2E tests pass
+- [ ] Desktop app builds (Tauri)
+- [ ] Desktop app can clip YouTube via yt-dlp
+- [ ] Desktop app can extract podcast audio via ffmpeg
+- [ ] Desktop app can transcribe via Whisper
+- [ ] Desktop app can screen-clip
+- [ ] Desktop app handles `annotated://callback` auth
+- [ ] Desktop app syncs with web app
+- [ ] Desktop app has collections + full-text search
+- [ ] Desktop app has AI summaries (local model)
+- [ ] Desktop app has voice notes
 
 ---
 
 ## 10. What NOT to Build
 
-- ❌ AI summaries (parked)
-- ❌ Voice note annotations (not core)
 - ❌ PomPom workstream (parked)
-- ❌ Full desktop app (future paid tier, not MVP)
 - ❌ Real-time features (not needed for v1)
 - ❌ Complex recommendation algorithms (not needed for v1)
 
@@ -541,6 +621,7 @@ Before submission:
 
 ## 11. Success Criteria for MVP
 
+**Web + Extension:**
 1. User can sign up with Google or X
 2. User can install extension and annotate any page
 3. Annotations appear in public feed
@@ -553,4 +634,16 @@ Before submission:
 10. Extension UX is polished (no bugs from audit)
 11. Onboarding guides first-time users
 
-If all 11 work, we submit to Launch.co.
+**Desktop App:**
+12. Desktop app builds and runs (Tauri)
+13. Desktop app can clip YouTube via yt-dlp (full media)
+14. Desktop app can extract podcast audio via ffmpeg
+15. Desktop app can transcribe via Whisper ASR
+16. Desktop app can screen-clip (anything on screen)
+17. Desktop app handles `annotated://callback` OAuth
+18. Desktop app syncs with web app
+19. Desktop app has collections + full-text search
+20. Desktop app has AI summaries (local model)
+21. Desktop app has voice notes
+
+If all 21 work, we ship.
