@@ -13,7 +13,7 @@ export default function NewAnnotation() {
   const [detected, setDetected] = useState(null);
   const [clipText, setClipText] = useState('');
   const [clipStart, setClipStart] = useState(0);
-  const [clipEnd, setClipEnd] = useState(60);
+  const [clipEnd, setClipEnd] = useState(90);
   const [commentary, setCommentary] = useState('');
   const [detecting, setDetecting] = useState(false);
   const [posting, setPosting] = useState(false);

@@ -2,7 +2,7 @@
 
 const TOOLTIP_ID = 'annotated-selection-tooltip';
 const OVERLAY_ID = 'annotated-clipping-overlay';
-const SHORT_CLIP_SECONDS = 60;
+const SHORT_CLIP_SECONDS = 90;
 
 let lastUrl = window.location.href;
 let clippingMode = false;
