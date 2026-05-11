@@ -210,8 +210,8 @@
       color: var(--text);
     }
 
-    /* ── Recent annotations ── */
-    .recent-header {
+    /* ── Following feed ── */
+    .following-header {
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
@@ -221,6 +221,9 @@
       margin-bottom: 8px;
       padding-bottom: 6px;
       border-bottom: 1px solid var(--border);
+    }
+    .following-header::before {
+      content: '🔔 ';
     }
     .recent-item {
       padding: 10px 0;
@@ -279,10 +282,10 @@
     <div id="related-list"></div>
   </div>
 
-  <!-- Recent annotations across all pages -->
-  <div id="recent" style="display:none">
-    <div class="recent-header">Recent</div>
-    <div id="recent-list"></div>
+  <!-- Following feed (activity from followed users) -->
+  <div id="following" style="display:none">
+    <div class="following-header">Following</div>
+    <div id="following-list"></div>
   </div>
 
   <script src="src/sidepanel.js"></script>

@@ -1,5 +1,5 @@
 // Content script — highlight + blur overlay + inline annotation UX
-// Injected on all pages. Activated by hotkey (Cmd+Shift+A) or extension click.
+// Injected on all pages. Activated ONLY by hotkey (Cmd+Shift+A).
 
 const MAX_CLIP_CHARS = 280;
 const MAX_COMMENTARY_CHARS = 500;
@@ -73,9 +73,8 @@ function showVideoTimeline(url, type) {
   const videoEl = document.querySelector('video');
   if (videoEl) {
     videoEl.addEventListener('loadedmetadata', () => {
-      totalDuration = Math.min(videoEl.duration, MAX_DURATION * 10); // allow up to 15min, but clip max 90s
+      totalDuration = Math.min(videoEl.duration, MAX_DURATION * 10);
       updateDurationDisplay();
-      // Default: first 30 seconds
       start = 0;
       end = Math.min(30, totalDuration);
       updateRange();
@@ -84,7 +83,7 @@ function showVideoTimeline(url, type) {
 
   // Fallback: if no video element, default to 0-30s
   if (!videoEl) {
-    totalDuration = 120; // assume 2 min for podcasts
+    totalDuration = 120;
     start = 0;
     end = 30;
     updateDurationDisplay();
@@ -108,7 +107,6 @@ function showVideoTimeline(url, type) {
 
     updateDurationDisplay();
 
-    // Enable clip button if range is valid and ≤ 90s
     const clipBtn = videoTimelineEl.querySelector('.annotated-timeline-btn-clip');
     const duration = end - start;
     clipBtn.disabled = duration <= 0 || duration > MAX_DURATION;
@@ -139,7 +137,7 @@ function showVideoTimeline(url, type) {
     const pct = (e.clientX - rect.left) / rect.width;
     const time = Math.max(0, Math.min(totalDuration, pct * totalDuration));
     start = time;
-    end = Math.min(time + 10, totalDuration); // default 10s range
+    end = Math.min(time + 10, totalDuration);
     updateRange();
   });
 
@@ -169,7 +167,6 @@ function showVideoTimeline(url, type) {
     const duration = end - start;
     if (duration <= 0 || duration > MAX_DURATION) return;
 
-    // Send clip info to sidepanel
     chrome.runtime.sendMessage({
       type: 'CLIP_VIDEO',
       url,
@@ -215,7 +212,7 @@ function removeOverlay() {
   }
 }
 
-// ── Annotation Tooltip ──────────────────────────────────────────
+// ── Annotation Tooltip (speech bubble style) ───────────────────
 
 function showAnnotationTooltip(selectedText, range) {
   removeTooltip();
@@ -225,8 +222,10 @@ function showAnnotationTooltip(selectedText, range) {
 
   tooltipEl = document.createElement('div');
   tooltipEl.id = 'annotated-tooltip';
+  // Use a template literal with explicit closing quote
+  const quoteText = escapeHtml(constrained.text);
   tooltipEl.innerHTML = `
-    <div class="annotated-tooltip-quote">"${escapeHtml(constrained.text)}"</div>
+    <div class="annotated-tooltip-quote">"${quoteText}"</div>
     ${constrained.truncated ? '<div class="annotated-tooltip-truncated">Trimmed to ~2 sentences</div>' : ''}
     <textarea class="annotated-tooltip-textarea" placeholder="What's your take?" rows="3" maxlength="${MAX_COMMENTARY_CHARS}"></textarea>
     <div class="annotated-tooltip-actions">
@@ -238,11 +237,13 @@ function showAnnotationTooltip(selectedText, range) {
     </div>
   `;
 
-  // Position below the selection, with viewport boundary checks
+  // Position as a speech bubble pointing at the selection
   const tooltipHeight = 280;
+  const tooltipWidth = Math.min(340, window.innerWidth - 32);
   let top = rect.bottom + window.scrollY + 8;
-  let left = Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 360));
+  let left = Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - tooltipWidth - 16));
 
+  // If tooltip would go below viewport, flip above
   if (top + tooltipHeight > window.innerHeight + window.scrollY) {
     top = Math.max(window.scrollY + 8, rect.top + window.scrollY - tooltipHeight);
   }
@@ -349,22 +350,30 @@ function exitAnnotateMode() {
   document.body.classList.remove('annotated-active');
   removeOverlay();
   removeTooltip();
-  window.getSelection()?.removeAllRanges();
+  // Clear any existing selection so user can highlight again
+  if (window.getSelection) {
+    window.getSelection().removeAllRanges();
+  }
+  // Notify sidepanel to reset compose state
+  chrome.runtime.sendMessage({ type: 'ANNOTATE_MODE_EXIT' }).catch(() => {});
 }
 
 // ── Selection Handling ──────────────────────────────────────────
 
+// Only intercept selection when in annotate mode (activated by Cmd+Shift+A)
 document.addEventListener('mouseup', (e) => {
+  // Don't intercept if clicking inside tooltip or timeline
   if (e.target.closest('#annotated-tooltip')) return;
   if (e.target.closest('#annotated-timeline')) return;
+
+  // Only intercept if in annotate mode (activated by keyboard shortcut)
+  if (!annotateMode) return;
 
   const sel = window.getSelection();
   const text = sel?.toString().trim();
 
   if (text && text.length > 3) {
     const range = sel.getRangeAt(0);
-
-    enterAnnotateMode();
 
     try {
       const highlight = document.createElement('span');
@@ -389,7 +398,12 @@ document.addEventListener('mouseup', (e) => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'ACTIVATE_ANNOTATE') {
-    enterAnnotateMode();
+    // Toggle annotate mode — enter mode so user can select text
+    if (!annotateMode) {
+      enterAnnotateMode();
+    } else {
+      exitAnnotateMode();
+    }
   }
   if (msg.type === 'NAVIGATE_TO_URL') {
     // User pasted a URL in the sidebar — open it

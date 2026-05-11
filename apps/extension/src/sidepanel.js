@@ -1,11 +1,11 @@
 const API_BASE = 'http://localhost:3080';
-const USER_ID = 'demo-user'; // TODO: replace with real auth
-const STORAGE_KEY = 'annotated_following';
+const USER_ID = 'demo-user';
+const STORAGE_KEY = 'annotated-following';
 
 let currentClip = null;
 let currentPage = null;
 let currentUrl = null;
-let following = []; // user_ids we follow
+let following = [];
 
 const statusEl = document.getElementById('status');
 const clipEl = document.getElementById('clip');
@@ -13,8 +13,8 @@ const emptyEl = document.getElementById('empty');
 const composeEl = document.getElementById('compose');
 const commentaryEl = document.getElementById('commentary');
 const postBtn = document.getElementById('post-btn');
-const recentEl = document.getElementById('recent');
-const recentListEl = document.getElementById('recent-list');
+const followingEl = document.getElementById('following');
+const followingListEl = document.getElementById('following-list');
 const urlInputEl = document.getElementById('url-input');
 const urlSubmitEl = document.getElementById('url-submit');
 const urlRowEl = document.getElementById('url-row');
@@ -41,6 +41,8 @@ async function toggleFollow(userId) {
   await chrome.storage.local.set({ [STORAGE_KEY]: following });
   // Reload related annotations to re-sort
   if (currentUrl) loadRelatedAnnotations(currentUrl);
+  // Also reload following feed
+  loadFollowingFeed();
 }
 
 // ── Message Handling ──────────────────────────────────────────
@@ -55,7 +57,10 @@ chrome.runtime.onMessage.addListener((msg) => {
       <span class="status-type ${msg.sourceType}">${msg.sourceType}</span>
       <span style="margin-left:8px;color:var(--text-dim)">${truncate(msg.title, 50)}</span>
     `;
-    loadFollowing().then(() => loadRelatedAnnotations(msg.url));
+    loadFollowing().then(() => {
+      loadRelatedAnnotations(msg.url);
+      loadFollowingFeed();
+    });
   }
 
   // Text selected from content script (relayed via background)
@@ -66,8 +71,8 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   // Annotation posted from content script's inline tooltip
   if (msg.type === 'ANNOTATION_POSTED') {
-    loadRecentAnnotations();
     if (currentUrl) loadRelatedAnnotations(currentUrl);
+    loadFollowingFeed();
     showPostSuccess(msg.clipText, msg.commentary);
   }
 
@@ -83,6 +88,12 @@ chrome.runtime.onMessage.addListener((msg) => {
       sourceType: 'youtube',
     };
     showCompose(msg.clipText || 'Video clip');
+  }
+
+  // Annotate mode exited from content script (Escape / click outside)
+  // Reset the sidepanel compose UI to match
+  if (msg.type === 'ANNOTATE_MODE_EXIT') {
+    resetCompose();
   }
 });
 
@@ -139,7 +150,6 @@ postBtn.addEventListener('click', async () => {
         clip_text: currentClip.text,
         commentary: commentaryEl.value.trim(),
         is_public: 1,
-        // Video clip metadata
         clip_start: currentClip.videoStart || null,
         clip_end: currentClip.videoEnd || null,
         clip_duration: currentClip.videoDuration || null,
@@ -160,8 +170,8 @@ postBtn.addEventListener('click', async () => {
 
       setTimeout(() => {
         resetCompose();
-        loadRecentAnnotations();
         if (currentUrl) loadRelatedAnnotations(currentUrl);
+        loadFollowingFeed();
       }, 1500);
     } else {
       throw new Error(data.error || 'Unknown error');
@@ -227,9 +237,9 @@ function renderRelatedItem(a) {
   const followClass = isFollowing ? 'follow-btn-following' : 'follow-btn';
 
   return `
-    <div class="recent-item">
-      <div class="recent-item-quote">❝ ${truncate(escapeHtml(a.clip_text || a.commentary), 100)}</div>
-      <div class="recent-item-commentary">${escapeHtml(truncate(a.commentary, 140))}</div>
+    <div class="related-item">
+      <div class="related-item-quote">❝ ${truncate(escapeHtml(a.clip_text || a.commentary), 100)}</div>
+      <div class="related-item-commentary">${escapeHtml(truncate(a.commentary, 140))}</div>
       <div style="margin-top:4px;font-size:11px;color:var(--text-muted)">
         ${name} · ${a.source_domain || ''}
         ${a.like_count ? ` · ♥ ${a.like_count}` : ''}
@@ -240,21 +250,24 @@ function renderRelatedItem(a) {
   `;
 }
 
-// ── Recent Annotations ──────────────────────────────────────
+// ── Following Feed (recent activity from followed users) ──────
 
-async function loadRecentAnnotations() {
+async function loadFollowingFeed() {
   try {
-    const res = await fetch(`${API_BASE}/api/feed?limit=10`);
+    const res = await fetch(`${API_BASE}/api/feed?limit=50`);
     const data = await res.json();
     const items = data.items || [];
 
-    if (items.length === 0) {
-      recentEl.style.display = 'none';
+    // Filter to annotations from followed users
+    const followedItems = items.filter((a) => following.includes(a.user_id));
+
+    if (followedItems.length === 0) {
+      followingEl.style.display = 'none';
       return;
     }
 
-    recentEl.style.display = 'block';
-    recentListEl.innerHTML = items.map((a) => `
+    followingEl.style.display = 'block';
+    followingListEl.innerHTML = followedItems.map((a) => `
       <div class="recent-item">
         ${a.clip_text ? `<div class="recent-item-quote">❝ ${truncate(escapeHtml(a.clip_text), 120)}</div>` : ''}
         <div class="recent-item-commentary">${escapeHtml(truncate(a.commentary, 160))}</div>
@@ -266,7 +279,7 @@ async function loadRecentAnnotations() {
       </div>
     `).join('');
   } catch (err) {
-    console.warn('Failed to load recent annotations:', err);
+    console.warn('Failed to load following feed:', err);
   }
 }
 
@@ -283,7 +296,6 @@ async function handleUrlSubmit() {
   const url = urlInputEl.value.trim();
   if (!url) return;
 
-  // Validate URL
   let parsedUrl;
   try {
     parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
@@ -294,7 +306,6 @@ async function handleUrlSubmit() {
   urlInputEl.value = '';
   urlRowEl.style.display = 'none';
 
-  // Send URL to content script to detect page type
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
       chrome.tabs.sendMessage(tabs[0].id, {
@@ -304,8 +315,8 @@ async function handleUrlSubmit() {
     }
   });
 
-  // Also load related annotations for this URL
   loadRelatedAnnotations(parsedUrl.href);
+  loadFollowingFeed();
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -348,4 +359,5 @@ relatedListEl.addEventListener('click', (e) => {
 
 // ── Init ─────────────────────────────────────────────────────
 
-loadRecentAnnotations();
+loadFollowing();
+loadFollowingFeed();

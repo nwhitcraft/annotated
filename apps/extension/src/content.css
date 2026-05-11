@@ -30,7 +30,7 @@
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   z-index: 10000;
-  cursor: crosshair;
+  cursor: default;
   transition: opacity 0.2s ease;
   pointer-events: all;
 }
