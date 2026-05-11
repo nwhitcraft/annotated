@@ -2,6 +2,7 @@
 // Injected on all pages. Activated by hotkey (Cmd+Shift+A) or extension click.
 
 const MAX_CLIP_CHARS = 280;
+const MAX_COMMENTARY_CHARS = 500;
 const API_BASE = 'http://localhost:3080';
 
 let annotateMode = false;
@@ -12,9 +13,7 @@ let tooltipEl = null;
 
 function detectPage() {
   const url = window.location.href;
-  let type = 'article';
-  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) type = 'youtube';
-  else if (/spotify\.com|podcasts\.apple\.com|overcast\.fm|pocketcasts|castbox|podbean/i.test(url)) type = 'podcast';
+  const type = detectSourceType(url);
 
   chrome.runtime.sendMessage({
     type: 'PAGE_INFO',
@@ -23,6 +22,12 @@ function detectPage() {
     sourceType: type,
     domain: window.location.hostname.replace(/^www\./, ''),
   });
+}
+
+function detectSourceType(url) {
+  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
+  if (/spotify\.com|podcasts\.apple\.com|overcast\.fm/i.test(url)) return 'podcast';
+  return 'article';
 }
 
 // ── Blur Overlay ────────────────────────────────────────────────
@@ -55,9 +60,9 @@ function showAnnotationTooltip(selectedText, range) {
   tooltipEl.innerHTML = `
     <div class="annotated-tooltip-quote">"${escapeHtml(constrained.text)}"</div>
     ${constrained.truncated ? '<div class="annotated-tooltip-truncated">Trimmed to ~2 sentences</div>' : ''}
-    <textarea class="annotated-tooltip-textarea" placeholder="What's your take?" rows="3"></textarea>
+    <textarea class="annotated-tooltip-textarea" placeholder="What's your take?" rows="3" maxlength="${MAX_COMMENTARY_CHARS}"></textarea>
     <div class="annotated-tooltip-actions">
-      <span class="annotated-tooltip-chars"><span class="annotated-tooltip-chars-count">0</span>/500</span>
+      <span class="annotated-tooltip-chars"><span class="annotated-tooltip-chars-count">0</span>/${MAX_COMMENTARY_CHARS}</span>
       <div class="annotated-tooltip-btns">
         <button class="annotated-tooltip-cancel">Cancel</button>
         <button class="annotated-tooltip-post" disabled>✦ Post</button>
@@ -65,9 +70,16 @@ function showAnnotationTooltip(selectedText, range) {
     </div>
   `;
 
-  // Position below the selection
-  const top = rect.bottom + window.scrollY + 8;
-  const left = Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 360));
+  // Position below the selection, with viewport boundary checks
+  const tooltipHeight = 280; // approximate max height
+  let top = rect.bottom + window.scrollY + 8;
+  let left = Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 360));
+
+  // If tooltip would go below viewport, position above selection
+  if (top + tooltipHeight > window.innerHeight + window.scrollY) {
+    top = Math.max(window.scrollY + 8, rect.top + window.scrollY - tooltipHeight);
+  }
+
   tooltipEl.style.top = `${top}px`;
   tooltipEl.style.left = `${left}px`;
 
@@ -107,7 +119,7 @@ function showAnnotationTooltip(selectedText, range) {
           user_id: 'demo-user', // TODO: real auth
           source_url: window.location.href,
           source_title: document.title,
-          source_type: detectSourceType(),
+          source_type: detectSourceType(window.location.href),
           source_domain: window.location.hostname.replace(/^www\./, ''),
           clip_text: constrained.text,
           commentary: textarea.value.trim(),
@@ -242,13 +254,6 @@ function constrainText(text) {
   };
 }
 
-function detectSourceType() {
-  const url = window.location.href;
-  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
-  if (/spotify\.com|podcasts\.apple\.com|overcast\.fm/i.test(url)) return 'podcast';
-  return 'article';
-}
-
 function escapeHtml(str) {
   const el = document.createElement('span');
   el.textContent = str;
@@ -259,12 +264,18 @@ function escapeHtml(str) {
 
 detectPage();
 
-// SPA navigation detection
+// SPA navigation detection — throttle to avoid noise
 let lastUrl = window.location.href;
+let navCheckTimer = null;
 const observer = new MutationObserver(() => {
-  if (window.location.href !== lastUrl) {
-    lastUrl = window.location.href;
-    detectPage();
-  }
+  if (navCheckTimer) return; // debounce
+  navCheckTimer = setTimeout(() => {
+    navCheckTimer = null;
+    const newUrl = window.location.href;
+    if (newUrl !== lastUrl) {
+      lastUrl = newUrl;
+      detectPage();
+    }
+  }, 500);
 });
 observer.observe(document.body, { childList: true, subtree: true });

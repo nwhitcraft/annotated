@@ -1,16 +1,17 @@
 /* Annotated — Content Script Styles
    Injected into every page. Scoped via #annotated- prefixes.
-   Newspaper editorial aesthetic: warm, serif, restrained. */
+   Newspaper editorial aesthetic: warm, serif, restrained.
+   Matches frontend-v2 CSS variables exactly. */
 
 /* ── Selection highlight ─────────────────────────────────────── */
 
 ::selection {
-  background: rgba(99, 102, 241, 0.2) !important;
+  background: rgba(99, 102, 241, 0.16) !important;
 }
 
 .annotated-highlight {
-  background: rgba(99, 102, 241, 0.15);
-  border-bottom: 2px solid rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.12);
+  border-bottom: 2px solid rgba(99, 102, 241, 0.4);
   border-radius: 2px;
   padding: 1px 0;
   position: relative;
@@ -54,7 +55,7 @@ body.annotated-active .annotated-highlight {
   width: 340px;
   max-width: calc(100vw - 32px);
   background: #fafaf8;
-  border: 1px solid #e5e2d9;
+  border: 1px solid #deded9;
   border-radius: 8px;
   padding: 16px;
   box-shadow:
@@ -75,17 +76,17 @@ body.annotated-active .annotated-highlight {
   font-style: italic;
   font-size: 14px;
   line-height: 1.5;
-  color: #3a3a3a;
+  color: #333333;
   padding: 10px 12px;
   margin-bottom: 12px;
-  border-left: 3px solid #6366f1;
-  background: rgba(99, 102, 241, 0.04);
-  border-radius: 0 4px 4px 0;
+  border-left: 1px solid #bfbfba;
+  background: transparent;
+  border-radius: 0;
 }
 
 .annotated-tooltip-truncated {
   font-size: 11px;
-  color: #9a9a9a;
+  color: #999999;
   margin-bottom: 8px;
   font-style: italic;
 }
@@ -95,8 +96,8 @@ body.annotated-active .annotated-highlight {
   width: 100%;
   min-height: 72px;
   padding: 10px 12px;
-  border: 1px solid #e5e2d9;
-  border-radius: 6px;
+  border: 1px solid #deded9;
+  border-radius: 0;
   background: #fff;
   color: #1a1a1a;
   font-family: 'Newsreader', 'Georgia', serif;
@@ -109,11 +110,11 @@ body.annotated-active .annotated-highlight {
 
 .annotated-tooltip-textarea:focus {
   border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: none;
 }
 
 .annotated-tooltip-textarea::placeholder {
-  color: #b0b0b0;
+  color: #999999;
   font-style: italic;
 }
 
@@ -127,7 +128,7 @@ body.annotated-active .annotated-highlight {
 
 .annotated-tooltip-chars {
   font-size: 11px;
-  color: #a0a0a0;
+  color: #999999;
 }
 
 .annotated-tooltip-btns {
@@ -137,10 +138,10 @@ body.annotated-active .annotated-highlight {
 
 .annotated-tooltip-cancel {
   padding: 6px 14px;
-  border: 1px solid #e5e2d9;
-  border-radius: 6px;
+  border: 1px solid #deded9;
+  border-radius: 0;
   background: transparent;
-  color: #666;
+  color: #1a1a1a;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -148,23 +149,24 @@ body.annotated-active .annotated-highlight {
 }
 
 .annotated-tooltip-cancel:hover {
-  background: #f0ede6;
+  background: #f0f0ee;
+  border-color: #1a1a1a;
 }
 
 .annotated-tooltip-post {
   padding: 6px 16px;
-  border: none;
-  border-radius: 6px;
-  background: #6366f1;
-  color: #fff;
+  border: 1px solid #1a1a1a;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1a1a;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .annotated-tooltip-post:hover:not(:disabled) {
-  background: #818cf8;
+  background: #f0f0ee;
 }
 
 .annotated-tooltip-post:disabled {
@@ -179,7 +181,7 @@ body.annotated-active .annotated-highlight {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: #b0b0b0;
+  color: #999999;
   margin-bottom: 10px;
   letter-spacing: 0.02em;
 }
