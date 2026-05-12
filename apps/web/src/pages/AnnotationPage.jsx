@@ -34,7 +34,7 @@ export default function AnnotationPage() {
   const [error, setError] = useState('');
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimSent, setClaimSent] = useState(false);
-  const [claim, setClaim] = useState({ email: '', reason: '' });
+  const [claim, setClaim] = useState({ email: '', reason_code: 'copyright', description: '' });
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +85,8 @@ export default function AnnotationPage() {
         body: JSON.stringify({
           annotation_id: id,
           claimant_email: claim.email,
-          reason: claim.reason,
+          reason_code: claim.reason_code,
+          description: claim.description,
         }),
       });
     } catch {
@@ -133,10 +134,28 @@ export default function AnnotationPage() {
         ) : (
           <form className="claim-form" onSubmit={fileClaim}>
             <strong>File a claim</strong>
-            <input className="field" type="email" placeholder="Email address" required value={claim.email} onChange={(event) => setClaim((value) => ({ ...value, email: event.target.value }))} />
-            <textarea className="field" placeholder="Describe the issue" required value={claim.reason} onChange={(event) => setClaim((value) => ({ ...value, reason: event.target.value }))} />
+            <p className="claim-hint">Select a reason and describe the issue. We'll review it and take appropriate action.</p>
+            <label>
+              <span>Reason</span>
+              <select className="field" required value={claim.reason_code} onChange={(event) => setClaim((value) => ({ ...value, reason_code: event.target.value }))}>
+                <option value="copyright">Copyright infringement</option>
+                <option value="misrepresentation">Misrepresentation</option>
+                <option value="defamation">Defamation</option>
+                <option value="privacy">Privacy violation</option>
+                <option value="harassment">Harassment</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              <span>Your email</span>
+              <input className="field" type="email" placeholder="you@example.com" required value={claim.email} onChange={(event) => setClaim((value) => ({ ...value, email: event.target.value }))} />
+            </label>
+            <label>
+              <span>Description</span>
+              <textarea className="field" placeholder="Describe why you're filing this claim..." required value={claim.description} onChange={(event) => setClaim((value) => ({ ...value, description: event.target.value }))} />
+            </label>
             <div className="form-actions">
-              <button className="button button-solid" type="submit">Submit</button>
+              <button className="button button-solid" type="submit">Submit Claim</button>
               <button className="button button-text" type="button" onClick={() => setClaimOpen(false)}>Cancel</button>
             </div>
           </form>

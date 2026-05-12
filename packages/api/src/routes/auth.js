@@ -188,16 +188,17 @@ app.get('/me', (c) => {
 
   try {
     const payload = jwt.verify(auth.slice(7), JWT_SECRET);
-    const user = db.prepare('SELECT id, username, display_name, avatar_url, bio, provider, email, created_at FROM users WHERE id = ?').get(payload.sub);
+    const user = db.prepare('SELECT id, username, display_name, avatar_url, bio, link, twitter_handle, age, onboarding_completed, subscription_tier, provider, email, created_at FROM users WHERE id = ?').get(payload.sub);
     if (!user) return c.json({ error: 'User not found' }, 404);
 
     // Stats
-    const annotations = db.prepare('SELECT COUNT(*) as count FROM annotations WHERE user_id = ?').get(user.id);
+    const annotations = db.prepare("SELECT COUNT(*) as count FROM annotations WHERE user_id = ? AND status = 'published'").get(user.id);
     const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE following_id = ?').get(user.id);
     const following = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(user.id);
 
     return c.json({
       ...user,
+      onboarding_completed: Boolean(user.onboarding_completed),
       stats: {
         annotations: annotations.count,
         followers: followers.count,
@@ -234,10 +235,10 @@ function upsertUser({ provider, provider_id, email, display_name, avatar_url, us
   if (taken) finalUsername = `${finalUsername}${nanoid(4)}`;
 
   const id = nanoid(12);
-  db.prepare('INSERT INTO users (id, username, display_name, avatar_url, bio, provider, provider_id, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  db.prepare('INSERT INTO users (id, username, display_name, avatar_url, bio, provider, provider_id, email, onboarding_completed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)')
     .run(id, finalUsername, display_name, avatar_url, null, provider, provider_id, email);
 
-  return { id, username: finalUsername, display_name, avatar_url, provider };
+  return { id, username: finalUsername, display_name, avatar_url, provider, subscription_tier: 'free', onboarding_completed: 0 };
 }
 
 function signToken(user) {

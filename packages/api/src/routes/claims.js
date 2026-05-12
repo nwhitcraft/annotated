@@ -4,20 +4,34 @@ import db from '../db.js';
 
 const app = new Hono();
 
+// Claim reason codes
+const REASON_CODES = [
+  'copyright',
+  'misrepresentation',
+  'defamation',
+  'privacy',
+  'harassment',
+  'other',
+];
+
 // File a fair-use claim against an annotation
 app.post('/', async (c) => {
-  const { annotation_id, claimant_email, reason } = await c.req.json();
+  const { annotation_id, claimant_email, reason_code, description } = await c.req.json();
 
-  if (!annotation_id || !claimant_email || !reason) {
-    return c.json({ error: 'Missing required fields: annotation_id, claimant_email, reason' }, 400);
+  if (!annotation_id || !claimant_email || !reason_code || !description) {
+    return c.json({ error: 'Missing required fields: annotation_id, claimant_email, reason_code, description' }, 400);
+  }
+
+  if (!REASON_CODES.includes(reason_code)) {
+    return c.json({ error: 'Invalid reason code' }, 400);
   }
 
   const annotation = db.prepare('SELECT id FROM annotations WHERE id = ?').get(annotation_id);
   if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
 
   const id = nanoid(12);
-  db.prepare('INSERT INTO claims (id, annotation_id, claimant_email, reason) VALUES (?, ?, ?, ?)')
-    .run(id, annotation_id, claimant_email, reason);
+  db.prepare('INSERT INTO claims (id, annotation_id, claimant_email, reason, reason_code, description) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, annotation_id, claimant_email, reason_code, reason_code, description);
   db.prepare('UPDATE annotations SET claim_count = claim_count + 1 WHERE id = ?')
     .run(annotation_id);
 
@@ -27,21 +41,55 @@ app.post('/', async (c) => {
 // List claims (admin)
 app.get('/', (c) => {
   const { status = 'pending' } = c.req.query();
-  const items = db.prepare('SELECT c.*, a.source_url, a.source_title FROM claims c JOIN annotations a ON c.annotation_id = a.id WHERE c.status = ? ORDER BY c.created_at DESC').all(status);
+  const items = db.prepare(`
+    SELECT c.*, a.source_url, a.source_title, a.commentary, a.user_id, u.username, u.display_name
+    FROM claims c
+    JOIN annotations a ON c.annotation_id = a.id
+    JOIN users u ON a.user_id = u.id
+    WHERE c.status = ?
+    ORDER BY c.created_at DESC
+  `).all(status);
   return c.json({ items });
 });
 
-// Update claim status (MVP admin: any logged-in user once auth is enabled)
+// Update claim status (admin)
 app.patch('/:id', async (c) => {
   const { id } = c.req.param();
-  const { status } = await c.req.json();
-  if (!['pending', 'reviewed', 'resolved'].includes(status)) {
+  const { status, action } = await c.req.json();
+  if (!['pending', 'reviewed', 'resolved', 'annotation_removed', 'user_blocked'].includes(status)) {
     return c.json({ error: 'Invalid status' }, 400);
   }
 
   const result = db.prepare('UPDATE claims SET status = ? WHERE id = ?').run(status, id);
   if (!result.changes) return c.json({ error: 'Claim not found' }, 404);
+
+  // If action is to remove the annotation or block the user
+  if (status === 'annotation_removed') {
+    const claim = db.prepare('SELECT annotation_id FROM claims WHERE id = ?').get(id);
+    if (claim) {
+      db.prepare(`
+        UPDATE annotations
+        SET status = 'removed',
+            is_public = 0,
+            updated_at = datetime('now')
+        WHERE id = ?
+      `)
+        .run(claim.annotation_id);
+    }
+  }
+
   return c.json({ updated: true, status });
+});
+
+// Block a user (admin)
+app.post('/block-user', async (c) => {
+  const { user_id, reason } = await c.req.json();
+  if (!user_id) return c.json({ error: 'Missing user_id' }, 400);
+
+  const result = db.prepare('UPDATE users SET blocked = 1 WHERE id = ?').run(user_id);
+  if (!result.changes) return c.json({ error: 'User not found' }, 404);
+
+  return c.json({ blocked: true });
 });
 
 // Delete a claim and keep annotation claim_count in sync

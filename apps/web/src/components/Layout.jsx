@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import UserAvatar from './UserAvatar.jsx';
 import UserSearch from './UserSearch.jsx';
 import { currentUser } from '../lib/mockData.js';
-import { getAvatarUrl, getToken, getUsername } from '../lib/api.js';
+import { getAvatarUrl, getDisplayName, getToken, getUsername } from '../lib/api.js';
 
 export default function Layout() {
   const [viewer, setViewer] = useState(currentUser);
@@ -14,7 +14,7 @@ export default function Layout() {
     setViewer({
       ...currentUser,
       username,
-      display_name: username,
+      display_name: getDisplayName() || username,
       avatar_url: getAvatarUrl() || currentUser.avatar_url,
     });
   }, []);
@@ -28,6 +28,7 @@ export default function Layout() {
             <NavLink to="/feed">Feed</NavLink>
             <NavLink to="/new">Annotate</NavLink>
             <NavLink to={`/u/${viewer.username}`}>Profile</NavLink>
+            {viewer.username === 'demo' && <NavLink to="/admin/claims">Claims</NavLink>}
           </nav>
           <div className="header-tools">
             <UserSearch />

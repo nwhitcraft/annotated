@@ -9,6 +9,7 @@ export default function QuoteAnnotationBubble({
   buttonLabel = 'Annotate',
   disabled = false,
   textareaId = 'quote-annotation-body',
+  actions = null,
 }) {
   return (
     <section className="quote-annotation-bubble" aria-label="Quote annotation">
@@ -29,14 +30,16 @@ export default function QuoteAnnotationBubble({
       />
 
       <div className="quote-annotation-bubble__actions">
-        <button
-          className="quote-annotation-bubble__button"
-          type={onSubmit ? 'button' : 'submit'}
-          onClick={onSubmit}
-          disabled={disabled}
-        >
-          {buttonLabel}
-        </button>
+        {actions || (
+          <button
+            className="quote-annotation-bubble__button"
+            type={onSubmit ? 'button' : 'submit'}
+            onClick={onSubmit}
+            disabled={disabled}
+          >
+            {buttonLabel}
+          </button>
+        )}
       </div>
     </section>
   );

@@ -36,6 +36,9 @@ export default function AnnotationItem({ annotation, expanded = false }) {
           <span>{domain}</span>
           <span>{timeAgo(annotation.created_at)}</span>
           <span className="annotation-type-tag">{annotation.annotation_type || 'Opinion'}</span>
+          {annotation.status && annotation.status !== 'published' && (
+            <span className={`annotation-status-tag ${annotation.status}`}>{annotation.status}</span>
+          )}
           <SourceType type={annotation.source_type} />
         </div>
       </div>

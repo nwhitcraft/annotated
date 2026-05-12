@@ -18,7 +18,7 @@ app.get('/page', (c) => {
     FROM annotations a
     JOIN users u ON a.user_id = u.id
     LEFT JOIN follows f ON f.following_id = a.user_id AND f.follower_id = ?
-    WHERE a.is_public = 1 AND a.source_url IN (${placeholders})
+    WHERE a.is_public = 1 AND a.status = 'published' AND a.source_url IN (${placeholders})
     ORDER BY followed_by_viewer DESC, a.created_at DESC
     LIMIT ?
   `).all(viewer_id, ...variants, cappedLimit);
@@ -34,7 +34,7 @@ app.get('/', (c) => {
     SELECT a.*, u.username, u.display_name, u.avatar_url 
     FROM annotations a 
     JOIN users u ON a.user_id = u.id 
-    WHERE a.is_public = 1
+    WHERE a.is_public = 1 AND a.status = 'published'
   `;
   const params = [];
 
@@ -64,7 +64,7 @@ app.get('/following/:userId', (c) => {
     FROM annotations a 
     JOIN users u ON a.user_id = u.id 
     JOIN follows f ON f.following_id = a.user_id 
-    WHERE f.follower_id = ? AND a.is_public = 1
+    WHERE f.follower_id = ? AND a.is_public = 1 AND a.status = 'published'
     ORDER BY a.created_at DESC LIMIT ? OFFSET ?
   `).all(userId, Number(limit), Number(offset));
 
@@ -79,7 +79,7 @@ app.get('/trending', (c) => {
     SELECT a.*, u.username, u.display_name, u.avatar_url 
     FROM annotations a 
     JOIN users u ON a.user_id = u.id 
-    WHERE a.is_public = 1 AND a.created_at >= datetime('now', '-7 days')
+    WHERE a.is_public = 1 AND a.status = 'published' AND a.created_at >= datetime('now', '-7 days')
     ORDER BY a.noteworthy_count DESC, a.pin_count DESC, a.comment_count DESC
     LIMIT ?
   `).all(Number(limit));

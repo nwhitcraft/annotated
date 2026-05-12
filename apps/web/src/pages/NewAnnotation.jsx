@@ -1,8 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QuoteAnnotationBubble from '../components/QuoteAnnotationBubble.jsx';
 import SourceType from '../components/SourceType.jsx';
-import { createAnnotation, createMediaClip, detectClip } from '../lib/api.js';
+import {
+  createAnnotation,
+  createMediaClip,
+  detectClip,
+  getCurrentUserId,
+  getUsername,
+  hydrateCurrentUser,
+  isPaidTier,
+} from '../lib/api.js';
 import { domainFromUrl, formatTime } from '../lib/format.js';
 
 const steps = ['URL', 'Clip', 'Commentary', 'Post'];
@@ -19,8 +27,11 @@ export default function NewAnnotation() {
   const [annotationType, setAnnotationType] = useState('Opinion');
   const [detecting, setDetecting] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [postingAction, setPostingAction] = useState('');
   const [clipping, setClipping] = useState(false);
+  const [viewer, setViewer] = useState(null);
   const [error, setError] = useState('');
+  const paidTier = isPaidTier(viewer?.subscription_tier);
 
   const activeStep = useMemo(() => {
     if (!detected) return 0;
@@ -29,6 +40,12 @@ export default function NewAnnotation() {
     if (!commentary.trim()) return 2;
     return 3;
   }, [detected, clipText, clipStart, clipEnd, commentary]);
+
+  useEffect(() => {
+    hydrateCurrentUser()
+      .then(setViewer)
+      .catch(() => setViewer({ subscription_tier: 'free' }));
+  }, []);
 
   async function detect(event) {
     event.preventDefault();
@@ -66,12 +83,13 @@ export default function NewAnnotation() {
     setClipEnd(Math.min(Math.max(next, clipStart + 1), clipStart + 90));
   }
 
-  async function submit(event) {
-    event.preventDefault();
+  async function submit(event, requestedStatus = 'published') {
+    event?.preventDefault?.();
     if (!detected) return setError('Detect a source first.');
     if (detected.type === 'article' && !clipText.trim()) return setError('Add the quoted passage.');
     if (!commentary.trim()) return setError('Write your commentary.');
     setPosting(true);
+    setPostingAction(requestedStatus);
     setClipping(false);
     setError('');
     try {
@@ -107,13 +125,50 @@ export default function NewAnnotation() {
         clip_media_path: mediaClip?.mediaPath || null,
         commentary: commentary.trim(),
         annotation_type: annotationType,
+        status: requestedStatus,
       });
-      navigate(`/a/${data.id}`);
-    } catch {
-      setError('Could not post yet. Check the API and try again.');
+      if (data.status === 'draft') {
+        navigate(`/u/${getUsername() || getCurrentUserId()}?tab=drafts`);
+      } else {
+        navigate(`/a/${data.id}`);
+      }
+    } catch (err) {
+      setError(err.message || 'Could not post yet. Check the API and try again.');
     } finally {
       setPosting(false);
+      setPostingAction('');
     }
+  }
+
+  function postControls() {
+    const disabled = posting || activeStep < 3;
+    const statusLabel = paidTier && postingAction !== 'published' ? 'Draft' : 'Published';
+
+    return (
+      <div className="publish-controls">
+        <span className={`status-pill ${statusLabel === 'Draft' ? 'draft' : 'published'}`}>
+          {statusLabel}
+        </span>
+        {paidTier && (
+          <button
+            className="button button-outline"
+            type="button"
+            onClick={(event) => submit(event, 'draft')}
+            disabled={disabled}
+          >
+            {posting && postingAction === 'draft' ? 'Saving draft' : 'Save as Draft'}
+          </button>
+        )}
+        <button
+          className="button button-solid"
+          type="button"
+          onClick={(event) => submit(event, 'published')}
+          disabled={disabled}
+        >
+          {clipping && postingAction === 'published' ? 'Clipping media' : posting && postingAction === 'published' ? 'Posting' : 'Post to Feed'}
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -129,7 +184,7 @@ export default function NewAnnotation() {
         ))}
       </ol>
 
-      <form className="editor-form" onSubmit={submit}>
+      <form className="editor-form" onSubmit={(event) => submit(event, 'published')}>
         <section className="form-section">
           <label htmlFor="source-url">Source URL</label>
           <div className="detect-row">
@@ -193,8 +248,8 @@ export default function NewAnnotation() {
                 onChange={setCommentary}
                 placeholder="Write the take people should respond to..."
                 disabled={posting || activeStep < 3}
-                buttonLabel={posting ? 'Posting' : 'Post annotation'}
                 textareaId="commentary"
+                actions={postControls()}
               />
             ) : (
               <textarea id="commentary" className="field commentary-field" placeholder="Write the take people should respond to..." value={commentary} onChange={(event) => setCommentary(event.target.value)} />
@@ -205,9 +260,7 @@ export default function NewAnnotation() {
         {error && <p className="notice error">{error}</p>}
 
         {detected && !(detected.type === 'article' && clipText.trim()) && (
-          <button className="button button-solid post-button" type="submit" disabled={posting || activeStep < 3}>
-            {clipping ? 'Clipping media' : posting ? 'Posting' : 'Post annotation'}
-          </button>
+          postControls()
         )}
       </form>
     </div>

@@ -4,8 +4,17 @@ const API_BASE = 'http://localhost:3080';
 const WEB_BASE = 'http://localhost:3090';
 const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
+const RECORDING_BUBBLE_ID = 'annotated-recording-bubble';
 const SHORT_CLIP_SECONDS = 90;
+const RECORDING_FRAME_RATE = 24;
+const RECORDING_WIDTH = 426;
+const RECORDING_HEIGHT = 240;
 const ANNOTATION_TYPES = ['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'];
+const VIDEO_MIME_TYPES = [
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
 
 let lastUrl = window.location.href;
 let authToken = '';
@@ -16,6 +25,7 @@ chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
   if (chrome.runtime.lastError) return;
   authToken = response?.token || '';
   authUser = response?.user || null;
+  void refreshAuthUser();
 });
 
 // Listen for auth updates from background
@@ -28,6 +38,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       if (chrome.runtime.lastError) return;
       authToken = response?.token || '';
       authUser = response?.user || null;
+      void refreshAuthUser();
     });
   }
 });
@@ -54,6 +65,8 @@ let selecting = false;
 let selectionTimer = null;
 let trackingFrame = null;
 let selectedType = 'Opinion';
+let mediaSession = null;
+let activeAnchorElement = null;
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
@@ -99,7 +112,8 @@ function cssEscape(value) {
 
 function currentMedia() {
   const media = [...document.querySelectorAll('video, audio')]
-    .find((item) => Number.isFinite(item.currentTime) && item.readyState > 0);
+    .filter((item) => Number.isFinite(item.currentTime) && item.readyState > 0)
+    .sort((a, b) => mediaScore(b) - mediaScore(a))[0];
   if (!media) return null;
 
   const start = Math.max(0, Math.floor(media.currentTime || 0));
@@ -107,7 +121,17 @@ function currentMedia() {
     element: media,
     start,
     end: start + SHORT_CLIP_SECONDS,
+    isVideo: media.tagName.toLowerCase() === 'video',
+    isPlaying: !media.paused && !media.ended,
   };
+}
+
+function mediaScore(media) {
+  const rect = media.getBoundingClientRect();
+  const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+  const playing = !media.paused && !media.ended ? 1_000_000 : 0;
+  const viewport = rect.bottom > 0 && rect.top < window.innerHeight ? 100_000 : 0;
+  return playing + viewport + area;
 }
 
 function clipFromSelection(openPanel = false) {
@@ -139,7 +163,12 @@ function clipFromSelection(openPanel = false) {
 function clipFromMedia(openPanel = false) {
   const page = getPageInfo();
   const media = currentMedia();
-  if (!media || page.sourceType === 'article') return null;
+  if (!media) return null;
+  if (page.sourceType === 'article' && !media.isPlaying) return null;
+
+  const sourceType = page.sourceType === 'article'
+    ? (media.isVideo ? 'video' : 'podcast')
+    : page.sourceType;
 
   return {
     type: 'TEXT_SELECTED',
@@ -147,7 +176,7 @@ function clipFromMedia(openPanel = false) {
     url: page.url,
     pageUrl: page.pageUrl,
     title: page.title,
-    sourceType: page.sourceType,
+    sourceType,
     domain: page.domain,
     siteName: page.siteName,
     author: page.author,
@@ -161,30 +190,280 @@ function clipFromMedia(openPanel = false) {
 }
 
 function enterClippingMode() {
+  if (mediaSession) {
+    void stopMediaRecording('shortcut');
+    return;
+  }
+
   clippingMode = true;
   activeClip = null;
+  activeAnchorElement = null;
   document.documentElement.classList.add('annotated-clipping-mode');
 
   const mediaClip = clipFromMedia(false);
   if (mediaClip) {
-    const rect = currentMedia()?.element.getBoundingClientRect();
-    activeClip = mediaClip;
-    activeRange = null;
-    showComposer(rect && rect.width ? rect : centerRect());
+    const media = currentMedia();
+    if (media) startMediaRecording(mediaClip, media);
   }
 }
 
 function exitClippingMode() {
+  if (mediaSession) cancelMediaRecording();
   clippingMode = false;
   activeClip = null;
   activeRange = null;
+  activeAnchorElement = null;
   window.clearTimeout(selectionTimer);
   if (trackingFrame) cancelAnimationFrame(trackingFrame);
   trackingFrame = null;
   document.documentElement.classList.remove('annotated-clipping-mode');
+  document.documentElement.classList.remove('annotated-media-recording-mode');
   document.getElementById(OVERLAY_ID)?.remove();
   document.getElementById(COMPOSER_ID)?.remove();
+  document.getElementById(RECORDING_BUBBLE_ID)?.remove();
   window.getSelection()?.removeAllRanges();
+}
+
+function cancelMediaRecording() {
+  const session = mediaSession;
+  if (!session) return;
+  session.stopping = true;
+  window.clearInterval(session.intervalId);
+  if (session.drawFrame) cancelAnimationFrame(session.drawFrame);
+  try {
+    if (session.recorder && session.recorder.state !== 'inactive') session.recorder.stop();
+  } catch {
+    // best-effort cancellation
+  }
+  stopCaptureTracks(session);
+  mediaSession = null;
+  document.getElementById(RECORDING_BUBBLE_ID)?.remove();
+  document.documentElement.classList.remove('annotated-media-recording-mode');
+}
+
+function startMediaRecording(clip, media) {
+  activeRange = null;
+  activeAnchorElement = media.element;
+  document.getElementById(COMPOSER_ID)?.remove();
+  document.getElementById(OVERLAY_ID)?.remove();
+  document.documentElement.classList.add('annotated-media-recording-mode');
+
+  mediaSession = {
+    clip,
+    element: media.element,
+    startedAt: Date.now(),
+    startSec: media.start,
+    endSec: media.start,
+    chunks: [],
+    blob: null,
+    mimeType: '',
+    recorder: null,
+    captureStream: null,
+    outputStream: null,
+    canvas: null,
+    drawFrame: null,
+    intervalId: null,
+    stopping: false,
+    captureError: '',
+  };
+
+  if (media.isVideo) startVideoCapture(mediaSession);
+  showRecordingBubble();
+  mediaSession.intervalId = window.setInterval(updateRecordingBubble, 250);
+  updateRecordingBubble();
+}
+
+function startVideoCapture(session) {
+  try {
+    const captureStream = session.element.captureStream?.() || session.element.mozCaptureStream?.();
+    if (!captureStream) throw new Error('captureStream is unavailable for this video');
+
+    session.captureStream = captureStream;
+    const canvas = document.createElement('canvas');
+    canvas.width = RECORDING_WIDTH;
+    canvas.height = RECORDING_HEIGHT;
+    session.canvas = canvas;
+
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context || !canvas.captureStream) throw new Error('Canvas recording is unavailable');
+
+    const outputStream = canvas.captureStream(RECORDING_FRAME_RATE);
+    for (const track of captureStream.getAudioTracks()) outputStream.addTrack(track);
+    session.outputStream = outputStream;
+
+    const mimeType = pickVideoMimeType();
+    const recorderOptions = {
+      videoBitsPerSecond: 350_000,
+      audioBitsPerSecond: 64_000,
+    };
+    if (mimeType) recorderOptions.mimeType = mimeType;
+    const recorder = new MediaRecorder(outputStream, recorderOptions);
+    session.mimeType = mimeType;
+    session.recorder = recorder;
+
+    recorder.addEventListener('dataavailable', (event) => {
+      if (event.data?.size) session.chunks.push(event.data);
+    });
+    recorder.addEventListener('error', () => {
+      session.captureError = 'Recording failed';
+    });
+
+    const draw = () => {
+      if (mediaSession !== session || session.stopping) return;
+      try {
+        context.fillStyle = '#000';
+        context.fillRect(0, 0, RECORDING_WIDTH, RECORDING_HEIGHT);
+        context.drawImage(session.element, 0, 0, RECORDING_WIDTH, RECORDING_HEIGHT);
+      } catch {
+        session.captureError = 'Canvas capture failed';
+      }
+      session.drawFrame = requestAnimationFrame(draw);
+    };
+
+    draw();
+    recorder.start(1000);
+  } catch (error) {
+    session.captureError = error.message || 'Recording unavailable';
+    stopCaptureTracks(session);
+  }
+}
+
+function pickVideoMimeType() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  return VIDEO_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function showRecordingBubble() {
+  document.getElementById(RECORDING_BUBBLE_ID)?.remove();
+  const bubble = document.createElement('section');
+  bubble.id = RECORDING_BUBBLE_ID;
+  bubble.className = 'annotated-recording-bubble';
+  bubble.setAttribute('aria-label', 'Media clip recording');
+  bubble.innerHTML = `
+    <div class="annotated-recording-bubble__status">
+      <span class="annotated-recording-bubble__dot" aria-hidden="true"></span>
+      <span class="annotated-recording-bubble__label">Recording...</span>
+      <span class="annotated-recording-bubble__time">00:00 / 01:30</span>
+    </div>
+    <button class="annotated-recording-bubble__stop" type="button">■ Stop</button>
+    <p class="annotated-recording-bubble__note" hidden></p>
+  `;
+  bubble.addEventListener('mousedown', (event) => event.stopPropagation());
+  bubble.querySelector('button').addEventListener('click', () => {
+    void stopMediaRecording('button');
+  });
+  document.documentElement.append(bubble);
+  positionRecordingBubble();
+}
+
+function updateRecordingBubble() {
+  if (!mediaSession) return;
+
+  const elapsed = Math.min(SHORT_CLIP_SECONDS, (Date.now() - mediaSession.startedAt) / 1000);
+  const current = Number(mediaSession.element.currentTime);
+  mediaSession.endSec = Number.isFinite(current) && current > mediaSession.startSec
+    ? Math.min(current, mediaSession.startSec + SHORT_CLIP_SECONDS)
+    : mediaSession.startSec + elapsed;
+
+  const bubble = document.getElementById(RECORDING_BUBBLE_ID);
+  if (bubble) {
+    bubble.querySelector('.annotated-recording-bubble__time').textContent = `${formatClock(elapsed)} / ${formatClock(SHORT_CLIP_SECONDS)}`;
+    const note = bubble.querySelector('.annotated-recording-bubble__note');
+    if (mediaSession.captureError) {
+      note.hidden = false;
+      note.textContent = 'Recording fallback will use source timestamps.';
+    }
+  }
+
+  positionRecordingBubble();
+  if (elapsed >= SHORT_CLIP_SECONDS) void stopMediaRecording('timer');
+}
+
+function positionRecordingBubble() {
+  const bubble = document.getElementById(RECORDING_BUBBLE_ID);
+  const element = mediaSession?.element;
+  if (!bubble || !element) return;
+
+  const rect = element.getBoundingClientRect();
+  const margin = 14;
+  const gap = 10;
+  const width = Math.min(360, Math.max(280, rect.width || 320), window.innerWidth - margin * 2);
+  const left = Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
+  const top = Math.max(margin, Math.min(window.innerHeight - bubble.offsetHeight - margin, rect.bottom + gap));
+
+  bubble.style.width = `${width}px`;
+  bubble.style.left = `${left}px`;
+  bubble.style.top = `${top}px`;
+}
+
+async function stopMediaRecording(reason) {
+  const session = mediaSession;
+  if (!session || session.stopping) return;
+  session.stopping = true;
+  window.clearInterval(session.intervalId);
+
+  const bubble = document.getElementById(RECORDING_BUBBLE_ID);
+  bubble?.querySelector('button')?.setAttribute('disabled', 'true');
+  const label = bubble?.querySelector('.annotated-recording-bubble__label');
+  if (label) label.textContent = 'Preparing clip...';
+
+  const elapsed = Math.min(SHORT_CLIP_SECONDS, (Date.now() - session.startedAt) / 1000);
+  const current = Number(session.element.currentTime);
+  const endSec = Number.isFinite(current) && current > session.startSec
+    ? Math.min(current, session.startSec + SHORT_CLIP_SECONDS)
+    : session.startSec + elapsed;
+
+  await stopVideoCapture(session);
+  stopCaptureTracks(session);
+
+  const clip = {
+    ...session.clip,
+    clipStartSec: session.startSec,
+    clipEndSec: Math.max(session.startSec + 1, endSec),
+    mediaDurationS: Math.max(1, Math.min(SHORT_CLIP_SECONDS, endSec - session.startSec)),
+    recordingBlob: session.blob,
+    recordingMimeType: session.mimeType || session.blob?.type || 'video/webm',
+    recordingError: session.captureError,
+    stoppedBy: reason,
+  };
+
+  mediaSession = null;
+  activeClip = clip;
+  activeRange = null;
+  activeAnchorElement = session.element;
+  document.documentElement.classList.remove('annotated-media-recording-mode');
+  document.getElementById(RECORDING_BUBBLE_ID)?.remove();
+
+  const rect = session.element.getBoundingClientRect();
+  showComposer(rect && rect.width ? rect : centerRect());
+}
+
+async function stopVideoCapture(session) {
+  if (session.drawFrame) cancelAnimationFrame(session.drawFrame);
+  if (!session.recorder || session.recorder.state === 'inactive') {
+    if (session.chunks.length) session.blob = new Blob(session.chunks, { type: session.mimeType || 'video/webm' });
+    return;
+  }
+
+  await new Promise((resolve) => {
+    const done = () => {
+      if (session.chunks.length) session.blob = new Blob(session.chunks, { type: session.mimeType || 'video/webm' });
+      resolve();
+    };
+    session.recorder.addEventListener('stop', done, { once: true });
+    try {
+      session.recorder.requestData();
+      session.recorder.stop();
+    } catch {
+      done();
+    }
+  });
+}
+
+function stopCaptureTracks(session) {
+  for (const stream of [session.captureStream, session.outputStream]) {
+    for (const track of stream?.getTracks?.() || []) track.stop();
+  }
 }
 
 function createOverlay(rect) {
@@ -239,6 +518,7 @@ function captureCompletedSelection() {
   if (!rect) return;
 
   activeClip = clip;
+  activeAnchorElement = null;
   showComposer(rect);
 }
 
@@ -267,6 +547,7 @@ function showComposer(rect) {
 
   createOverlay(rect);
   document.getElementById(COMPOSER_ID)?.remove();
+  const paidTier = isPaidUser(authUser);
 
   const composer = document.createElement('section');
   composer.id = COMPOSER_ID;
@@ -274,6 +555,7 @@ function showComposer(rect) {
   composer.setAttribute('aria-label', 'Quote annotation');
   composer.style.visibility = 'hidden';
   composer.innerHTML = `
+    ${mediaComposerSummary(activeClip)}
     <div class="quote-annotation-bubble__tags" role="radiogroup" aria-label="Annotation type">
       ${ANNOTATION_TYPES.map((t) => `<button type="button" class="quote-annotation-bubble__tag${t === selectedType ? ' quote-annotation-bubble__tag--active' : ''}" data-type="${t}">${t}</button>`).join('')}
     </div>
@@ -284,8 +566,10 @@ function showComposer(rect) {
       placeholder="Write your take…"
     ></textarea>
     <div class="quote-annotation-bubble__actions">
+      <span class="quote-annotation-bubble__status ${paidTier ? 'quote-annotation-bubble__status--draft' : 'quote-annotation-bubble__status--published'}">${paidTier ? 'Draft' : 'Published'}</span>
       <span class="quote-annotation-bubble__hint">↵ to post</span>
-      <button class="quote-annotation-bubble__button" type="button">Annotate</button>
+      ${paidTier ? '<button class="quote-annotation-bubble__draft-button" type="button">Save as Draft</button>' : ''}
+      <button class="quote-annotation-bubble__button" type="button">Post to Feed</button>
     </div>
   `;
 
@@ -305,16 +589,50 @@ function showComposer(rect) {
   composer.querySelector('textarea').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      postAnnotation(composer);
+      postAnnotation(composer, 'published');
     }
   });
 
-  composer.querySelector('.quote-annotation-bubble__button').addEventListener('click', () => postAnnotation(composer));
+  composer.querySelector('.quote-annotation-bubble__button').addEventListener('click', () => postAnnotation(composer, 'published'));
+  composer.querySelector('.quote-annotation-bubble__draft-button')?.addEventListener('click', () => saveLocalDraft(composer));
 
   document.documentElement.append(composer);
   positionComposer(composer, rect);
   composer.style.visibility = '';
   composer.querySelector('textarea').focus();
+}
+
+function isPaidUser(user) {
+  const tier = String(user?.subscription_tier || 'free').toLowerCase();
+  return tier && !['free', 'starter'].includes(tier);
+}
+
+async function refreshAuthUser() {
+  if (!authToken) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    const user = await response.json().catch(() => ({}));
+    if (!response.ok || user.error) throw new Error(user.error || 'Auth refresh failed');
+    authUser = { ...authUser, ...user };
+  } catch {
+    // Keep cached auth state when the API is unavailable.
+  }
+}
+
+function mediaComposerSummary(clip) {
+  if (!isMediaClip(clip)) return '';
+  const duration = clip.mediaDurationS || Math.max(0, (clip.clipEndSec || 0) - (clip.clipStartSec || 0));
+  const label = clip.sourceType === 'podcast' ? 'Audio clip attached' : 'Video clip attached';
+  const fallback = clip.recordingError ? '<span class="quote-annotation-bubble__clip-warning">timestamp fallback</span>' : '';
+  return `
+    <div class="quote-annotation-bubble__clip">
+      <span>${label}</span>
+      <span>${formatClock(duration)}</span>
+      ${fallback}
+    </div>
+  `;
 }
 
 function positionComposer(composer, rect) {
@@ -343,9 +661,15 @@ function positionComposer(composer, rect) {
 
 function updateAnchoredUi() {
   trackingFrame = null;
-  if (!clippingMode || !activeClip || !activeRange) return;
+  if (mediaSession) {
+    positionRecordingBubble();
+    return;
+  }
+  if (!clippingMode || !activeClip) return;
 
-  const rect = rectFromRange(activeRange);
+  const rect = activeRange
+    ? rectFromRange(activeRange)
+    : activeAnchorElement?.getBoundingClientRect();
   if (!rect) return;
 
   setPaneStyles(rect);
@@ -354,11 +678,11 @@ function updateAnchoredUi() {
 }
 
 function scheduleAnchoredUiUpdate() {
-  if (!clippingMode || !activeRange || trackingFrame) return;
+  if (!clippingMode || (!activeRange && !activeAnchorElement && !mediaSession) || trackingFrame) return;
   trackingFrame = requestAnimationFrame(updateAnchoredUi);
 }
 
-async function postAnnotation(composer) {
+async function postAnnotation(composer, status = 'published') {
   const textarea = composer.querySelector('textarea');
   const button = composer.querySelector('.quote-annotation-bubble__button');
   const commentary = textarea.value.trim();
@@ -369,7 +693,6 @@ async function postAnnotation(composer) {
 
   try {
     await ensureUser();
-    const mediaClip = await maybeCreateMediaClip(activeClip);
     const headers = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     const response = await fetch(`${API_BASE}/api/annotations`, {
@@ -378,24 +701,37 @@ async function postAnnotation(composer) {
       body: JSON.stringify({
         user_id: authUser?.id || 'demo-user',
         source_url: activeClip.url,
-        source_title: mediaClip?.title || activeClip.title || '',
+        source_title: activeClip.title || '',
         source_type: activeClip.sourceType || 'article',
         source_domain: activeClip.domain || '',
         source_site_name: activeClip.siteName || null,
         source_author: activeClip.author || null,
         source_published_at: activeClip.publishedAt || null,
-        source_thumbnail: mediaClip?.thumbnail || activeClip.thumbnail || null,
+        source_thumbnail: activeClip.thumbnail || null,
         clip_text: activeClip.text || null,
-        clip_start_sec: mediaClip?.startSec ?? activeClip.clipStartSec ?? null,
-        clip_end_sec: mediaClip?.endSec ?? activeClip.clipEndSec ?? null,
-        clip_media_path: mediaClip?.mediaPath || null,
+        clip_start_sec: activeClip.clipStartSec ?? null,
+        clip_end_sec: activeClip.clipEndSec ?? null,
+        clip_media_path: null,
         commentary,
         annotation_type: selectedType,
+        status,
       }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.id) throw new Error(data.error || 'Post failed');
+
+    if (isMediaClip(activeClip)) {
+      button.textContent = 'Attaching clip';
+      try {
+        await attachMediaClip(data.id, activeClip);
+      } catch {
+        button.textContent = 'Posted without clip';
+        safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
+        window.setTimeout(exitClippingMode, 1200);
+        return;
+      }
+    }
 
     button.textContent = 'Posted';
     safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
@@ -406,6 +742,111 @@ async function postAnnotation(composer) {
   }
 }
 
+function saveLocalDraft(composer) {
+  const textarea = composer.querySelector('textarea');
+  const button = composer.querySelector('.quote-annotation-bubble__draft-button');
+  const badge = composer.querySelector('.quote-annotation-bubble__status');
+  const commentary = textarea.value.trim();
+  if (!commentary || !activeClip) return;
+
+  button.disabled = true;
+  button.textContent = 'Saving';
+
+  const draft = {
+    id: `local-${Date.now()}`,
+    user_id: authUser?.id || 'demo-user',
+    source_url: activeClip.url,
+    source_title: activeClip.title || '',
+    source_type: activeClip.sourceType || 'article',
+    source_domain: activeClip.domain || '',
+    source_site_name: activeClip.siteName || null,
+    source_author: activeClip.author || null,
+    source_published_at: activeClip.publishedAt || null,
+    source_thumbnail: activeClip.thumbnail || null,
+    clip_text: activeClip.text || null,
+    clip_start_sec: activeClip.clipStartSec ?? null,
+    clip_end_sec: activeClip.clipEndSec ?? null,
+    commentary,
+    annotation_type: selectedType,
+    status: 'draft',
+    created_at: new Date().toISOString(),
+  };
+
+  chrome.storage.local.get({ annotation_drafts: [] }, (result) => {
+    const drafts = Array.isArray(result.annotation_drafts) ? result.annotation_drafts : [];
+    chrome.storage.local.set({ annotation_drafts: [draft, ...drafts].slice(0, 50) }, () => {
+      if (chrome.runtime.lastError) {
+        button.disabled = false;
+        button.textContent = 'Error - try again';
+        return;
+      }
+      badge.textContent = 'Draft saved';
+      button.textContent = 'Saved';
+      window.setTimeout(exitClippingMode, 600);
+    });
+  });
+}
+
+async function attachMediaClip(annotationId, clip) {
+  if (clip.recordingBlob?.size) {
+    const form = new FormData();
+    form.append('clip', clip.recordingBlob, `annotated-${annotationId}.webm`);
+    form.append('start', String(clip.clipStartSec ?? 0));
+    form.append('end', String(clip.clipEndSec ?? 0));
+    form.append('duration', String(clip.mediaDurationS ?? 0));
+    form.append('source_type', clip.sourceType || 'video');
+    const headers = {};
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    await fetchWithRetry(() => fetch(`${API_BASE}/api/annotations/${encodeURIComponent(annotationId)}/clip-upload`, {
+      method: 'POST',
+      headers,
+      body: form,
+    }));
+    return;
+  }
+
+  await fetchWithRetry(() => fetch(`${API_BASE}/api/annotations/${encodeURIComponent(annotationId)}/source-clip`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      url: clip.pageUrl || clip.url,
+      start: clip.clipStartSec,
+      end: clip.clipEndSec,
+      source_type: clip.sourceType,
+    }),
+  }));
+}
+
+async function fetchWithRetry(makeRequest, attempts = 2) {
+  let lastError = null;
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      const response = await makeRequest();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error) throw new Error(data.error || `Request failed: ${response.status}`);
+      return data;
+    } catch (error) {
+      lastError = error;
+      if (index + 1 < attempts) await delay(500 * (index + 1));
+    }
+  }
+  throw lastError || new Error('Request failed');
+}
+
+function authHeaders(base = {}) {
+  const headers = { ...base };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  return headers;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isMediaClip(clip) {
+  return ['youtube', 'podcast', 'video'].includes(clip?.sourceType);
+}
+
 function centerRect() {
   return {
     left: Math.round(window.innerWidth * 0.18),
@@ -413,6 +854,13 @@ function centerRect() {
     width: Math.round(window.innerWidth * 0.64),
     height: Math.max(80, Math.round(window.innerHeight * 0.18)),
   };
+}
+
+function formatClock(seconds) {
+  const value = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(value / 60);
+  const secs = value % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 function safeSend(message) {
@@ -449,6 +897,7 @@ window.addEventListener('keyup', (event) => {
 
 document.addEventListener('mousedown', (event) => {
   if (!clippingMode) return;
+  if (mediaSession) return;
   const composer = document.getElementById(COMPOSER_ID);
   if (composer?.contains(event.target)) return;
   if (composer && !composer.contains(event.target)) {

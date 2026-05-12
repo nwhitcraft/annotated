@@ -1,91 +1,199 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { getSuggestedUsers, getUsername, toggleFollow } from '../lib/api.js';
-
-const interests = ['Politics', 'Tech', 'Media', 'Science', 'Markets', 'Culture'];
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  checkAuth,
+  checkUsername,
+  getAvatarUrl,
+  getDisplayName,
+  getUsername,
+  onboardUser,
+  uploadAvatar,
+} from '../lib/api.js';
 
 export default function Onboarding() {
-  const [step, setStep] = useState(0);
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [displayName, setDisplayName] = useState(getDisplayName() || getUsername() || '');
+  const [age, setAge] = useState('');
   const [username, setUsername] = useState(getUsername() || '');
-  const [selected, setSelected] = useState([]);
-  const [suggested, setSuggested] = useState([]);
-  const [followed, setFollowed] = useState(new Set());
+  const [avatarUrl, setAvatarUrl] = useState(getAvatarUrl() || '');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(getAvatarUrl() || '');
+  const [usernameState, setUsernameState] = useState({ checking: false, available: false, message: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const ageValid = useMemo(() => {
+    if (age === '') return true;
+    const value = Number(age);
+    return Number.isInteger(value) && value >= 13 && value <= 120;
+  }, [age]);
 
   useEffect(() => {
-    getSuggestedUsers().then(setSuggested).catch(() => setSuggested([]));
+    let cancelled = false;
+    checkAuth().then((result) => {
+      if (cancelled || result.error) return;
+      setUser(result.user);
+      setDisplayName(result.user.display_name || result.user.username || '');
+      setUsername(result.user.username || '');
+      setAge(result.user.age || '');
+      setAvatarUrl(result.user.avatar_url || '');
+      setAvatarPreview(result.user.avatar_url || '');
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function follow(id) {
-    const next = new Set(followed);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setFollowed(next);
+  useEffect(() => {
+    if (!avatarFile) return undefined;
+    const url = URL.createObjectURL(avatarFile);
+    setAvatarPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [avatarFile]);
+
+  useEffect(() => {
+    const value = username.trim().toLowerCase();
+    if (!value) {
+      setUsernameState({ checking: false, available: false, message: 'Choose a username.' });
+      return undefined;
+    }
+
+    if (user?.username && value === user.username) {
+      setUsernameState({ checking: false, available: true, message: 'Available' });
+      return undefined;
+    }
+
+    setUsernameState({ checking: true, available: false, message: 'Checking...' });
+    const timer = window.setTimeout(() => {
+      checkUsername(value)
+        .then((result) => {
+          setUsernameState({
+            checking: false,
+            available: Boolean(result.available),
+            message: result.available ? 'Available' : `Taken - try ${result.suggestion || `${value}_1`}`,
+          });
+        })
+        .catch(() => {
+          setUsernameState({ checking: false, available: false, message: 'Could not check username.' });
+        });
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+  }, [username, user?.username]);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!displayName.trim() || !usernameState.available || !ageValid || saving) return;
+    setSaving(true);
+    setError('');
+
     try {
-      await toggleFollow(id);
-    } catch {
-      // Keep onboarding moving; the user can retry follows later.
+      let finalAvatarUrl = avatarUrl;
+      if (avatarFile) {
+        const upload = await uploadAvatar(avatarFile, user?.id);
+        finalAvatarUrl = upload.avatar_url || finalAvatarUrl;
+      }
+
+      await onboardUser({
+        display_name: displayName.trim(),
+        age: age === '' ? null : Number(age),
+        avatar_url: finalAvatarUrl || null,
+        username: username.trim().toLowerCase(),
+      });
+      navigate('/onboarding/extension', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Could not complete onboarding');
+    } finally {
+      setSaving(false);
     }
   }
+
+  const canSubmit = displayName.trim() && usernameState.available && ageValid && !saving;
 
   return (
     <div className="page onboarding-page">
       <header className="editor-heading">
         <p>Welcome to Annotated</p>
-        <h1>Set up your clipping desk.</h1>
+        <h1>Set up the profile people will see beside your annotations.</h1>
       </header>
 
       <ol className="step-list">
-        {['Username', 'Interests', 'Follow', 'Extension', 'First clip'].map((label, index) => (
-          <li key={label} className={index <= step ? 'active' : ''}>{label}</li>
+        {['Profile', 'Extension', 'How to clip'].map((label, index) => (
+          <li key={label} className={index === 0 ? 'active' : ''}>{label}</li>
         ))}
       </ol>
 
-      {step === 0 && (
+      <form className="editor-form onboarding-form" onSubmit={submit}>
         <section className="form-section">
+          <label htmlFor="display-name">Display name</label>
+          <input
+            id="display-name"
+            className="field"
+            required
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="Nick Whitcraft"
+          />
+
+          <label htmlFor="age">Age</label>
+          <input
+            id="age"
+            className="field"
+            type="number"
+            min="13"
+            max="120"
+            value={age}
+            onChange={(event) => setAge(event.target.value)}
+            placeholder="Optional"
+          />
+          {!ageValid && <p className="form-error">Age must be between 13 and 120.</p>}
+
+          <label htmlFor="avatar">Profile picture</label>
+          <div className="avatar-upload-row">
+            <span className="avatar-preview">
+              {avatarPreview ? <img src={avatarPreview} alt="" /> : initials(displayName || username)}
+            </span>
+            <input
+              id="avatar"
+              className="field"
+              type="file"
+              accept="image/*"
+              onChange={(event) => setAvatarFile(event.target.files?.[0] || null)}
+            />
+          </div>
+
           <label htmlFor="username">Username</label>
-          <input id="username" className="field" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="nick" />
+          <input
+            id="username"
+            className="field mono-field"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="nick"
+            autoComplete="off"
+          />
+          <p className={`username-check ${usernameState.available ? 'available' : 'taken'}`}>
+            {usernameState.checking ? 'Checking...' : usernameState.available ? '✓ Available' : `✗ ${usernameState.message}`}
+          </p>
         </section>
-      )}
 
-      {step === 1 && (
-        <section className="tag-picker" aria-label="Choose interests">
-          {interests.map((item) => (
-            <button key={item} className={selected.includes(item) ? 'active' : ''} onClick={() => setSelected((value) => value.includes(item) ? value.filter((x) => x !== item) : [...value, item])}>
-              {item}
-            </button>
-          ))}
-        </section>
-      )}
+        {error && <p className="form-error">{error}</p>}
 
-      {step === 2 && (
-        <section className="suggested-list">
-          {suggested.map((user) => (
-            <button key={user.id} className={followed.has(user.id) ? 'active' : ''} onClick={() => follow(user.id)}>
-              <span>{user.display_name || user.username}</span>
-              <small>@{user.username}</small>
-            </button>
-          ))}
-        </section>
-      )}
-
-      {step === 3 && (
-        <section className="empty-state">
-          <strong>Install the Chrome extension.</strong>
-          <p>Open the extension side panel, sign in, then use Command+Shift+X to clip a source.</p>
-        </section>
-      )}
-
-      {step === 4 && (
-        <section className="empty-state">
-          <strong>Make the first clip.</strong>
-          <p>Highlight a passage, open the side panel, choose a tag, and publish your annotation.</p>
-          <Link className="button button-solid" to="/new">Start with a URL</Link>
-        </section>
-      )}
-
-      <div className="form-actions">
-        <button className="button button-outline" disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}>Back</button>
-        <button className="button button-solid" onClick={() => setStep((value) => Math.min(4, value + 1))}>{step === 4 ? 'Done' : 'Next'}</button>
-      </div>
+        <div className="form-actions">
+          <button className="button button-solid" type="submit" disabled={!canSubmit}>
+            {saving ? 'Submitting' : 'Submit'}
+          </button>
+        </div>
+      </form>
     </div>
   );
+}
+
+function initials(value) {
+  return String(value || 'A')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'A';
 }

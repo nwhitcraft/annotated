@@ -25,6 +25,10 @@ db.exec(`
     provider TEXT NOT NULL,          -- 'google' or 'twitter'
     provider_id TEXT NOT NULL,
     email TEXT,
+    blocked INTEGER DEFAULT 0,
+    subscription_tier TEXT DEFAULT 'free',
+    age INTEGER,
+    onboarding_completed INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     UNIQUE(provider, provider_id)
@@ -51,9 +55,11 @@ db.exec(`
     -- The annotation
     commentary TEXT NOT NULL,
     annotation_type TEXT DEFAULT 'Opinion',
+    status TEXT DEFAULT 'draft',      -- 'draft', 'published', 'removed'
+    published_at TEXT,
     
     -- Metadata
-    is_public INTEGER DEFAULT 1,
+    is_public INTEGER DEFAULT 0,
     pin_count INTEGER DEFAULT 0,
     noteworthy_count INTEGER DEFAULT 0,
     claim_count INTEGER DEFAULT 0,
@@ -104,8 +110,10 @@ db.exec(`
     id TEXT PRIMARY KEY,
     annotation_id TEXT NOT NULL REFERENCES annotations(id),
     claimant_email TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',    -- 'pending', 'reviewed', 'resolved'
+    reason TEXT,
+    reason_code TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',    -- 'pending', 'reviewed', 'resolved', 'annotation_removed', 'user_blocked'
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -119,7 +127,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_likes_annotation ON likes(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_noteworthy_annotation ON noteworthy(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
 `);
+
+const annotationColumnsBeforeMigration = db.prepare('PRAGMA table_info(annotations)').all().map((column) => column.name);
+const userColumnsBeforeMigration = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
 
 // Add like_count column if missing (safe migration)
 try {
@@ -131,14 +143,51 @@ for (const statement of [
   `ALTER TABLE annotations ADD COLUMN source_author TEXT`,
   `ALTER TABLE annotations ADD COLUMN source_published_at TEXT`,
   `ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'`,
+  `ALTER TABLE annotations ADD COLUMN status TEXT DEFAULT 'draft'`,
+  `ALTER TABLE annotations ADD COLUMN published_at TEXT`,
   `ALTER TABLE annotations ADD COLUMN noteworthy_count INTEGER DEFAULT 0`,
   `ALTER TABLE annotations ADD COLUMN claim_count INTEGER DEFAULT 0`,
   `ALTER TABLE users ADD COLUMN credibility_score INTEGER DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN link TEXT`,
+  `ALTER TABLE users ADD COLUMN twitter_handle TEXT`,
+  `ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'`,
+  `ALTER TABLE users ADD COLUMN age INTEGER`,
+  `ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0`,
+  `ALTER TABLE claims ADD COLUMN reason TEXT`,
+  `ALTER TABLE claims ADD COLUMN reason_code TEXT`,
+  `ALTER TABLE claims ADD COLUMN description TEXT`,
 ]) {
   try {
     db.exec(statement);
   } catch { /* column already exists */ }
 }
+
+if (!annotationColumnsBeforeMigration.includes('status')) {
+  db.exec(`
+    UPDATE annotations
+    SET status = 'published',
+        published_at = COALESCE(published_at, created_at),
+        is_public = 1
+    WHERE status = 'draft' OR status IS NULL
+  `);
+}
+
+if (!userColumnsBeforeMigration.includes('onboarding_completed')) {
+  db.exec(`
+    UPDATE users
+    SET onboarding_completed = 1
+    WHERE onboarding_completed IS NULL OR onboarding_completed = 0
+  `);
+}
+
+db.exec(`
+  UPDATE annotations SET status = 'published' WHERE status IS NULL;
+  UPDATE annotations SET is_public = 0 WHERE status IN ('draft', 'removed');
+  UPDATE annotations SET published_at = COALESCE(published_at, created_at) WHERE status = 'published';
+  UPDATE users SET onboarding_completed = 0 WHERE onboarding_completed IS NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS noteworthy (
@@ -157,13 +206,14 @@ try {
 } catch { /* column already exists */ }
 
 db.prepare(`
-  INSERT INTO users (id, username, display_name, avatar_url, bio, provider, provider_id, email)
-  VALUES ('demo-user', 'demo', 'Demo User', null, 'Local extension testing account', 'local', 'demo-user', null)
+  INSERT INTO users (id, username, display_name, avatar_url, bio, provider, provider_id, email, onboarding_completed)
+  VALUES ('demo-user', 'demo', 'Demo User', null, 'Local extension testing account', 'local', 'demo-user', null, 1)
   ON CONFLICT(id) DO UPDATE SET
     username = excluded.username,
     display_name = excluded.display_name,
     provider = excluded.provider,
     provider_id = excluded.provider_id,
+    onboarding_completed = COALESCE(users.onboarding_completed, excluded.onboarding_completed),
     updated_at = datetime('now')
 `).run();
 

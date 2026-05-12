@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-label="Keyboard shortcuts for clipping">
+  <rect width="960" height="360" fill="#fafaf8"/>
+  <rect x="42" y="38" width="876" height="284" fill="#ffffff" stroke="#deded9" stroke-width="2"/>
+  <text x="480" y="88" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">Annotated clipping shortcut</text>
+  <g transform="translate(110 142)">
+    <text x="0" y="-22" fill="#6b6b6b" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Windows / Linux</text>
+    <rect x="0" y="0" width="154" height="80" fill="#f7f7f5" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="176" y="0" width="154" height="80" fill="#f7f7f5" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="352" y="0" width="92" height="80" fill="#f7f7f5" stroke="#1a1a1a" stroke-width="2"/>
+    <text x="77" y="50" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Ctrl</text>
+    <text x="253" y="50" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Shift</text>
+    <text x="398" y="50" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">X</text>
+    <text x="161" y="50" text-anchor="middle" fill="#999999" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">+</text>
+    <text x="337" y="50" text-anchor="middle" fill="#999999" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">+</text>
+  </g>
+  <g transform="translate(560 142)">
+    <text x="0" y="-22" fill="#6b6b6b" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">Mac</text>
+    <rect x="0" y="0" width="154" height="80" fill="#f7f7f5" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="176" y="0" width="154" height="80" fill="#f7f7f5" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="352" y="0" width="92" height="80" fill="#f7f7f5" stroke="#1a1a1a" stroke-width="2"/>
+    <text x="77" y="50" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Option</text>
+    <text x="253" y="50" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Shift</text>
+    <text x="398" y="50" text-anchor="middle" fill="#1a1a1a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">X</text>
+    <text x="161" y="50" text-anchor="middle" fill="#999999" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">+</text>
+    <text x="337" y="50" text-anchor="middle" fill="#999999" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">+</text>
+  </g>
+  <text x="480" y="280" text-anchor="middle" fill="#6b6b6b" font-family="Inter, Arial, sans-serif" font-size="18">Highlight text or start media playback, then press the shortcut.</text>
+</svg>

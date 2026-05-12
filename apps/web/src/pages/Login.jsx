@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { hydrateCurrentUser, setCurrentUserId, setToken, setUsername, setAvatarUrl } from '../lib/api.js';
+import { checkAuth, setCurrentUserId, setToken, setUsername, setAvatarUrl } from '../lib/api.js';
 import AuthButtons from '../components/AuthButtons.jsx';
 
 export function AuthCallback() {
@@ -17,7 +17,13 @@ export function AuthCallback() {
       setCurrentUserId(userId);
       if (username) setUsername(username);
       if (avatarUrl) setAvatarUrl(avatarUrl);
-      hydrateCurrentUser().finally(() => navigate('/feed', { replace: true }));
+      checkAuth().then((result) => {
+        if (result.error) {
+          navigate('/login', { replace: true });
+          return;
+        }
+        navigate(result.onboardingCompleted ? '/feed' : '/onboarding', { replace: true });
+      });
     }
   }, [navigate]);
 

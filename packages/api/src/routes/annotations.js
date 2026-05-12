@@ -1,15 +1,27 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
+import { existsSync, mkdirSync } from 'fs';
+import { writeFile } from 'fs/promises';
+import { dirname, extname, join } from 'path';
+import { fileURLToPath } from 'url';
+import { extractPodcastClip, extractYouTubeClip } from '@annotated/clip-engine';
 import db from '../db.js';
 
 const app = new Hono();
 const ANNOTATION_TYPES = new Set(['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking']);
+const PUBLIC_STATUSES = new Set(['published']);
+const WRITABLE_STATUSES = new Set(['draft', 'published']);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MEDIA_DIR = join(__dirname, '..', '..', 'data', 'media');
+const MAX_MEDIA_CLIP_SECONDS = 90;
+
+if (!existsSync(MEDIA_DIR)) mkdirSync(MEDIA_DIR, { recursive: true });
 
 // List annotations (with optional filters)
 app.get('/', (c) => {
   const { user_id, source_type, annotation_type, limit = '20', offset = '0' } = c.req.query();
   
-  let sql = 'SELECT a.*, u.username, u.display_name, u.avatar_url FROM annotations a JOIN users u ON a.user_id = u.id WHERE a.is_public = 1';
+  let sql = "SELECT a.*, u.username, u.display_name, u.avatar_url FROM annotations a JOIN users u ON a.user_id = u.id WHERE a.is_public = 1 AND a.status = 'published'";
   const params = [];
 
   if (user_id) {
@@ -29,7 +41,7 @@ app.get('/', (c) => {
   params.push(Number(limit), Number(offset));
 
   const items = db.prepare(sql).all(...params);
-  const total = db.prepare('SELECT COUNT(*) as count FROM annotations WHERE is_public = 1').get();
+  const total = db.prepare("SELECT COUNT(*) as count FROM annotations WHERE is_public = 1 AND status = 'published'").get();
 
   return c.json({ items, total: total.count });
 });
@@ -50,6 +62,7 @@ app.get('/:id/claims', (c) => {
 // Get single annotation
 app.get('/:id', (c) => {
   const { id } = c.req.param();
+  const viewerId = resolveUserId(c.req.query('viewer_id'));
   const annotation = db.prepare(`
     SELECT a.*, u.username, u.display_name, u.avatar_url 
     FROM annotations a JOIN users u ON a.user_id = u.id 
@@ -57,6 +70,9 @@ app.get('/:id', (c) => {
   `).get(id);
   
   if (!annotation) return c.json({ error: 'Not found' }, 404);
+  if (annotation.status !== 'published' && viewerId !== annotation.user_id) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   // Threaded comments
   const flat = db.prepare(`
@@ -96,12 +112,52 @@ function resolveUserId(raw) {
   return byProvider ? byProvider.id : null;
 }
 
+function getUserById(userId) {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+}
+
+function isPaidUser(user) {
+  const tier = String(user?.subscription_tier || 'free').toLowerCase();
+  return tier && !['free', 'starter'].includes(tier);
+}
+
+function normalizeRequestedStatus(value, fallback = 'draft') {
+  const status = String(value || fallback).toLowerCase();
+  return WRITABLE_STATUSES.has(status) ? status : fallback;
+}
+
+function visibilityForStatus(status) {
+  return PUBLIC_STATUSES.has(status) ? 1 : 0;
+}
+
+function currentTimestamp() {
+  return db.prepare("SELECT datetime('now') AS now").get().now;
+}
+
+function positiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function clampDuration(duration) {
+  const parsed = Number(duration);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.min(parsed, MAX_MEDIA_CLIP_SECONDS);
+}
+
+function safeMediaExtension(name, mimeType = '') {
+  const extension = extname(name || '').toLowerCase();
+  if (['.webm', '.mp4', '.mov', '.m4v'].includes(extension)) return extension;
+  if (mimeType.includes('mp4')) return '.mp4';
+  return '.webm';
+}
+
 // Create annotation
 app.post('/', async (c) => {
   const body = await c.req.json();
   const { user_id: rawUserId, source_url, source_title, source_type, source_domain, source_thumbnail,
           source_site_name, source_author, source_published_at, clip_text, clip_start_sec, clip_end_sec,
-          clip_media_path, commentary, annotation_type } = body;
+          clip_media_path, commentary, annotation_type, status } = body;
 
   if (!rawUserId || !source_url || !source_type || !commentary) {
     return c.json({ error: 'Missing required fields: user_id, source_url, source_type, commentary' }, 400);
@@ -112,31 +168,158 @@ app.post('/', async (c) => {
     return c.json({ error: `User not found: ${rawUserId}` }, 404);
   }
 
+  const user = getUserById(user_id);
+  const requestedStatus = normalizeRequestedStatus(status, 'draft');
+  const finalStatus = isPaidUser(user) ? requestedStatus : 'published';
+  const publishedAt = finalStatus === 'published' ? currentTimestamp() : null;
   const id = nanoid(12);
   const safeAnnotationType = ANNOTATION_TYPES.has(annotation_type) ? annotation_type : 'Opinion';
   db.prepare(`
     INSERT INTO annotations (id, user_id, source_url, source_title, source_type, source_domain, source_site_name,
       source_author, source_published_at, source_thumbnail, clip_text, clip_start_sec, clip_end_sec,
-      clip_media_path, commentary, annotation_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      clip_media_path, commentary, annotation_type, status, published_at, is_public)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, user_id, source_url, source_title, source_type, source_domain, source_site_name || null,
     source_author || null, source_published_at || null, source_thumbnail || null, clip_text || null,
-    clip_start_sec || null, clip_end_sec || null, clip_media_path || null, commentary, safeAnnotationType);
+    clip_start_sec || null, clip_end_sec || null, clip_media_path || null, commentary, safeAnnotationType,
+    finalStatus, publishedAt, visibilityForStatus(finalStatus));
 
-  return c.json({ id, user_id, created: true }, 201);
+  return c.json({ id, user_id, status: finalStatus, published_at: publishedAt, created: true }, 201);
+});
+
+// Attach a browser-recorded video clip to an annotation
+app.post('/:id/clip-upload', async (c) => {
+  const { id } = c.req.param();
+  const annotation = db.prepare('SELECT id FROM annotations WHERE id = ?').get(id);
+  if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
+
+  const body = await c.req.parseBody();
+  const file = body.clip || body.file;
+  if (!file || typeof file.arrayBuffer !== 'function') {
+    return c.json({ error: 'clip file required' }, 400);
+  }
+
+  const startSec = positiveNumber(body.start, 0);
+  const requestedEndSec = positiveNumber(body.end, startSec + MAX_MEDIA_CLIP_SECONDS);
+  const duration = clampDuration(requestedEndSec - startSec);
+  const endSec = startSec + duration;
+  const originalName = typeof file.name === 'string' ? file.name : '';
+  const extension = safeMediaExtension(originalName, file.type);
+  const clipId = nanoid(12);
+  const filename = `${clipId}${extension}`;
+  const localPath = join(MEDIA_DIR, filename);
+
+  await writeFile(localPath, Buffer.from(await file.arrayBuffer()));
+
+  const mediaPath = `/media/${filename}`;
+  db.prepare(`
+    UPDATE annotations
+    SET clip_media_path = ?, clip_start_sec = ?, clip_end_sec = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(mediaPath, startSec, endSec, id);
+
+  return c.json({ id, clipId, mediaPath, startSec, endSec, duration, type: 'upload' });
+});
+
+// Extract a source clip server-side and attach it to an annotation
+app.post('/:id/source-clip', async (c) => {
+  const { id } = c.req.param();
+  const annotation = db.prepare('SELECT * FROM annotations WHERE id = ?').get(id);
+  if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
+
+  const body = await c.req.json().catch(() => ({}));
+  const sourceType = body.source_type || annotation.source_type;
+  const url = body.url || annotation.source_url;
+  const startSec = positiveNumber(body.start, annotation.clip_start_sec || 0);
+  const requestedEndSec = positiveNumber(body.end, annotation.clip_end_sec || startSec + MAX_MEDIA_CLIP_SECONDS);
+  const endSec = startSec + clampDuration(requestedEndSec - startSec);
+
+  if (!url) return c.json({ error: 'source url required' }, 400);
+  if (!['podcast', 'youtube'].includes(sourceType)) {
+    return c.json({ error: `Source extraction unavailable for ${sourceType || 'unknown'} clips` }, 400);
+  }
+
+  let clip;
+  try {
+    clip = sourceType === 'podcast'
+      ? await extractPodcastClip({ url, start: startSec, end: endSec, mediaDir: MEDIA_DIR })
+      : await extractYouTubeClip({ url, start: startSec, end: endSec, mediaDir: MEDIA_DIR });
+  } catch (error) {
+    return c.json({ error: 'Failed to attach source clip', detail: error.message }, 500);
+  }
+
+  db.prepare(`
+    UPDATE annotations
+    SET clip_media_path = ?,
+        clip_start_sec = ?,
+        clip_end_sec = ?,
+        source_title = ?,
+        source_thumbnail = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    clip.mediaPath,
+    clip.startSec,
+    clip.endSec,
+    clip.title || annotation.source_title || '',
+    clip.thumbnail || annotation.source_thumbnail || null,
+    id,
+  );
+
+  return c.json({ id, ...clip });
+});
+
+// Publish a paid user's draft annotation
+app.patch('/:id/publish', async (c) => {
+  const { id } = c.req.param();
+  const body = await c.req.json().catch(() => ({}));
+  const user_id = resolveUserId(body.user_id);
+  if (!user_id) return c.json({ error: 'Missing or invalid user_id' }, 400);
+
+  const user = getUserById(user_id);
+  if (!isPaidUser(user)) return c.json({ error: 'Draft publishing requires a paid subscription' }, 403);
+
+  const annotation = db.prepare('SELECT * FROM annotations WHERE id = ? AND user_id = ? AND status != ?')
+    .get(id, user_id, 'removed');
+  if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
+
+  const publishedAt = annotation.published_at || currentTimestamp();
+  db.prepare(`
+    UPDATE annotations
+    SET status = 'published',
+        is_public = 1,
+        published_at = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(publishedAt, id);
+
+  return c.json({ id, status: 'published', published_at: publishedAt });
 });
 
 // Update annotation
 app.patch('/:id', async (c) => {
   const { id } = c.req.param();
   const body = await c.req.json();
-  const allowed = ['commentary', 'is_public', 'annotation_type'];
+  const allowed = ['commentary', 'is_public', 'annotation_type', 'status'];
   const updates = [];
   const params = [];
 
   for (const key of allowed) {
     if (body[key] !== undefined) {
       if (key === 'annotation_type' && !ANNOTATION_TYPES.has(body[key])) continue;
+      if (key === 'status') {
+        const user_id = resolveUserId(body.user_id);
+        if (!user_id) return c.json({ error: 'Missing or invalid user_id' }, 400);
+        const annotation = db.prepare('SELECT * FROM annotations WHERE id = ? AND user_id = ? AND status != ?')
+          .get(id, user_id, 'removed');
+        if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
+        const user = getUserById(user_id);
+        if (!isPaidUser(user)) return c.json({ error: 'Draft status changes require a paid subscription' }, 403);
+        const nextStatus = normalizeRequestedStatus(body.status, annotation.status || 'draft');
+        updates.push('status = ?', 'is_public = ?', 'published_at = ?');
+        params.push(nextStatus, visibilityForStatus(nextStatus), nextStatus === 'published' ? (annotation.published_at || currentTimestamp()) : null);
+        continue;
+      }
       updates.push(`${key} = ?`);
       params.push(body[key]);
     }
@@ -294,7 +477,7 @@ function recalculateCredibility(annotation_id) {
       COALESCE(SUM(noteworthy_count), 0) AS noteworthy,
       COALESCE(SUM(CASE WHEN annotation_type = 'Fact Check' THEN 1 ELSE 0 END), 0) AS fact_checks
     FROM annotations
-    WHERE user_id = ?
+    WHERE user_id = ? AND status = 'published'
   `).get(row.user_id);
   const score = Number(stats.noteworthy || 0) * 5
     + Number(stats.fact_checks || 0) * 3

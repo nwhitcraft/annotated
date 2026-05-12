@@ -93,10 +93,146 @@
       font-weight: 600;
     }
 
-    .auth-slot { margin-left: auto; font-size: 13px; }
-    .auth-user { color: var(--text-secondary); font-family: var(--font-sans); }
+    .auth-slot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      font-size: 13px;
+    }
+    .auth-profile {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      gap: 7px;
+      color: inherit;
+      text-decoration: none;
+    }
+    .auth-avatar {
+      display: inline-grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 700;
+      overflow: hidden;
+    }
+    .auth-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .auth-user {
+      max-width: 124px;
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .auth-edit { color: var(--accent); text-decoration: none; font-size: 12px; font-family: var(--font-sans); font-weight: 500; }
+    .auth-edit:hover { text-decoration: underline; }
     .auth-signin { color: var(--accent); text-decoration: none; font-family: var(--font-sans); font-weight: 500; }
     .auth-signin:hover { text-decoration: underline; }
+
+    .auth-editor {
+      display: grid;
+      gap: 10px;
+      padding: 0 0 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .auth-editor label {
+      display: grid;
+      gap: 5px;
+    }
+
+    .auth-editor span {
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .auth-editor input,
+    .auth-editor textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-primary);
+      outline: none;
+      padding: 7px 8px;
+    }
+
+    .auth-editor textarea {
+      min-height: 68px;
+      resize: vertical;
+    }
+
+    .auth-editor input:focus,
+    .auth-editor textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .auth-editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .auth-editor-actions button,
+    .auth-editor-actions a {
+      padding: 0;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .auth-editor-actions button:hover,
+    .auth-editor-actions a:hover {
+      text-decoration: underline;
+    }
+
+    .auth-editor-error {
+      margin: 0;
+      color: var(--danger);
+      font-size: 12px;
+    }
+
+    .onboarding-banner {
+      display: grid;
+      gap: 6px;
+      padding: 12px 0 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .onboarding-banner strong {
+      color: var(--text-primary);
+      font-family: var(--font-serif);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1.1;
+    }
+
+    .onboarding-banner a {
+      justify-self: start;
+      color: var(--accent);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .onboarding-banner a:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
 
     .status {
       display: grid;
@@ -238,9 +374,10 @@
     </header>
 
     <div id="status" class="status" hidden></div>
+    <div id="onboarding-banner" class="onboarding-banner" hidden></div>
 
     <div class="shortcut-line">
-      <kbd>⌥⇧X</kbd> to Annotate
+      <kbd>Ctrl⇧X</kbd> / <kbd>⌥⇧X</kbd> to Annotate
     </div>
 
     <section id="feed-section">

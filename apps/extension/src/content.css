@@ -68,6 +68,27 @@
   gap: 6px;
 }
 
+.quote-annotation-bubble__clip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eeeeec;
+  color: #6b6b6b;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.quote-annotation-bubble__clip-warning {
+  color: #9f1239;
+  font-weight: 500;
+  text-transform: none;
+}
+
 .quote-annotation-bubble__tag {
   padding: 4px 10px;
   border: 1px solid #deded9;
@@ -105,6 +126,51 @@
   font-size: 11px;
 }
 
+.quote-annotation-bubble__status {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #deded9;
+  color: #6b6b6b;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.quote-annotation-bubble__status--draft {
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+
+.quote-annotation-bubble__status--published {
+  border-color: #1a1a1a;
+  color: #1a1a1a;
+}
+
+.quote-annotation-bubble__draft-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #deded9;
+  background: transparent;
+  color: #1a1a1a;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer !important;
+}
+
+.quote-annotation-bubble__draft-button:hover:not(:disabled) {
+  border-color: #1a1a1a;
+}
+
+.quote-annotation-bubble__draft-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55;
+}
+
 .quote-annotation-bubble__button {
   min-height: 34px;
   padding: 0;
@@ -125,6 +191,77 @@
 .quote-annotation-bubble__button:disabled {
   cursor: not-allowed !important;
   opacity: 0.55;
+}
+
+.annotated-recording-bubble {
+  position: fixed;
+  z-index: 2147483647;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #1a1a1a;
+  border-radius: 0;
+  background: rgba(255, 255, 253, 0.98);
+  box-shadow: none;
+  color: #1a1a1a;
+  box-sizing: border-box;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.annotated-recording-bubble__status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.annotated-recording-bubble__dot {
+  width: 8px;
+  height: 8px;
+  background: #dc2626;
+}
+
+.annotated-recording-bubble__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotated-recording-bubble__time {
+  color: #6b6b6b;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.annotated-recording-bubble__stop {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1a1a1a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer !important;
+}
+
+.annotated-recording-bubble__stop:hover:not(:disabled) {
+  color: #dc2626;
+}
+
+.annotated-recording-bubble__stop:disabled {
+  cursor: wait !important;
+  opacity: 0.6;
+}
+
+.annotated-recording-bubble__note {
+  margin: 0;
+  color: #9f1239;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 #annotated-clipping-overlay {
@@ -152,7 +289,9 @@
 }
 
 .annotated-clipping-mode .quote-annotation-bubble,
-.annotated-clipping-mode .quote-annotation-bubble * {
+.annotated-clipping-mode .quote-annotation-bubble *,
+.annotated-clipping-mode .annotated-recording-bubble,
+.annotated-clipping-mode .annotated-recording-bubble * {
   cursor: auto !important;
 }
 

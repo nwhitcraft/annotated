@@ -9,6 +9,7 @@ const statusEl = document.getElementById('status');
 const feedTitleEl = document.getElementById('feed-title');
 const feedCountEl = document.getElementById('feed-count');
 const feedListEl = document.getElementById('feed-list');
+const onboardingBannerEl = document.getElementById('onboarding-banner');
 
 hydrate();
 loadAuth().then(() => ensureUser());
@@ -24,6 +25,27 @@ feedListEl?.addEventListener('click', (event) => {
   chrome.windows.create({ url, type: 'normal', focused: true });
 });
 
+document.addEventListener('click', (event) => {
+  const editButton = event.target.closest('[data-auth-edit]');
+  if (editButton) {
+    event.preventDefault();
+    showProfileEditor();
+    return;
+  }
+
+  const cancelButton = event.target.closest('[data-auth-edit-cancel]');
+  if (cancelButton) {
+    event.preventDefault();
+    closeProfileEditor();
+  }
+});
+
+document.addEventListener('submit', (event) => {
+  if (event.target?.id !== 'auth-profile-editor') return;
+  event.preventDefault();
+  saveProfileFromSidebar(event.target);
+});
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'PAGE_DETECTED' || msg.type === 'STATE_UPDATED') {
     renderState(msg.state);
@@ -37,6 +59,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'AUTH_UPDATED') {
     loadAuth().then(() => {
       renderAuthSlot();
+      renderOnboardingBanner();
       loadFeed();
     });
   }
@@ -52,21 +75,146 @@ function hydrate() {
 async function loadAuth() {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
-      if (chrome.runtime.lastError) { resolve(); return; }
+      if (chrome.runtime.lastError) {
+        resolve();
+        return;
+      }
       authToken = response?.token || '';
       authUser = response?.user || null;
-      resolve();
+      refreshAuthUser().finally(resolve);
     });
   });
+}
+
+async function refreshAuthUser() {
+  if (!authUser?.id) return;
+  try {
+    const headers = new Headers();
+    if (authToken) headers.set('Authorization', `Bearer ${authToken}`);
+    const response = await fetch(`${API_BASE}/api/users/${encodeURIComponent(authUser.id)}`, { headers });
+    const fresh = await response.json().catch(() => ({}));
+    if (!response.ok || fresh.error) throw new Error(fresh.error || 'Profile refresh failed');
+    authUser = { ...authUser, ...fresh };
+  } catch {
+    // Keep the cached auth user if the profile refresh fails.
+  }
 }
 
 function renderAuthSlot() {
   const slot = document.getElementById('auth-slot');
   if (!slot) return;
   if (authUser) {
-    slot.innerHTML = `<span class="auth-user">${escapeHtml(authUser.display_name || authUser.username || 'You')}</span>`;
+    const label = authUser.display_name || authUser.username || 'You';
+    const profileHref = authUser.username
+      ? `${WEB_BASE}/u/${encodeURIComponent(authUser.username)}?edit=1`
+      : `${WEB_BASE}/feed`;
+    slot.innerHTML = `
+      <a class="auth-profile" href="${escapeAttr(profileHref)}" target="_blank" rel="noreferrer">
+        <span class="auth-avatar">${authUser.avatar_url ? `<img src="${escapeAttr(authUser.avatar_url)}" alt="">` : escapeHtml(initials(label))}</span>
+        <span class="auth-user">${escapeHtml(label)}</span>
+      </a>
+      <button class="auth-edit" type="button" data-auth-edit>Edit</button>
+    `;
   } else {
     slot.innerHTML = `<a href="${escapeAttr(WEB_BASE)}/extension-auth" target="_blank" class="auth-signin">Sign in</a>`;
+  }
+  renderOnboardingBanner();
+}
+
+function renderOnboardingBanner() {
+  if (!onboardingBannerEl) return;
+  const needsOnboarding = authUser?.id && !Boolean(Number(authUser.onboarding_completed));
+  onboardingBannerEl.hidden = !needsOnboarding;
+  if (!needsOnboarding) {
+    onboardingBannerEl.innerHTML = '';
+    return;
+  }
+
+  onboardingBannerEl.innerHTML = `
+    <strong>Complete your profile setup</strong>
+    <span>Your account is connected. Finish onboarding before your profile goes live.</span>
+    <a href="${escapeAttr(WEB_BASE)}/onboarding" target="_blank" rel="noreferrer">Open onboarding</a>
+  `;
+}
+
+function showProfileEditor() {
+  if (!authUser?.id) return;
+  closeProfileEditor();
+  const header = document.querySelector('.topline');
+  if (!header) return;
+  const webProfileHref = authUser.username
+    ? `${WEB_BASE}/u/${encodeURIComponent(authUser.username)}?edit=1`
+    : `${WEB_BASE}/feed`;
+  header.insertAdjacentHTML('afterend', `
+    <form id="auth-profile-editor" class="auth-editor">
+      <label>
+        <span>Display name</span>
+        <input name="display_name" required value="${escapeAttr(authUser.display_name || authUser.username || '')}">
+      </label>
+      <label>
+        <span>Bio</span>
+        <textarea name="bio" maxlength="280">${escapeHtml(authUser.bio || '')}</textarea>
+      </label>
+      <label>
+        <span>Avatar URL</span>
+        <input name="avatar_url" type="url" value="${escapeAttr(authUser.avatar_url || '')}">
+      </label>
+      <label>
+        <span>Link</span>
+        <input name="link" type="url" value="${escapeAttr(authUser.link || '')}">
+      </label>
+      <label>
+        <span>X handle</span>
+        <input name="twitter_handle" value="${escapeAttr(authUser.twitter_handle || '')}">
+      </label>
+      <p class="auth-editor-error" hidden></p>
+      <div class="auth-editor-actions">
+        <button type="submit">Save</button>
+        <button type="button" data-auth-edit-cancel>Cancel</button>
+        <a href="${escapeAttr(webProfileHref)}" target="_blank" rel="noreferrer">Open web</a>
+      </div>
+    </form>
+  `);
+}
+
+function closeProfileEditor() {
+  document.getElementById('auth-profile-editor')?.remove();
+}
+
+async function saveProfileFromSidebar(form) {
+  if (!authUser?.id) return;
+  const button = form.querySelector('button[type="submit"]');
+  const errorEl = form.querySelector('.auth-editor-error');
+  button.disabled = true;
+  button.textContent = 'Saving';
+  errorEl.hidden = true;
+
+  try {
+    const payload = {
+      display_name: form.elements.display_name.value,
+      bio: form.elements.bio.value,
+      avatar_url: form.elements.avatar_url.value,
+      link: form.elements.link.value,
+      twitter_handle: form.elements.twitter_handle.value.replace(/^@+/, ''),
+    };
+    const updated = await fetchJson(`/api/users/${encodeURIComponent(authUser.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    authUser = { ...authUser, ...updated };
+    if (authToken) {
+      chrome.runtime.sendMessage({ type: 'STORE_AUTH_TOKEN', token: authToken, user: authUser }, () => {
+        void chrome.runtime.lastError;
+      });
+    }
+    renderAuthSlot();
+    closeProfileEditor();
+  } catch (error) {
+    errorEl.hidden = false;
+    errorEl.textContent = error.message || 'Could not save profile';
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Save';
   }
 }
 
@@ -164,7 +312,7 @@ function renderFeed(title, items) {
         ${escapeHtml(sourceLabel(item))}
       </a>
       <p class="feed-commentary">${escapeHtml(item.commentary || '')}</p>
-      ${item.clip_text ? `<blockquote class="feed-quote">${escapeHtml(truncate(item.clip_text, 180))}</blockquote>` : `<p class="feed-quote">${escapeHtml(mediaRange(item))}</p>`}
+      ${clipPreview(item)}
       <div class="feed-actions">
         <button class="feed-action" type="button" data-comment-url="${escapeAttr(annotationCommentsUrl(item))}" aria-label="Open comments">
           <span aria-hidden="true">○</span>
@@ -195,8 +343,17 @@ function sourceLabel(source) {
 
 function typeLabel(type) {
   if (type === 'youtube') return 'Video';
+  if (type === 'video') return 'Video';
   if (type === 'podcast') return 'Audio';
   return 'Article';
+}
+
+function clipPreview(item) {
+  if (item.clip_text) return `<blockquote class="feed-quote">${escapeHtml(truncate(item.clip_text, 180))}</blockquote>`;
+  const attachment = item.clip_media_path
+    ? ` / <a href="${escapeAttr(`${API_BASE}${item.clip_media_path}`)}" target="_blank" rel="noreferrer">Clip attached</a>`
+    : '';
+  return `<p class="feed-quote">${escapeHtml(mediaRange(item))}${attachment}</p>`;
 }
 
 function mediaRange(item) {
@@ -238,4 +395,13 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value).replaceAll('`', '&#096;');
+}
+
+function initials(value) {
+  return String(value || 'You')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'Y';
 }

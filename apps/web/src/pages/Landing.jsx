@@ -16,6 +16,10 @@ const productNotes = [
     label: 'Discuss',
     copy: 'Publish into a feed built around threaded commentary instead of disposable bookmarks.',
   },
+  {
+    label: 'Protect',
+    copy: 'Every clip includes a "File a Claim" button so creators can dispute unfair use. Fair use, made visible.',
+  },
 ];
 
 export default function Landing() {
@@ -40,7 +44,7 @@ export default function Landing() {
           <div className="landing-kicker">Social commentary for the open web</div>
           <h1 id="landing-title">Clip the internet. Publish the argument.</h1>
           <p>
-            Annotated is a place to quote articles, videos, and podcasts with context, then discuss the take in a public thread.
+            Annotated is a place to quote articles, videos, and podcasts with context, then discuss the take in a public thread. Every clip includes a "File a Claim" button so creators can dispute unfair use.
           </p>
           <div className="landing-auth">
             {username ? (
@@ -59,7 +63,7 @@ export default function Landing() {
             The resilience of consumer spending and the adaptability of businesses have changed the forecast.
           </blockquote>
           <h2>The useful layer is not the link. It is the argument attached to it.</h2>
-          <div className="proof-actions">♡ 42 · ○ 8 · Share</div>
+          <div className="proof-actions">♡ 42 · ○ 8 · <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>File a claim</span></div>
         </aside>
       </main>
 
