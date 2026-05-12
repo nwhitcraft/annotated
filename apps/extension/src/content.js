@@ -326,7 +326,7 @@ function scheduleAnchoredUiUpdate() {
 
 async function postAnnotation(composer) {
   const textarea = composer.querySelector('textarea');
-  const button = composer.querySelector('button');
+  const button = composer.querySelector('.quote-annotation-bubble__button');
   const commentary = textarea.value.trim();
   if (!commentary || !activeClip) return;
 
