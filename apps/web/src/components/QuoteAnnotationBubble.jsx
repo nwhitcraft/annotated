@@ -10,6 +10,7 @@ export default function QuoteAnnotationBubble({
   disabled = false,
   textareaId = 'quote-annotation-body',
   actions = null,
+  maxLength,
 }) {
   return (
     <section className="quote-annotation-bubble" aria-label="Quote annotation">
@@ -27,6 +28,7 @@ export default function QuoteAnnotationBubble({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         rows={5}
+        maxLength={maxLength}
       />
 
       <div className="quote-annotation-bubble__actions">

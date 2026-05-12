@@ -8,6 +8,7 @@ const app = new Hono();
 const JWT_SECRET = process.env.JWT_SECRET || 'annotated-dev-secret-change-in-prod';
 const JWT_EXPIRY = '7d';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3090';
+const DESKTOP_CALLBACK_URL = process.env.DESKTOP_CALLBACK_URL || 'annotated://callback';
 
 // --- Google OAuth ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -17,9 +18,11 @@ const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT || '/api/auth/google/callbac
 app.get('/google', (c) => {
   if (!GOOGLE_CLIENT_ID) {
     // Dev fallback: redirect to demo login
-    return c.redirect('/api/auth/demo?provider=google');
+    const client = c.req.query('client') === 'desktop' ? '&client=desktop' : '';
+    return c.redirect(`/api/auth/demo?provider=google${client}`);
   }
   const redirectUri = `${new URL(c.req.url).origin}${GOOGLE_REDIRECT}`;
+  const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -27,12 +30,14 @@ app.get('/google', (c) => {
     scope: 'openid email profile',
     access_type: 'offline',
     prompt: 'consent',
+    state: client,
   });
   return c.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
 
 app.get('/google/callback', async (c) => {
   const code = c.req.query('code');
+  const client = c.req.query('state') === 'desktop' ? 'desktop' : 'web';
   if (!code) return c.json({ error: 'Missing authorization code' }, 400);
 
   try {
@@ -68,7 +73,7 @@ app.get('/google/callback', async (c) => {
     });
 
     const token = signToken(user);
-    return c.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
+    return c.redirect(callbackTarget(token, client));
   } catch (err) {
     console.error('Google OAuth error:', err.message);
     return c.redirect(`${FRONTEND_URL}/login?error=google_failed`);
@@ -85,10 +90,12 @@ const pkceStore = new Map();
 
 app.get('/twitter', async (c) => {
   if (!TWITTER_CLIENT_ID) {
-    return c.redirect('/api/auth/demo?provider=twitter');
+    const client = c.req.query('client') === 'desktop' ? '&client=desktop' : '';
+    return c.redirect(`/api/auth/demo?provider=twitter${client}`);
   }
   const state = nanoid(16);
   const codeVerifier = nanoid(64);
+  const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
 
   // S256 challenge
   const encoder = new TextEncoder();
@@ -97,7 +104,7 @@ app.get('/twitter', async (c) => {
   const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-  pkceStore.set(state, { codeVerifier, created: Date.now() });
+  pkceStore.set(state, { codeVerifier, client, created: Date.now() });
   // Clean old entries
   for (const [k, v] of pkceStore) {
     if (Date.now() - v.created > 600000) pkceStore.delete(k);
@@ -159,7 +166,7 @@ app.get('/twitter/callback', async (c) => {
     });
 
     const token = signToken(user);
-    return c.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
+    return c.redirect(callbackTarget(token, pkce.client));
   } catch (err) {
     console.error('Twitter OAuth error:', err.message);
     return c.redirect(`${FRONTEND_URL}/login?error=twitter_failed`);
@@ -169,6 +176,7 @@ app.get('/twitter/callback', async (c) => {
 // --- Demo login (development only) ---
 app.get('/demo', (c) => {
   const provider = c.req.query('provider') || 'demo';
+  const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
   const demoUsers = {
     google: { provider: 'google', provider_id: 'demo-google-1', email: 'maya@annotated.com', display_name: 'Maya Desai', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=96&q=80', username: 'mayadesai' },
     twitter: { provider: 'twitter', provider_id: 'demo-twitter-1', email: null, display_name: 'Maya Desai', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=96&q=80', username: 'mayadesai' },
@@ -178,7 +186,7 @@ app.get('/demo', (c) => {
   const profile = demoUsers[provider] || demoUsers.demo;
   const user = upsertUser(profile);
   const token = signToken(user);
-  return c.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
+  return c.redirect(callbackTarget(token, client));
 });
 
 // --- Current user (JWT-protected) ---
@@ -247,6 +255,13 @@ function signToken(user) {
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
   );
+}
+
+function callbackTarget(token, client = 'web') {
+  if (client === 'desktop') {
+    return `${DESKTOP_CALLBACK_URL}?token=${encodeURIComponent(token)}`;
+  }
+  return `${FRONTEND_URL}/auth/callback?token=${encodeURIComponent(token)}`;
 }
 
 export { JWT_SECRET };

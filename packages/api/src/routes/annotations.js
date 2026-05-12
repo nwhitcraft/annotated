@@ -11,6 +11,7 @@ const app = new Hono();
 const ANNOTATION_TYPES = new Set(['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking']);
 const PUBLIC_STATUSES = new Set(['published']);
 const WRITABLE_STATUSES = new Set(['draft', 'published']);
+const MAX_COMMENTARY_LENGTH = 360;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MEDIA_DIR = join(__dirname, '..', '..', 'data', 'media');
 const MAX_MEDIA_CLIP_SECONDS = 90;
@@ -162,6 +163,9 @@ app.post('/', async (c) => {
   if (!rawUserId || !source_url || !source_type || !commentary) {
     return c.json({ error: 'Missing required fields: user_id, source_url, source_type, commentary' }, 400);
   }
+  if (String(commentary).trim().length > MAX_COMMENTARY_LENGTH) {
+    return c.json({ error: `commentary must be ${MAX_COMMENTARY_LENGTH} characters or fewer` }, 400);
+  }
 
   const user_id = resolveUserId(rawUserId);
   if (!user_id) {
@@ -307,6 +311,9 @@ app.patch('/:id', async (c) => {
   for (const key of allowed) {
     if (body[key] !== undefined) {
       if (key === 'annotation_type' && !ANNOTATION_TYPES.has(body[key])) continue;
+      if (key === 'commentary' && String(body[key] || '').trim().length > MAX_COMMENTARY_LENGTH) {
+        return c.json({ error: `commentary must be ${MAX_COMMENTARY_LENGTH} characters or fewer` }, 400);
+      }
       if (key === 'status') {
         const user_id = resolveUserId(body.user_id);
         if (!user_id) return c.json({ error: 'Missing or invalid user_id' }, 400);
@@ -361,11 +368,25 @@ app.post('/:id/noteworthy', async (c) => {
   return c.json({ noteworthy: true });
 });
 
-// Delete annotation
-app.delete('/:id', (c) => {
+// Remove annotation from public/profile surfaces while keeping the audit trail.
+app.delete('/:id', async (c) => {
   const { id } = c.req.param();
-  db.prepare('DELETE FROM annotations WHERE id = ?').run(id);
-  return c.json({ deleted: true });
+  const body = await c.req.json().catch(() => ({}));
+  const user_id = resolveUserId(body.user_id);
+  if (!user_id) return c.json({ error: 'Missing or invalid user_id' }, 400);
+
+  const annotation = db.prepare('SELECT id FROM annotations WHERE id = ? AND user_id = ?')
+    .get(id, user_id);
+  if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
+
+  db.prepare(`
+    UPDATE annotations
+    SET status = 'removed',
+        is_public = 0,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(id);
+  return c.json({ removed: true });
 });
 
 // Add comment (supports nested replies via parent_id)
@@ -391,7 +412,13 @@ app.post('/:id/comments', async (c) => {
   db.prepare('UPDATE annotations SET comment_count = comment_count + 1 WHERE id = ?')
     .run(annotation_id);
 
-  return c.json({ id, created: true }, 201);
+  const comment = db.prepare(`
+    SELECT c.*, u.username, u.display_name, u.avatar_url
+    FROM comments c JOIN users u ON c.user_id = u.id
+    WHERE c.id = ?
+  `).get(id);
+
+  return c.json({ ...comment, replies: [], created: true }, 201);
 });
 
 // Get comments as a threaded tree
@@ -434,12 +461,14 @@ app.post('/:id/like', async (c) => {
       .run(user_id, annotation_id);
     db.prepare('UPDATE annotations SET like_count = MAX(0, like_count - 1) WHERE id = ?')
       .run(annotation_id);
+    recalculateCredibility(annotation_id);
     return c.json({ liked: false });
   } else {
     db.prepare('INSERT INTO likes (user_id, annotation_id) VALUES (?, ?)')
       .run(user_id, annotation_id);
     db.prepare('UPDATE annotations SET like_count = like_count + 1 WHERE id = ?')
       .run(annotation_id);
+    recalculateCredibility(annotation_id);
     return c.json({ liked: true });
   }
 });
@@ -475,11 +504,13 @@ function recalculateCredibility(annotation_id) {
     SELECT
       COUNT(*) AS annotations,
       COALESCE(SUM(noteworthy_count), 0) AS noteworthy,
+      COALESCE(SUM(like_count), 0) AS credible,
       COALESCE(SUM(CASE WHEN annotation_type = 'Fact Check' THEN 1 ELSE 0 END), 0) AS fact_checks
     FROM annotations
     WHERE user_id = ? AND status = 'published'
   `).get(row.user_id);
-  const score = Number(stats.noteworthy || 0) * 5
+  const score = Number(stats.credible || 0)
+    + Number(stats.noteworthy || 0)
     + Number(stats.fact_checks || 0) * 3
     + Number(stats.annotations || 0);
   db.prepare('UPDATE users SET credibility_score = ? WHERE id = ?').run(score, row.user_id);

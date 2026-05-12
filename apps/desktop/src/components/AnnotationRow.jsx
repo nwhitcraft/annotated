@@ -15,7 +15,7 @@ export default function AnnotationRow({ annotation, active, onOpen, onContext })
         <strong>{annotation.source_domain}</strong>
         <span>{formatDate(annotation.updated_at)}</span>
         <SourceType type={annotation.source_type} />
-        {annotation.is_public ? <span>posted</span> : <span>local</span>}
+        {annotation.is_public ? <span className="visibility-state public">Public</span> : <span className="visibility-state private">Private</span>}
       </div>
       <a className="source-title">{annotation.source_title || annotation.source_url}</a>
       {annotation.clip_text && <blockquote>{annotation.clip_text}</blockquote>}

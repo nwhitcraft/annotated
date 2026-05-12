@@ -3,20 +3,51 @@ import { useEffect, useState } from 'react';
 import UserAvatar from './UserAvatar.jsx';
 import UserSearch from './UserSearch.jsx';
 import { currentUser } from '../lib/mockData.js';
-import { getAvatarUrl, getDisplayName, getToken, getUsername } from '../lib/api.js';
+import { checkAuth, getAvatarUrl, getCurrentUserId, getDisplayName, getToken, getUsername } from '../lib/api.js';
 
 export default function Layout() {
   const [viewer, setViewer] = useState(currentUser);
 
   useEffect(() => {
-    if (!getToken()) return;
-    const username = getUsername() || currentUser.username;
-    setViewer({
-      ...currentUser,
-      username,
-      display_name: getDisplayName() || username,
-      avatar_url: getAvatarUrl() || currentUser.avatar_url,
+    let cancelled = false;
+    const cachedViewer = () => {
+      const cachedUsername = getUsername() || currentUser.username;
+      return {
+        ...currentUser,
+        id: getCurrentUserId(),
+        username: cachedUsername,
+        display_name: getDisplayName() || cachedUsername,
+        avatar_url: getAvatarUrl() || '',
+      };
+    };
+    const applyCachedViewer = (event) => {
+      setViewer((current) => ({
+        ...current,
+        ...cachedViewer(),
+        ...(event?.detail || {}),
+      }));
+    };
+
+    applyCachedViewer();
+    window.addEventListener('annotated:user-updated', applyCachedViewer);
+
+    if (!getToken()) return () => {
+      cancelled = true;
+      window.removeEventListener('annotated:user-updated', applyCachedViewer);
+    };
+
+    checkAuth().then((result) => {
+      if (cancelled || result.error) return;
+      setViewer({
+        ...currentUser,
+        ...result.user,
+        avatar_url: result.user.avatar_url || '',
+      });
     });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('annotated:user-updated', applyCachedViewer);
+    };
   }, []);
 
   return (

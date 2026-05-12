@@ -6,13 +6,17 @@ import LibraryView from './components/LibraryView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import {
   addLocalComment,
+  authUrl,
+  checkAuth,
   deleteAnnotation,
   exportAnnotation,
+  getCachedUser,
   listAnnotations,
   loadSettings,
   postAnnotation,
   saveAnnotation,
   saveSettings,
+  setAuthTokenFromCallback,
 } from './lib/localStore.js';
 
 const views = [
@@ -28,15 +32,25 @@ export default function App() {
   const [activeId, setActiveId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [settings, setSettings] = useState({});
+  const [authUser, setAuthUser] = useState(getCachedUser());
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [visibilityFilter, setVisibilityFilter] = useState('private');
   const [tagFilter, setTagFilter] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [status, setStatus] = useState('Ready');
 
   useEffect(() => {
     refresh();
-    loadSettings().then(setSettings);
+    loadSettings().then((value) => {
+      setSettings(value);
+      checkAuth(value).then((result) => {
+        if (result.user) {
+          setAuthUser(result.user);
+          setStatus(`Signed in as ${result.user.display_name || result.user.username}`);
+        }
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -69,11 +83,13 @@ export default function App() {
     return annotations.filter((item) => {
       const haystack = `${item.source_title} ${item.source_domain} ${item.clip_text} ${item.commentary} ${(item.tags || []).join(' ')}`.toLowerCase();
       const typeOk = typeFilter === 'all' || item.source_type === typeFilter;
+      const visibilityOk = visibilityFilter === 'all'
+        || (visibilityFilter === 'public' ? Number(item.is_public) === 1 : Number(item.is_public || 0) === 0);
       const searchOk = !term || haystack.includes(term);
       const tagOk = !tag || (item.tags || []).some((value) => value.toLowerCase().includes(tag));
-      return typeOk && searchOk && tagOk;
+      return typeOk && visibilityOk && searchOk && tagOk;
     });
-  }, [annotations, search, typeFilter, tagFilter]);
+  }, [annotations, search, typeFilter, visibilityFilter, tagFilter]);
 
   const activeAnnotation = annotations.find((item) => item.id === activeId) || null;
 
@@ -87,9 +103,14 @@ export default function App() {
   }
 
   async function post(id) {
-    const posted = await postAnnotation(id);
-    setStatus('Marked as posted');
-    await refresh(posted?.id || id);
+    try {
+      const posted = await postAnnotation(id);
+      setStatus('Published to Annotated feed');
+      await refresh(posted?.id || id);
+    } catch (error) {
+      setStatus(error.message || 'Could not publish');
+      throw error;
+    }
   }
 
   async function remove(id) {
@@ -114,6 +135,23 @@ export default function App() {
   async function exportItem(annotation) {
     await exportAnnotation(annotation);
     setStatus('Export copied to clipboard');
+  }
+
+  function signIn(provider) {
+    window.open(authUrl(provider, settings), '_blank', 'noopener,noreferrer');
+    setStatus('Opened browser sign-in. Paste the annotated://callback URL here when it returns.');
+    setActiveView('settings');
+  }
+
+  async function connectCallback(value) {
+    setAuthTokenFromCallback(value);
+    const result = await checkAuth(settings);
+    if (result.user) {
+      setAuthUser(result.user);
+      setStatus(`Signed in as ${result.user.display_name || result.user.username}`);
+      return result.user;
+    }
+    throw new Error(result.error || 'Could not verify token');
   }
 
   function open(annotation) {
@@ -146,16 +184,18 @@ export default function App() {
       </aside>
 
       <main className="workspace">
-        {activeView === 'compose' && <Composer editing={editing} onSave={save} onPost={post} />}
+        {activeView === 'compose' && <Composer editing={editing} authUser={authUser} onSave={save} onPost={post} onSignIn={signIn} />}
         {activeView === 'library' && (
           <LibraryView
             annotations={filtered}
             activeId={activeId}
             search={search}
             typeFilter={typeFilter}
+            visibilityFilter={visibilityFilter}
             tagFilter={tagFilter}
             onSearch={setSearch}
             onTypeFilter={setTypeFilter}
+            onVisibilityFilter={setVisibilityFilter}
             onTagFilter={setTagFilter}
             onOpen={open}
             onContext={openMenu}
@@ -164,19 +204,28 @@ export default function App() {
         {activeView === 'detail' && (
           <DetailView annotation={activeAnnotation} onPost={post} onDelete={remove} onExport={exportItem} onTagsChange={updateTags} onComment={addComment} />
         )}
-        {activeView === 'settings' && <SettingsView settings={settings} onChange={setSettings} onSave={async (value) => { await saveSettings(value); setStatus('Settings saved'); }} />}
+        {activeView === 'settings' && (
+          <SettingsView
+            settings={settings}
+            authUser={authUser}
+            onChange={setSettings}
+            onSignIn={signIn}
+            onCallback={connectCallback}
+            onSave={async (value) => { await saveSettings(value); setStatus('Settings saved'); }}
+          />
+        )}
       </main>
 
       <footer className="status-bar">
         <span>{status}</span>
-        <span>{annotations.filter((item) => !item.is_public).length} local drafts</span>
+        <span>{annotations.filter((item) => !item.is_public).length} private · {annotations.filter((item) => item.is_public).length} public</span>
       </footer>
 
       {contextMenu && (
         <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
           <button onClick={() => edit(contextMenu.annotation)}>Edit</button>
           <button onClick={() => { remove(contextMenu.annotation.id); setContextMenu(null); }}>Delete</button>
-          <button onClick={() => { post(contextMenu.annotation.id); setContextMenu(null); }}>Post</button>
+          <button onClick={() => { post(contextMenu.annotation.id); setContextMenu(null); }}>Make public</button>
           <button onClick={() => { exportItem(contextMenu.annotation); setContextMenu(null); }}>Export</button>
         </div>
       )}

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import AnnotationItem from '../components/AnnotationItem.jsx';
 import CommentThread from '../components/CommentThread.jsx';
 import { currentUser } from '../lib/mockData.js';
-import { getAnnotation, postComment } from '../lib/api.js';
+import { checkAuth, getAnnotation, postComment } from '../lib/api.js';
 
 function childrenOf(comment) {
   return comment.replies || comment.children || comment.comments || [];
@@ -26,6 +26,13 @@ function replaceId(comments, oldId, newId) {
   }));
 }
 
+function replaceComment(comments, oldId, nextComment) {
+  return comments.map((comment) => {
+    if (comment.id === oldId) return { ...nextComment, replies: childrenOf(nextComment) };
+    return { ...comment, replies: replaceComment(childrenOf(comment), oldId, nextComment) };
+  });
+}
+
 export default function AnnotationPage() {
   const { id } = useParams();
   const [annotation, setAnnotation] = useState(null);
@@ -35,6 +42,7 @@ export default function AnnotationPage() {
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimSent, setClaimSent] = useState(false);
   const [claim, setClaim] = useState({ email: '', reason_code: 'copyright', description: '' });
+  const [viewer, setViewer] = useState(currentUser);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,14 +65,24 @@ export default function AnnotationPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    checkAuth().then((result) => {
+      if (!cancelled && !result.error) setViewer(result.user);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const commentCount = useMemo(() => comments.length, [comments]);
 
   async function addComment(body, parentId) {
     const optimistic = {
       id: `local-${Date.now()}`,
-      username: currentUser.username,
-      display_name: currentUser.display_name,
-      avatar_url: currentUser.avatar_url,
+      username: viewer.username,
+      display_name: viewer.display_name || viewer.username,
+      avatar_url: viewer.avatar_url,
       body,
       created_at: new Date().toISOString(),
       replies: [],
@@ -72,7 +90,11 @@ export default function AnnotationPage() {
     setComments((existing) => insertComment(existing, parentId, optimistic));
     setAnnotation((item) => item ? { ...item, comment_count: Number(item.comment_count || 0) + 1 } : item);
     const saved = await postComment(id, body, parentId);
-    if (saved?.id) setComments((existing) => replaceId(existing, optimistic.id, saved.id));
+    if (saved?.id) {
+      setComments((existing) => saved.username
+        ? replaceComment(existing, optimistic.id, saved)
+        : replaceId(existing, optimistic.id, saved.id));
+    }
   }
 
   async function fileClaim(event) {

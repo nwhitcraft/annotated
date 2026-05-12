@@ -1,7 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
-function getCurrentUserId() {
+const TOKEN_KEY = 'annotated.jwt';
+const USER_ID_KEY = 'annotated.user_id';
+const USERNAME_KEY = 'annotated.username';
+const AVATAR_URL_KEY = 'annotated.avatar_url';
+const DISPLAY_NAME_KEY = 'annotated.display_name';
+const SUBSCRIPTION_TIER_KEY = 'annotated.subscription_tier';
+
+export function getCurrentUserId() {
   return window.localStorage.getItem('annotated.user_id') || 'local-user';
 }
 
@@ -50,9 +57,85 @@ const demoAnnotations = [
 
 const defaultSettings = {
   apiEndpoint: 'http://localhost:3080',
+  frontendUrl: 'http://localhost:3090',
   hotkey: 'CommandOrControl+Shift+A',
   storageLocation: 'Application support / Annotated / annotated.sqlite',
 };
+
+export function getToken() {
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  if (token) window.localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(USER_ID_KEY);
+  window.localStorage.removeItem(USERNAME_KEY);
+  window.localStorage.removeItem(AVATAR_URL_KEY);
+  window.localStorage.removeItem(DISPLAY_NAME_KEY);
+  window.localStorage.removeItem(SUBSCRIPTION_TIER_KEY);
+}
+
+export function getCachedUser() {
+  const id = window.localStorage.getItem(USER_ID_KEY);
+  if (!id) return null;
+  return {
+    id,
+    username: window.localStorage.getItem(USERNAME_KEY) || '',
+    display_name: window.localStorage.getItem(DISPLAY_NAME_KEY) || '',
+    avatar_url: window.localStorage.getItem(AVATAR_URL_KEY) || '',
+    subscription_tier: window.localStorage.getItem(SUBSCRIPTION_TIER_KEY) || 'free',
+  };
+}
+
+function cacheUser(user) {
+  if (!user?.id) return;
+  window.localStorage.setItem(USER_ID_KEY, user.id);
+  window.localStorage.setItem(USERNAME_KEY, user.username || '');
+  window.localStorage.setItem(DISPLAY_NAME_KEY, user.display_name || user.username || '');
+  if (user.avatar_url) window.localStorage.setItem(AVATAR_URL_KEY, user.avatar_url);
+  else window.localStorage.removeItem(AVATAR_URL_KEY);
+  window.localStorage.setItem(SUBSCRIPTION_TIER_KEY, user.subscription_tier || 'free');
+}
+
+export function authUrl(provider, settings = {}) {
+  const endpoint = (settings.apiEndpoint || defaultSettings.apiEndpoint).replace(/\/$/, '');
+  return `${endpoint}/api/auth/${provider}?client=desktop`;
+}
+
+export function setAuthTokenFromCallback(value) {
+  const input = String(value || '').trim();
+  if (!input) throw new Error('Paste a callback URL or token first.');
+  let token = input;
+  try {
+    const url = new URL(input);
+    token = url.searchParams.get('token') || url.searchParams.get('jwt') || input;
+  } catch {
+    // Plain token paste.
+  }
+  if (!token || token === input && input.includes('://')) throw new Error('No token found in callback URL.');
+  setToken(token);
+  return token;
+}
+
+export async function checkAuth(settings = {}) {
+  const token = getToken();
+  if (!token) return { user: null, error: 'unauthorized' };
+  const endpoint = (settings.apiEndpoint || defaultSettings.apiEndpoint).replace(/\/$/, '');
+  const response = await fetch(`${endpoint}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    clearToken();
+    return { user: null, error: data.error || 'unauthorized' };
+  }
+  cacheUser(data);
+  return { user: data };
+}
 
 function readLocal() {
   const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -106,26 +189,28 @@ export async function deleteAnnotation(id) {
 }
 
 export async function postAnnotation(id) {
-  if (isTauri) {
-    const local = await invoke('post_annotation', { id });
-    await syncAnnotation(local);
-    return local;
-  }
+  const annotation = await getAnnotation(id);
+  if (!annotation) throw new Error('Annotation not found.');
+  await syncAnnotation({ ...annotation, is_public: 1 });
   const now = new Date().toISOString();
-  const next = readLocal().map((item) => item.id === id ? { ...item, is_public: 1, synced_at: now, updated_at: now } : item);
-  writeLocal(next);
-  return next.find((item) => item.id === id);
+  const updated = {
+    ...annotation,
+    is_public: 1,
+    synced_at: now,
+    updated_at: now,
+    user_id: getCurrentUserId(),
+  };
+  return saveAnnotation(updated);
 }
 
 export async function syncAnnotation(annotation) {
-  if (!isTauri) return annotation;
+  const token = getToken();
+  if (!token) throw new Error('Sign in before publishing to the public feed.');
   try {
     const endpoint = await getApiEndpoint();
     const userId = getCurrentUserId();
-    const tags = annotation.tags || [];
-    const tagsJson = JSON.stringify(tags);
     const body = {
-      user_id: annotation.user_id || userId,
+      user_id: userId,
       source_url: annotation.source_url,
       source_type: annotation.source_type,
       source_title: annotation.source_title,
@@ -136,21 +221,22 @@ export async function syncAnnotation(annotation) {
       clip_end_sec: annotation.clip_end_sec || null,
       commentary: annotation.commentary,
       annotation_type: annotation.annotation_type || 'Opinion',
-      tags: tags,
       is_public: annotation.is_public ? 1 : 0,
+      status: 'published',
     };
     const response = await fetch(`${endpoint}/api/annotations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(body),
     });
-    if (!response.ok) {
-      console.warn('API sync failed:', response.status, await response.text());
-    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(data.error || `API sync failed: ${response.status}`);
     return annotation;
   } catch (err) {
-    console.warn('API sync error:', err.message);
-    return annotation;
+    throw new Error(err.message || 'API sync failed');
   }
 }
 
@@ -173,6 +259,7 @@ export async function loadSettings() {
 }
 
 export async function saveSettings(settings) {
+  cachedSettings = { ...defaultSettings, ...settings };
   if (isTauri) return invoke('save_settings', { settings });
   window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   return settings;
@@ -185,12 +272,12 @@ export async function runDesktopDiagnostics() {
       podcast: { ok: false, blocker: 'Run inside Tauri to exercise ffmpeg.' },
       whisper: { ok: false, blocker: 'Run inside Tauri to exercise Whisper.' },
       screen: { ok: false, blocker: 'Screen capture requires Tauri permissions.' },
-      auth: { ok: true, stdout: 'annotated://callback parser available in Tauri build.' },
+      auth: { ok: true, stdout: 'Desktop callback token parser available; deep-link auto-open needs the Tauri deep-link plugin before packaged auth is seamless.' },
     };
   }
   const [screen, auth] = await Promise.all([
     invoke('screen_clip_diagnostic'),
-    invoke('handle_auth_callback', { callbackUrl: 'annotated://callback?token=diagnostic' }).then((stdout) => ({ ok: true, stdout })).catch((error) => ({ ok: false, blocker: String(error) })),
+    invoke('handle_auth_callback', { callbackUrl: 'annotated://callback?token=diagnostic' }).then(() => ({ ok: true, stdout: 'Callback parser ready; automatic URL handling still needs packaged deep-link registration.' })).catch((error) => ({ ok: false, blocker: String(error) })),
   ]);
   return {
     youtube: { ok: false, blocker: 'Provide a YouTube URL in a clipping workflow to run yt-dlp.' },

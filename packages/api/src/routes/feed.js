@@ -91,6 +91,14 @@ function sourceUrlVariants(value) {
   const variants = new Set([value]);
   try {
     const parsed = new URL(value);
+    const youtubeId = youtubeVideoId(parsed);
+    if (youtubeId) {
+      variants.add(`https://www.youtube.com/watch?v=${youtubeId}`);
+      variants.add(`https://youtube.com/watch?v=${youtubeId}`);
+      variants.add(`https://m.youtube.com/watch?v=${youtubeId}`);
+      variants.add(`https://youtu.be/${youtubeId}`);
+      variants.add(`https://www.youtube.com/shorts/${youtubeId}`);
+    }
     parsed.hash = '';
     variants.add(parsed.toString());
     parsed.search = '';
@@ -101,6 +109,17 @@ function sourceUrlVariants(value) {
     variants.add(value.replace(/#.*$/, '').replace(/\?.*$/, '').replace(/\/$/, ''));
   }
   return [...variants].filter(Boolean);
+}
+
+function youtubeVideoId(url) {
+  const host = url.hostname.replace(/^www\./, '');
+  if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || '';
+  if (host === 'youtube.com' || host === 'm.youtube.com') {
+    if (url.pathname === '/watch') return url.searchParams.get('v') || '';
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (['shorts', 'embed', 'live'].includes(parts[0])) return parts[1] || '';
+  }
+  return '';
 }
 
 export default app;

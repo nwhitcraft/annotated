@@ -24,7 +24,7 @@ export default function Onboarding() {
   const [error, setError] = useState('');
 
   const ageValid = useMemo(() => {
-    if (age === '') return true;
+    if (age === '') return false;
     const value = Number(age);
     return Number.isInteger(value) && value >= 13 && value <= 120;
   }, [age]);
@@ -143,9 +143,10 @@ export default function Onboarding() {
             type="number"
             min="13"
             max="120"
+            required
             value={age}
             onChange={(event) => setAge(event.target.value)}
-            placeholder="Optional"
+            placeholder="13-120"
           />
           {!ageValid && <p className="form-error">Age must be between 13 and 120.</p>}
 

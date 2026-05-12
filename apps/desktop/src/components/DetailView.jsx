@@ -29,13 +29,18 @@ export default function DetailView({ annotation, onPost, onDelete, onExport, onT
         <div className="annotation-meta">
           <strong>{annotation.source_domain}</strong>
           <SourceType type={annotation.source_type} />
-          <span>{annotation.is_public ? 'posted' : 'local draft'}</span>
+          <span className={`visibility-state ${annotation.is_public ? 'public' : 'private'}`}>
+            {annotation.is_public ? 'Public' : 'Private'}
+          </span>
           <span>v{annotation.conflict_version || 1}</span>
         </div>
         <a href={annotation.source_url} target="_blank" rel="noreferrer" className="source-title">{annotation.source_title}</a>
       </header>
 
       {annotation.clip_text && <blockquote className="detail-quote">{annotation.clip_text}</blockquote>}
+      {annotation.clip_start_sec != null && annotation.clip_end_sec != null && (
+        <p className="media-range">{annotation.source_type === 'podcast' ? 'Audio excerpt' : 'Video excerpt'} · {annotation.clip_start_sec}s-{annotation.clip_end_sec}s</p>
+      )}
       <h1>{annotation.commentary}</h1>
 
       <div className="tag-editor">
@@ -46,7 +51,7 @@ export default function DetailView({ annotation, onPost, onDelete, onExport, onT
       </div>
 
       <div className="detail-actions">
-        <button className="button button-solid" onClick={() => onPost(annotation.id)}>Post to Feed</button>
+        {!annotation.is_public && <button className="button button-solid" onClick={() => onPost(annotation.id)}>Make Public</button>}
         <button className="button button-outline" onClick={() => onExport(annotation)}>Export</button>
         <button className="button button-text danger" onClick={() => onDelete(annotation.id)}>Delete</button>
       </div>

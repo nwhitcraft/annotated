@@ -43,9 +43,15 @@ struct Annotation {
 struct Settings {
     #[serde(rename = "apiEndpoint")]
     api_endpoint: String,
+    #[serde(rename = "frontendUrl", default = "default_frontend_url")]
+    frontend_url: String,
     hotkey: String,
     #[serde(rename = "storageLocation")]
     storage_location: String,
+}
+
+fn default_frontend_url() -> String {
+    "http://localhost:3090".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -361,6 +367,7 @@ fn load_settings(app: AppHandle) -> Result<Settings, String> {
     let path = db_path(&app)?.display().to_string();
     let default = Settings {
         api_endpoint: "http://localhost:3080".to_string(),
+        frontend_url: default_frontend_url(),
         hotkey: "CommandOrControl+Shift+A".to_string(),
         storage_location: path,
     };
@@ -459,7 +466,7 @@ fn screen_clip_diagnostic() -> ToolResult {
         stdout: String::new(),
         stderr: String::new(),
         output_path: None,
-        blocker: Some("screen capture requires platform permission UX; scaffold is present but capture is not enabled in this build".to_string()),
+        blocker: Some("screen capture requires macOS screen-recording permission plus a native capture backend; the private/public workflow is scaffolded but pixels are not captured in this build".to_string()),
     }
 }
 

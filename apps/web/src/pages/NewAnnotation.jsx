@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QuoteAnnotationBubble from '../components/QuoteAnnotationBubble.jsx';
 import SourceType from '../components/SourceType.jsx';
@@ -8,13 +8,12 @@ import {
   detectClip,
   getCurrentUserId,
   getUsername,
-  hydrateCurrentUser,
-  isPaidTier,
 } from '../lib/api.js';
 import { domainFromUrl, formatTime } from '../lib/format.js';
 
-const steps = ['URL', 'Clip', 'Commentary', 'Post'];
+const steps = ['Link', 'Clip', 'Commentary', 'Post'];
 const annotationTypes = ['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'];
+const MAX_COMMENTARY_LENGTH = 360;
 
 export default function NewAnnotation() {
   const navigate = useNavigate();
@@ -29,23 +28,16 @@ export default function NewAnnotation() {
   const [posting, setPosting] = useState(false);
   const [postingAction, setPostingAction] = useState('');
   const [clipping, setClipping] = useState(false);
-  const [viewer, setViewer] = useState(null);
   const [error, setError] = useState('');
-  const paidTier = isPaidTier(viewer?.subscription_tier);
+  const isMediaSource = detected && ['youtube', 'podcast'].includes(detected.type);
 
   const activeStep = useMemo(() => {
     if (!detected) return 0;
-    if (detected.type === 'article' && !clipText.trim()) return 1;
+    if (!['youtube', 'podcast'].includes(detected.type) && !clipText.trim()) return 1;
     if (['youtube', 'podcast'].includes(detected.type) && clipEnd <= clipStart) return 1;
     if (!commentary.trim()) return 2;
     return 3;
   }, [detected, clipText, clipStart, clipEnd, commentary]);
-
-  useEffect(() => {
-    hydrateCurrentUser()
-      .then(setViewer)
-      .catch(() => setViewer({ subscription_tier: 'free' }));
-  }, []);
 
   async function detect(event) {
     event.preventDefault();
@@ -86,7 +78,7 @@ export default function NewAnnotation() {
   async function submit(event, requestedStatus = 'published') {
     event?.preventDefault?.();
     if (!detected) return setError('Detect a source first.');
-    if (detected.type === 'article' && !clipText.trim()) return setError('Add the quoted passage.');
+    if (!['youtube', 'podcast'].includes(detected.type) && !clipText.trim()) return setError('Add the quoted passage.');
     if (!commentary.trim()) return setError('Write your commentary.');
     setPosting(true);
     setPostingAction(requestedStatus);
@@ -94,7 +86,7 @@ export default function NewAnnotation() {
     setError('');
     try {
       let mediaClip = null;
-      if (['youtube', 'podcast'].includes(detected.type)) {
+      if (isMediaSource) {
         setClipping(true);
         try {
           mediaClip = await createMediaClip({
@@ -119,9 +111,9 @@ export default function NewAnnotation() {
         source_author: detected.author || null,
         source_published_at: detected.publishedAt || null,
         source_thumbnail: mediaClip?.thumbnail || detected.thumbnail || null,
-        clip_text: detected.type === 'article' ? clipText.trim() : null,
-        clip_start_sec: detected.type === 'article' ? null : (mediaClip?.startSec ?? clipStart),
-        clip_end_sec: detected.type === 'article' ? null : (mediaClip?.endSec ?? clipEnd),
+        clip_text: isMediaSource ? null : clipText.trim(),
+        clip_start_sec: isMediaSource ? (mediaClip?.startSec ?? clipStart) : null,
+        clip_end_sec: isMediaSource ? (mediaClip?.endSec ?? clipEnd) : null,
         clip_media_path: mediaClip?.mediaPath || null,
         commentary: commentary.trim(),
         annotation_type: annotationType,
@@ -142,30 +134,16 @@ export default function NewAnnotation() {
 
   function postControls() {
     const disabled = posting || activeStep < 3;
-    const statusLabel = paidTier && postingAction !== 'published' ? 'Draft' : 'Published';
 
     return (
       <div className="publish-controls">
-        <span className={`status-pill ${statusLabel === 'Draft' ? 'draft' : 'published'}`}>
-          {statusLabel}
-        </span>
-        {paidTier && (
-          <button
-            className="button button-outline"
-            type="button"
-            onClick={(event) => submit(event, 'draft')}
-            disabled={disabled}
-          >
-            {posting && postingAction === 'draft' ? 'Saving draft' : 'Save as Draft'}
-          </button>
-        )}
         <button
-          className="button button-solid"
+          className="annotate-submit-button"
           type="button"
           onClick={(event) => submit(event, 'published')}
           disabled={disabled}
         >
-          {clipping && postingAction === 'published' ? 'Clipping media' : posting && postingAction === 'published' ? 'Posting' : 'Post to Feed'}
+          {clipping && postingAction === 'published' ? 'Clipping media' : posting && postingAction === 'published' ? 'Annotating' : 'Annotate'}
         </button>
       </div>
     );
@@ -175,7 +153,7 @@ export default function NewAnnotation() {
     <div className="page new-page">
       <header className="editor-heading">
         <p>New annotation</p>
-        <h1>Choose the sentence, then write the argument.</h1>
+        <h1>Paste an article, YouTube, podcast, Spotify, or X link.</h1>
       </header>
 
       <ol className="step-list">
@@ -186,13 +164,13 @@ export default function NewAnnotation() {
 
       <form className="editor-form" onSubmit={(event) => submit(event, 'published')}>
         <section className="form-section">
-          <label htmlFor="source-url">Source URL</label>
+          <label htmlFor="source-url">Source link</label>
           <div className="detect-row">
             <input
               id="source-url"
               className="field mono-field"
               type="url"
-              placeholder="https://"
+              placeholder="Article, YouTube, podcast, Spotify, or X URL"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               onKeyDown={(event) => {
@@ -211,7 +189,7 @@ export default function NewAnnotation() {
             <p className="detected-line">
               <SourceType type={detected.type} /> <strong>{detected.title}</strong> <span>{detected.domain}</span>
             </p>
-            {detected.type === 'article' ? (
+            {!isMediaSource ? (
               <textarea className="field quote-field" placeholder="Paste the highlighted passage..." value={clipText} onChange={(event) => setClipText(event.target.value)} />
             ) : (
               <div className="time-grid">
@@ -241,25 +219,36 @@ export default function NewAnnotation() {
                 </button>
               ))}
             </div>
-            {detected.type === 'article' && clipText.trim() ? (
+            {!isMediaSource && clipText.trim() ? (
               <QuoteAnnotationBubble
                 quote={`“${clipText.trim()}”`}
                 value={commentary}
                 onChange={setCommentary}
                 placeholder="Write the take people should respond to..."
+                maxLength={MAX_COMMENTARY_LENGTH}
                 disabled={posting || activeStep < 3}
                 textareaId="commentary"
                 actions={postControls()}
               />
             ) : (
-              <textarea id="commentary" className="field commentary-field" placeholder="Write the take people should respond to..." value={commentary} onChange={(event) => setCommentary(event.target.value)} />
+              <>
+                <textarea
+                  id="commentary"
+                  className="field commentary-field"
+                  placeholder="Write the take people should respond to..."
+                  value={commentary}
+                  maxLength={MAX_COMMENTARY_LENGTH}
+                  onChange={(event) => setCommentary(event.target.value)}
+                />
+                <small className="field-counter">{commentary.length}/{MAX_COMMENTARY_LENGTH}</small>
+              </>
             )}
           </section>
         )}
 
         {error && <p className="notice error">{error}</p>}
 
-        {detected && !(detected.type === 'article' && clipText.trim()) && (
+        {detected && !(!isMediaSource && clipText.trim()) && (
           postControls()
         )}
       </form>

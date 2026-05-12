@@ -28,6 +28,35 @@ app.get('/suggested', (c) => {
   return c.json({ items });
 });
 
+// Search by handle or display name
+app.get('/search', (c) => {
+  const query = String(c.req.query('q') || '').trim().replace(/^@/, '');
+  const viewerId = c.req.query('viewer_id');
+  if (query.length < 2) return c.json({ items: [] });
+
+  const term = `%${query.toLowerCase()}%`;
+  const items = db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.avatar_url, u.bio, u.link, u.twitter_handle, u.credibility_score,
+      CASE WHEN f.follower_id IS NOT NULL THEN 1 ELSE 0 END AS following
+    FROM users u
+    LEFT JOIN follows f ON f.following_id = u.id AND f.follower_id = ?
+    WHERE lower(u.username) LIKE ?
+       OR lower(COALESCE(u.display_name, '')) LIKE ?
+    ORDER BY
+      CASE
+        WHEN lower(u.username) = lower(?) THEN 0
+        WHEN lower(COALESCE(u.display_name, '')) = lower(?) THEN 1
+        WHEN lower(u.username) LIKE lower(?) THEN 2
+        ELSE 3
+      END,
+      u.credibility_score DESC,
+      u.username ASC
+    LIMIT 8
+  `).all(viewerId || '', term, term, query, query, `${query}%`);
+
+  return c.json({ items });
+});
+
 // Upload avatar image and optionally attach it to a user profile
 app.post('/avatar', async (c) => {
   const body = await c.req.parseBody();
@@ -97,8 +126,9 @@ app.post('/onboard', async (c) => {
     return c.json({ error: 'Username taken', suggestion: suggestUsername(normalized.username) }, 409);
   }
 
-  const age = body.age === '' || body.age == null ? null : Number(body.age);
-  if (age != null && (!Number.isInteger(age) || age < 13 || age > 120)) {
+  if (body.age === '' || body.age == null) return c.json({ error: 'age is required' }, 400);
+  const age = Number(body.age);
+  if (!Number.isInteger(age) || age < 13 || age > 120) {
     return c.json({ error: 'age must be between 13 and 120' }, 400);
   }
 
@@ -434,11 +464,13 @@ function calculateCredibility(userId) {
     SELECT
       COUNT(*) AS annotations,
       COALESCE(SUM(noteworthy_count), 0) AS noteworthy,
+      COALESCE(SUM(like_count), 0) AS credible,
       COALESCE(SUM(CASE WHEN annotation_type = 'Fact Check' THEN 1 ELSE 0 END), 0) AS fact_checks
     FROM annotations
     WHERE user_id = ? AND status = 'published'
   `).get(userId);
-  return Number(stats.noteworthy || 0) * 5
+  return Number(stats.credible || 0)
+    + Number(stats.noteworthy || 0)
     + Number(stats.fact_checks || 0) * 3
     + Number(stats.annotations || 0);
 }

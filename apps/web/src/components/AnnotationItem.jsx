@@ -4,10 +4,11 @@ import SourceType from './SourceType.jsx';
 import UserAvatar from './UserAvatar.jsx';
 import { domainFromUrl, formatTime, timeAgo } from '../lib/format.js';
 
-export default function AnnotationItem({ annotation, expanded = false }) {
+export default function AnnotationItem({ annotation, expanded = false, canDelete = false, onDelete }) {
   const navigate = useNavigate();
   const domain = annotation.source_domain || domainFromUrl(annotation.source_url);
   const hasRange = annotation.clip_start_sec != null && annotation.clip_end_sec != null;
+  const isYouTubeClip = annotation.source_type === 'youtube' && annotation.clip_media_path;
   const author = {
     username: annotation.username,
     display_name: annotation.display_name,
@@ -53,7 +54,7 @@ export default function AnnotationItem({ annotation, expanded = false }) {
         >
           {annotation.source_title || annotation.source_url}
         </a>
-        {annotation.source_thumbnail && (
+        {annotation.source_thumbnail && !isYouTubeClip && (
           <a
             className="source-thumbnail"
             href={annotation.source_url}
@@ -88,13 +89,34 @@ export default function AnnotationItem({ annotation, expanded = false }) {
         </video>
       )}
 
+      {isYouTubeClip && (
+        <a
+          className="source-platform-link youtube-platform-link"
+          href={annotation.source_url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span aria-hidden="true">▶</span>
+          Open on YouTube
+        </a>
+      )}
+
       {annotation.clip_media_path && annotation.source_type === 'podcast' && (
         <audio controls className="audio-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={annotation.clip_media_path} type="audio/mpeg" />
+          <source src={annotation.clip_media_path} type={annotation.clip_media_path.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg'} />
         </audio>
       )}
 
       <ActionRow annotation={annotation} onOpenComments={openComments} />
+      {canDelete && (
+        <button className="annotation-delete" type="button" onClick={(event) => {
+          event.stopPropagation();
+          onDelete?.(annotation);
+        }}>
+          Remove annotation
+        </button>
+      )}
     </article>
   );
 }

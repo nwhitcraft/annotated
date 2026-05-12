@@ -1,7 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 
-const CHROME_STORE_URL = 'https://chrome.google.com/webstore/detail/annotated';
-
 export default function OnboardingExtension() {
   const navigate = useNavigate();
 
@@ -19,11 +17,14 @@ export default function OnboardingExtension() {
       </ol>
 
       <section className="onboarding-panel">
-        <a className="button button-solid onboarding-store-button" href={CHROME_STORE_URL} target="_blank" rel="noreferrer">
-          Download from Chrome Web Store
-        </a>
+        <div className="extension-install-card">
+          <strong>Use the development extension for launch testing</strong>
+          <p>The Chrome Web Store listing is coming soon. For Thursday night, load the unpacked extension from the local project.</p>
+          <code>/Users/nicholaswhitcraft/Documents/New project/annotated/apps/extension</code>
+        </div>
         <div className="onboarding-instructions">
-          <p>After installing, click the extension icon in your toolbar.</p>
+          <p>Open chrome://extensions, enable Developer Mode, then choose Load unpacked.</p>
+          <p>Select the extension folder above, then click the extension icon in your toolbar.</p>
           <p>Click Sign in in the side panel to connect your account.</p>
           <p>Your personal feed will appear once you're logged in.</p>
         </div>

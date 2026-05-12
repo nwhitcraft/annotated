@@ -6,6 +6,7 @@ const USERNAME_KEY = 'annotated.username';
 const AVATAR_URL_KEY = 'annotated.avatar_url';
 const DISPLAY_NAME_KEY = 'annotated.display_name';
 const SUBSCRIPTION_TIER_KEY = 'annotated.subscription_tier';
+const USER_UPDATED_EVENT = 'annotated:user-updated';
 
 export function getToken() {
   return window.localStorage.getItem(TOKEN_KEY);
@@ -54,6 +55,7 @@ export function getAvatarUrl() {
 
 export function setAvatarUrl(avatarUrl) {
   if (avatarUrl) window.localStorage.setItem(AVATAR_URL_KEY, avatarUrl);
+  else window.localStorage.removeItem(AVATAR_URL_KEY);
 }
 
 export function getSubscriptionTier() {
@@ -94,6 +96,11 @@ function cacheUser(user) {
   setDisplayName(user.display_name);
   setAvatarUrl(user.avatar_url);
   setSubscriptionTier(user.subscription_tier);
+  notifyUserChanged(user);
+}
+
+function notifyUserChanged(user) {
+  window.dispatchEvent(new CustomEvent(USER_UPDATED_EVENT, { detail: user || {} }));
 }
 
 async function request(path, options = {}) {
@@ -139,8 +146,8 @@ export async function searchUsers(query) {
   const term = query.trim().replace(/^@/, '');
   if (term.length < 2) return [];
   try {
-    const exact = await getUser(term);
-    return exact ? [exact] : [];
+    const data = await request(`/users/search?q=${encodeURIComponent(term)}&viewer_id=${encodeURIComponent(getCurrentUserId())}`);
+    return data.items || [];
   } catch {
     return [];
   }
@@ -229,6 +236,8 @@ export async function updateProfile(userId, payload) {
   setUsername(data.username);
   setDisplayName(data.display_name);
   setAvatarUrl(data.avatar_url);
+  setSubscriptionTier(data.subscription_tier);
+  notifyUserChanged(data);
   return data;
 }
 
@@ -256,7 +265,10 @@ export async function uploadAvatar(file, userId = getCurrentUserId()) {
     method: 'POST',
     body,
   });
-  if (data.avatar_url) setAvatarUrl(data.avatar_url);
+  if (data.avatar_url) {
+    setAvatarUrl(data.avatar_url);
+    notifyUserChanged({ id: userId, avatar_url: data.avatar_url });
+  }
   return data;
 }
 
@@ -303,6 +315,13 @@ export async function createAnnotation(payload) {
   return request('/annotations', {
     method: 'POST',
     body: JSON.stringify({ user_id: getCurrentUserId(), ...payload }),
+  });
+}
+
+export async function deleteAnnotation(id) {
+  return request(`/annotations/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
   });
 }
 

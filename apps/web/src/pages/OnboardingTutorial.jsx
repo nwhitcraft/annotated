@@ -31,10 +31,13 @@ export default function OnboardingTutorial() {
         <li className="active">How to clip</li>
       </ol>
 
+      <section className="shortcut-hero">
+        <img src="/shortcut-keys.png" alt="" />
+      </section>
+
       <div className="tutorial-grid">
         {lessons.map((lesson) => (
           <section className="tutorial-section" key={lesson.title}>
-            <img src="/shortcut-keys.png" alt="" />
             <div>
               <h2>{lesson.title}</h2>
               <p>{lesson.text}</p>

@@ -271,6 +271,12 @@ textarea {
   font-size: 13px;
 }
 
+.avatar-lg {
+  width: 68px;
+  height: 68px;
+  font-size: 22px;
+}
+
 .site-main {
   padding: 23px 0 72px;
 }
@@ -671,6 +677,32 @@ textarea {
   border: 1px solid var(--border);
 }
 
+.source-platform-link {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.source-platform-link span {
+  display: inline-grid;
+  width: 23px;
+  height: 16px;
+  place-items: center;
+  background: #dc2626;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.source-platform-link:hover {
+  color: var(--youtube);
+}
+
 .annotation-headline {
   max-width: 650px;
   margin: 3px 0 4px;
@@ -690,10 +722,11 @@ textarea {
 
 .action-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .action-row button {
@@ -702,6 +735,7 @@ textarea {
   gap: 6px;
   padding: 0;
   color: inherit;
+  font-weight: 500;
 }
 
 .action-row button:hover,
@@ -710,7 +744,6 @@ textarea {
 }
 
 .claim-count {
-  font-size: 11px;
   color: var(--text-tertiary);
   cursor: pointer;
 }
@@ -1161,6 +1194,51 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
+.profile-edit-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 520px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 253, 0.72);
+}
+
+.profile-edit-card > div {
+  display: grid;
+  gap: 4px;
+}
+
+.profile-edit-card strong {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.profile-edit-card span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.change-picture-button {
+  position: relative;
+  width: fit-content;
+  margin-top: 6px;
+  color: var(--accent-hover);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.change-picture-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .profile-edit-form label {
   display: grid;
   gap: 7px;
@@ -1185,6 +1263,19 @@ textarea {
   font-family: var(--font-serif);
   font-size: 17px;
   line-height: 1.5;
+}
+
+.annotation-delete {
+  justify-self: start;
+  width: fit-content;
+  padding: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.annotation-delete:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .form-grid {
@@ -1302,11 +1393,32 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-.onboarding-store-button {
-  justify-self: start;
-  min-height: 48px;
-  padding-inline: 18px;
-  font-size: 14px;
+.extension-install-card {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 253, 0.74);
+}
+
+.extension-install-card strong {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.extension-install-card p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.extension-install-card code {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .onboarding-instructions {
@@ -1325,22 +1437,31 @@ textarea {
 
 .tutorial-grid {
   display: grid;
-  gap: 0;
-  border-top: 1px solid var(--border);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 22px 0 0;
+}
+
+.shortcut-hero {
+  display: grid;
+  justify-items: center;
+  padding: 10px 0 26px;
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcut-hero img {
+  width: min(620px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
 }
 
 .tutorial-section {
   display: grid;
-  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
-  gap: 22px;
-  align-items: center;
-  padding: 22px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.tutorial-section img {
-  width: 100%;
+  align-content: start;
+  padding: 18px;
   border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 253, 0.72);
 }
 
 .tutorial-section h2 {
@@ -1438,6 +1559,22 @@ textarea {
 .quote-annotation-bubble__actions .publish-controls {
   justify-self: stretch;
   width: 100%;
+}
+
+.annotate-submit-button {
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.annotate-submit-button:hover:not(:disabled) {
+  color: var(--accent-hover);
 }
 
 .status-pill {
@@ -1697,7 +1834,7 @@ textarea {
   }
 
   .avatar-upload-row,
-  .tutorial-section {
+  .tutorial-grid {
     grid-template-columns: 1fr;
   }
 }

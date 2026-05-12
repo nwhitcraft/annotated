@@ -1,11 +1,24 @@
 import { useState } from 'react';
 import { runDesktopDiagnostics } from '../lib/localStore.js';
 
-export default function SettingsView({ settings, onChange, onSave }) {
+export default function SettingsView({ settings, authUser, onChange, onSave, onSignIn, onCallback }) {
   const [diagnostics, setDiagnostics] = useState(null);
+  const [callbackValue, setCallbackValue] = useState('');
+  const [authError, setAuthError] = useState('');
 
   async function runDiagnostics() {
     setDiagnostics(await runDesktopDiagnostics());
+  }
+
+  async function connectCallback() {
+    setAuthError('');
+    try {
+      await onSave(settings);
+      await onCallback(callbackValue);
+      setCallbackValue('');
+    } catch (error) {
+      setAuthError(error.message || 'Could not connect account');
+    }
   }
 
   return (
@@ -16,9 +29,39 @@ export default function SettingsView({ settings, onChange, onSave }) {
           <h2>Local workspace</h2>
         </div>
       </header>
+      <section className="auth-card">
+        <div>
+          <p>Account</p>
+          {authUser ? (
+            <h3>{authUser.display_name || authUser.username} <span>@{authUser.username}</span></h3>
+          ) : (
+            <h3>Sign in to publish public annotations</h3>
+          )}
+        </div>
+        <div className="auth-actions">
+          <button className="button button-outline" type="button" onClick={() => onSignIn('google')}>Google</button>
+          <button className="button button-outline" type="button" onClick={() => onSignIn('twitter')}>X</button>
+        </div>
+        <label>
+          Desktop callback URL or token
+          <input
+            value={callbackValue}
+            onChange={(event) => setCallbackValue(event.target.value)}
+            placeholder="annotated://callback?token=..."
+          />
+        </label>
+        <button className="button button-solid" type="button" onClick={connectCallback} disabled={!callbackValue.trim()}>
+          Connect account
+        </button>
+        {authError && <p className="composer-error">{authError}</p>}
+      </section>
       <label>
         API endpoint
         <input value={settings.apiEndpoint || ''} onChange={(event) => onChange({ ...settings, apiEndpoint: event.target.value })} />
+      </label>
+      <label>
+        Web app URL
+        <input value={settings.frontendUrl || ''} onChange={(event) => onChange({ ...settings, frontendUrl: event.target.value })} />
       </label>
       <label>
         Global hotkey

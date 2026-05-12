@@ -10,7 +10,6 @@ export default function ActionRow({ annotation, onOpenComments }) {
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimSent, setClaimSent] = useState(false);
   const [claim, setClaim] = useState({ email: getUsername() ? `${getUsername()}@annotated.local` : '', reason: '' });
-  const [shared, setShared] = useState(false);
 
   async function like(event) {
     event.preventDefault();
@@ -46,19 +45,6 @@ export default function ActionRow({ annotation, onOpenComments }) {
     onOpenComments?.();
   }
 
-  async function share(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const href = `${window.location.origin}/a/${annotation.id}`;
-    try {
-      await navigator.clipboard.writeText(href);
-      setShared(true);
-      window.setTimeout(() => setShared(false), 1300);
-    } catch {
-      window.location.href = `mailto:?subject=Annotated&body=${encodeURIComponent(href)}`;
-    }
-  }
-
   async function openClaim(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -85,24 +71,20 @@ export default function ActionRow({ annotation, onOpenComments }) {
     <>
       <div className="action-row" aria-label="Annotation actions">
         <button className={liked ? 'is-active' : ''} onClick={like} aria-pressed={liked}>
-          <span aria-hidden="true">♡</span>
+          <span>Credible</span>
           {likes}
         </button>
         <button className={noteworthy ? 'is-active' : ''} onClick={markNoteworthy} aria-pressed={noteworthy}>
-          <span aria-hidden="true">N</span>
+          <span>Disagree</span>
           {noteworthyCount}
         </button>
         <button onClick={comments}>
-          <span aria-hidden="true">○</span>
+          <span>Comments</span>
           {annotation.comment_count || 0}
         </button>
         <button className="claim-count" onClick={openClaim}>
-          <span aria-hidden="true">!</span>
+          <span>Claims</span>
           {claimCount}
-        </button>
-        <button onClick={share}>
-          <span aria-hidden="true">↗</span>
-          {shared ? 'Copied' : 'Share'}
         </button>
       </div>
       {claimOpen && (

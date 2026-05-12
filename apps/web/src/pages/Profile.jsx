@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import AnnotationItem from '../components/AnnotationItem.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import {
+  deleteAnnotation,
   getCurrentUserId,
   getUser,
   getUserAnnotations,
@@ -17,12 +18,13 @@ export default function Profile() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
-  const [tab, setTab] = useState(searchParams.get('tab') || 'annotations');
+  const [tab, setTab] = useState(normalizeProfileTab(searchParams.get('tab')));
   const [following, setFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [form, setForm] = useState(profileForm(null));
   const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,10 +33,12 @@ export default function Profile() {
     setLoading(true);
     getUser(username)
       .then(async (profile) => {
-        const annotations = await getUserAnnotations(profile.id || username, tab);
+        const listTab = normalizeProfileTab(tab);
+        const annotations = await getUserAnnotations(profile.id || username, listTab);
         if (cancelled) return;
         setUser(profile);
         setForm(profileForm(profile));
+        setAvatarPreview(profile.avatar_url || '');
         setFollowing(Boolean(profile.following));
         setItems(annotations);
       })
@@ -48,10 +52,21 @@ export default function Profile() {
 
   useEffect(() => {
     setEditing(searchParams.get('edit') === '1');
+    setTab(normalizeProfileTab(searchParams.get('tab')));
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview(user?.avatar_url || '');
+      return undefined;
+    }
+    const preview = URL.createObjectURL(avatarFile);
+    setAvatarPreview(preview);
+    return () => URL.revokeObjectURL(preview);
+  }, [avatarFile, user?.avatar_url]);
+
   const isSelf = user && (user.id === getCurrentUserId() || user.username === getUsername());
-  const activeTab = isSelf || !['drafts', 'removed'].includes(tab) ? tab : 'annotations';
+  const activeTab = normalizeProfileTab(tab);
 
   async function follow() {
     const next = !following;
@@ -81,6 +96,17 @@ export default function Profile() {
     if (nextTab === 'annotations') nextParams.delete('tab');
     else nextParams.set('tab', nextTab);
     setSearchParams(nextParams);
+  }
+
+  async function removeAnnotation(annotation) {
+    const confirmed = window.confirm('Remove this annotation from your profile and the public feed?');
+    if (!confirmed) return;
+    setItems((current) => current.filter((item) => item.id !== annotation.id));
+    try {
+      await deleteAnnotation(annotation.id);
+    } catch {
+      setItems((current) => [annotation, ...current]);
+    }
   }
 
   function stopEditing() {
@@ -148,7 +174,7 @@ export default function Profile() {
     <div className="page">
       <section className="profile-header">
         <div className="profile-identity">
-          <UserAvatar user={user} size="md" />
+          <UserAvatar user={user} size="lg" />
           <div>
             <h1>{user.display_name || user.username}</h1>
             <p>@{user.username}</p>
@@ -179,20 +205,17 @@ export default function Profile() {
 
       {editing && isSelf && (
         <form className="profile-edit-form" onSubmit={saveProfile}>
-          <div className="form-grid two">
-            <label>
-              <span>Display name</span>
-              <input className="field" required value={form.display_name} onChange={(event) => updateField('display_name', event.target.value)} />
-            </label>
-            <label>
-              <span>Avatar URL</span>
-              <input className="field" type="url" value={form.avatar_url} onChange={(event) => updateField('avatar_url', event.target.value)} placeholder="https://..." />
-            </label>
+          <div className="profile-edit-card">
+            <UserAvatar user={{ ...user, avatar_url: avatarPreview }} size="lg" />
+            <div>
+              <strong>{user.display_name || user.username}</strong>
+              <span>@{user.username}</span>
+              <label className="change-picture-button">
+                Change picture
+                <input type="file" accept="image/*" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+              </label>
+            </div>
           </div>
-          <label>
-            <span>Upload avatar</span>
-            <input className="field" type="file" accept="image/*" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
-          </label>
           <label>
             <span>Bio</span>
             <textarea className="field profile-bio-field" maxLength="280" value={form.bio} onChange={(event) => updateField('bio', event.target.value)} />
@@ -218,8 +241,6 @@ export default function Profile() {
 
       <nav className="text-tabs" aria-label="Profile tabs">
         <button className={activeTab === 'annotations' ? 'active' : ''} onClick={() => changeTab('annotations')}>Annotations</button>
-        {isSelf && <button className={activeTab === 'drafts' ? 'active' : ''} onClick={() => changeTab('drafts')}>Drafts</button>}
-        {isSelf && <button className={activeTab === 'removed' ? 'active' : ''} onClick={() => changeTab('removed')}>Removed</button>}
         <button className={activeTab === 'liked' ? 'active' : ''} onClick={() => changeTab('liked')}>Liked</button>
       </nav>
 
@@ -230,7 +251,14 @@ export default function Profile() {
         </div>
       ) : (
         <div className="ruled-list">
-          {items.map((annotation) => <AnnotationItem key={annotation.id} annotation={annotation} />)}
+          {items.map((annotation) => (
+            <AnnotationItem
+              key={annotation.id}
+              annotation={annotation}
+              canDelete={isSelf && activeTab === 'annotations'}
+              onDelete={removeAnnotation}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -257,8 +285,10 @@ function cleanUrlLabel(value) {
 }
 
 function tabLabel(tab) {
-  if (tab === 'drafts') return 'drafts';
-  if (tab === 'removed') return 'removed annotations';
   if (tab === 'liked') return 'liked annotations';
   return 'annotations';
+}
+
+function normalizeProfileTab(value) {
+  return value === 'liked' ? 'liked' : 'annotations';
 }

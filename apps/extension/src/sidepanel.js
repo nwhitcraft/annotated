@@ -264,6 +264,11 @@ async function loadFeed() {
   feedListEl.innerHTML = '<p class="feed-empty">Loading...</p>';
 
   try {
+    if (isAnnotatedPage(currentPage)) {
+      renderAnnotatedPageState();
+      return;
+    }
+
     let title = 'Your feed';
     let items = [];
 
@@ -290,6 +295,16 @@ async function loadFeed() {
   } catch {
     renderFeed('Feed', []);
   }
+}
+
+function renderAnnotatedPageState() {
+  feedTitleEl.textContent = 'Annotated';
+  feedCountEl.textContent = '';
+  feedListEl.innerHTML = `
+    <p class="feed-empty">
+      Annotated is already open in this tab. Use the web app here; the side panel will stay out of the way.
+    </p>
+  `;
 }
 
 function renderFeed(title, items) {
@@ -363,6 +378,22 @@ function mediaRange(item) {
 
 function annotationCommentsUrl(item) {
   return `${WEB_BASE}/a/${encodeURIComponent(item.id)}#comments`;
+}
+
+function isAnnotatedPage(page) {
+  return [page?.url, page?.pageUrl].filter(Boolean).some(isAnnotatedUrl);
+}
+
+function isAnnotatedUrl(value) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.replace(/^www\./, '');
+    return url.origin === WEB_BASE
+      || hostname === 'annotated.com'
+      || ((hostname === 'localhost' || hostname === '127.0.0.1') && url.port === '3090');
+  } catch {
+    return false;
+  }
 }
 
 function sourceDate(value) {
