@@ -93,6 +93,11 @@
       font-weight: 600;
     }
 
+    .auth-slot { margin-left: auto; font-size: 13px; }
+    .auth-user { color: var(--text-secondary); font-family: var(--font-sans); }
+    .auth-signin { color: var(--accent); text-decoration: none; font-family: var(--font-sans); font-weight: 500; }
+    .auth-signin:hover { text-decoration: underline; }
+
     .status {
       display: grid;
       grid-template-columns: auto auto minmax(0, 1fr);
@@ -229,6 +234,7 @@
   <main class="shell">
     <header class="topline">
       <div class="wordmark">annotated</div>
+      <div id="auth-slot"></div>
     </header>
 
     <div id="status" class="status" hidden></div>

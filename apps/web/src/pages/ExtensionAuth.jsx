@@ -7,6 +7,8 @@ export default function ExtensionAuth() {
   const [user, setUser] = useState({ username: getUsername(), avatar_url: getAvatarUrl() });
 
   useEffect(() => {
+    let removeReadyListener = null;
+    let cancelled = false;
     const token = getToken();
     if (!token) {
       setState('needs-login');
@@ -15,12 +17,30 @@ export default function ExtensionAuth() {
 
     hydrateCurrentUser()
       .then((profile) => {
+        if (cancelled) return;
         setUser(profile);
-        window.postMessage({ type: 'ANNOTATED_AUTH_TOKEN', token, user: profile }, window.location.origin);
-        window.opener?.postMessage({ type: 'ANNOTATED_AUTH_TOKEN', token, user: profile }, window.location.origin);
+        const sendAuth = () => {
+          window.postMessage({ type: 'ANNOTATED_AUTH_TOKEN', token, user: profile }, window.location.origin);
+          window.opener?.postMessage({ type: 'ANNOTATED_AUTH_TOKEN', token, user: profile }, window.location.origin);
+        };
+        // Send immediately (content script may already be listening)
+        sendAuth();
+        // Also respond if content script asks later
+        const onReady = (event) => {
+          if (event.data?.type === 'ANNOTATED_EXTENSION_READY') sendAuth();
+        };
+        window.addEventListener('message', onReady);
+        removeReadyListener = () => window.removeEventListener('message', onReady);
         setState('sent');
       })
-      .catch(() => setState('needs-login'));
+      .catch(() => {
+        if (!cancelled) setState('needs-login');
+      });
+
+    return () => {
+      cancelled = true;
+      removeReadyListener?.();
+    };
   }, []);
 
   function login(provider) {

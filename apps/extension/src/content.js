@@ -1,13 +1,52 @@
 // Content script — shortcut-driven clipping mode, source metadata, and media time.
 
 const API_BASE = 'http://localhost:3080';
-const USER_ID = 'demo-user';
+const WEB_BASE = 'http://localhost:3090';
 const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const SHORT_CLIP_SECONDS = 90;
 const ANNOTATION_TYPES = ['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'];
 
 let lastUrl = window.location.href;
+let authToken = '';
+let authUser = null;
+
+// Load auth state on init
+chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
+  if (chrome.runtime.lastError) return;
+  authToken = response?.token || '';
+  authUser = response?.user || null;
+});
+
+// Listen for auth updates from background
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'START_CLIPPING') enterClippingMode();
+  if (msg.type === 'EXIT_CLIPPING') exitClippingMode();
+  if (msg.type === 'AUTH_UPDATED') {
+    authUser = msg.user || null;
+    chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
+      if (chrome.runtime.lastError) return;
+      authToken = response?.token || '';
+      authUser = response?.user || null;
+    });
+  }
+});
+
+// Auth bridge: on localhost pages, listen for JWT handoff from web app
+if (window.location.origin === WEB_BASE || window.location.origin === API_BASE) {
+  window.postMessage({ type: 'ANNOTATED_EXTENSION_READY' }, window.location.origin);
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    if (event.data?.type !== 'ANNOTATED_AUTH_TOKEN' || !event.data.token) return;
+    chrome.runtime.sendMessage({
+      type: 'STORE_AUTH_TOKEN',
+      token: event.data.token,
+      user: event.data.user || null,
+    });
+    authToken = event.data.token;
+    authUser = event.data.user || null;
+  });
+}
 let clippingMode = false;
 let activeClip = null;
 let activeRange = null;
@@ -15,11 +54,6 @@ let selecting = false;
 let selectionTimer = null;
 let trackingFrame = null;
 let selectedType = 'Opinion';
-
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'START_CLIPPING') enterClippingMode();
-  if (msg.type === 'EXIT_CLIPPING') exitClippingMode();
-});
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
@@ -336,11 +370,13 @@ async function postAnnotation(composer) {
   try {
     await ensureUser();
     const mediaClip = await maybeCreateMediaClip(activeClip);
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     const response = await fetch(`${API_BASE}/api/annotations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
-        user_id: USER_ID,
+        user_id: authUser?.id || 'demo-user',
         source_url: activeClip.url,
         source_title: mediaClip?.title || activeClip.title || '',
         source_type: activeClip.sourceType || 'article',
@@ -462,6 +498,9 @@ function isClippingShortcut(event) {
 }
 
 async function ensureUser() {
+  // If authenticated via OAuth, user already exists in DB
+  if (authUser?.id) return;
+  // Fallback: create demo user for unauthenticated usage
   await fetch(`${API_BASE}/api/users`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -469,7 +508,7 @@ async function ensureUser() {
       username: 'demo',
       display_name: 'Demo User',
       provider: 'local',
-      provider_id: USER_ID,
+      provider_id: 'demo-user',
     }),
   });
 }

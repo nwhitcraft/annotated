@@ -1,8 +1,9 @@
 const API_BASE = 'http://localhost:3080';
 const WEB_BASE = 'http://localhost:3090';
-const USER_ID = 'demo-user';
 
 let currentPage = null;
+let authToken = '';
+let authUser = null;
 
 const statusEl = document.getElementById('status');
 const feedTitleEl = document.getElementById('feed-title');
@@ -10,7 +11,7 @@ const feedCountEl = document.getElementById('feed-count');
 const feedListEl = document.getElementById('feed-list');
 
 hydrate();
-ensureUser();
+loadAuth().then(() => ensureUser());
 
 feedListEl?.addEventListener('click', (event) => {
   const button = event.target.closest('[data-comment-url]');
@@ -32,6 +33,13 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (msg.state) renderState(msg.state);
     else loadFeed();
   }
+
+  if (msg.type === 'AUTH_UPDATED') {
+    loadAuth().then(() => {
+      renderAuthSlot();
+      loadFeed();
+    });
+  }
 });
 
 function hydrate() {
@@ -41,7 +49,30 @@ function hydrate() {
   });
 }
 
+async function loadAuth() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
+      if (chrome.runtime.lastError) { resolve(); return; }
+      authToken = response?.token || '';
+      authUser = response?.user || null;
+      resolve();
+    });
+  });
+}
+
+function renderAuthSlot() {
+  const slot = document.getElementById('auth-slot');
+  if (!slot) return;
+  if (authUser) {
+    slot.innerHTML = `<span class="auth-user">${escapeHtml(authUser.display_name || authUser.username || 'You')}</span>`;
+  } else {
+    slot.innerHTML = `<a href="${escapeAttr(WEB_BASE)}/extension-auth" target="_blank" class="auth-signin">Sign in</a>`;
+  }
+}
+
 async function ensureUser() {
+  renderAuthSlot();
+  if (authUser?.id) return;
   try {
     await fetch(`${API_BASE}/api/users`, {
       method: 'POST',
@@ -50,11 +81,11 @@ async function ensureUser() {
         username: 'demo',
         display_name: 'Demo User',
         provider: 'local',
-        provider_id: USER_ID,
+        provider_id: 'demo-user',
       }),
     });
   } catch {
-    // The API seeds this user at startup; sidebar creation should not block on it.
+    // fallback demo user
   }
 }
 
@@ -89,13 +120,14 @@ async function loadFeed() {
     let items = [];
 
     if (currentPage?.url) {
-      const pageFeed = await fetchJson(`/api/feed/page?url=${encodeURIComponent(currentPage.url)}&viewer_id=${USER_ID}&limit=50`);
+      const viewerId = authUser?.id || 'demo-user';
+      const pageFeed = await fetchJson(`/api/feed/page?url=${encodeURIComponent(currentPage.url)}&viewer_id=${encodeURIComponent(viewerId)}&limit=50`);
       items = pageFeed.items || [];
       if (items.length) title = 'On this page';
     }
 
     if (!items.length) {
-      const following = await fetchJson(`/api/feed/following/${encodeURIComponent(USER_ID)}?limit=50`);
+      const following = authUser?.id ? await fetchJson(`/api/feed/following/${encodeURIComponent(authUser.id)}?limit=50`) : { items: [] };
       items = following.items || [];
       title = items.length ? 'Following' : 'Latest';
     }
@@ -147,6 +179,7 @@ function renderFeed(title, items) {
 async function fetchJson(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (authToken) headers.set('Authorization', `Bearer ${authToken}`);
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.error) throw new Error(data.error || `Request failed: ${response.status}`);
