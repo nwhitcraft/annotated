@@ -654,4 +654,4 @@ If all 21 work, we ship.
 - Real Google/X sign-up requires Nick-provided OAuth credentials; dev fallback routes remain available.
 - Full desktop media operations require local `yt-dlp`, `ffmpeg`, and `whisper` binaries plus real source URLs/files.
 - Screen clipping requires platform permission UX; current desktop command reports this blocker explicitly.
-- Web and desktop Vite builds hang before diagnostics in this environment after dependencies install; extension validation, API syntax checks, API smoke checks, and `cargo check` pass.
+- Web and desktop Vite builds pass after dependencies are installed; extension validation, API syntax checks, API smoke checks, browser web smoke, and `cargo check` pass.
