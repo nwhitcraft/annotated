@@ -1241,11 +1241,14 @@ textarea {
   place-items: center;
   width: 21px;
   height: 21px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 700;
+}
+
+.oauth-mark svg {
+  width: 18px;
+  height: 18px;
 }
 
 .login-panel footer {

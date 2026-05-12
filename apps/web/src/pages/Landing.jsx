@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import AuthButtons from '../components/AuthButtons.jsx';
+import { getToken, getUsername } from '../lib/api.js';
 
 const productNotes = [
   {
@@ -17,13 +19,19 @@ const productNotes = [
 ];
 
 export default function Landing() {
+  const [username, setUsername] = useState('');
+
+  useEffect(() => {
+    setUsername(getToken() ? getUsername() || 'demo' : '');
+  }, []);
+
   return (
     <div className="landing-shell">
       <header className="landing-header">
         <Link className="wordmark" to="/">annotated</Link>
         <nav aria-label="Public navigation">
           <Link to="/feed">Feed</Link>
-          <Link to="/login">Log in</Link>
+          {username ? <Link to={`/u/${username}`}>@{username}</Link> : <Link to="/login">Log in</Link>}
         </nav>
       </header>
 
@@ -35,8 +43,12 @@ export default function Landing() {
             Annotated is a place to quote articles, videos, and podcasts with context, then discuss the take in a public thread.
           </p>
           <div className="landing-auth">
-            <AuthButtons />
-            <span>Sign up or log in with one click.</span>
+            {username ? (
+              <Link className="button button-solid" to="/feed">Open feed</Link>
+            ) : (
+              <AuthButtons />
+            )}
+            <span>{username ? `Signed in as @${username}.` : 'Sign up or log in with one click.'}</span>
           </div>
         </section>
 
