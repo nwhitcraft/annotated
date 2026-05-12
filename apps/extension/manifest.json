@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Annotated — Clip & Comment",
+  "name": "Annotated \u2014 Clip & Comment",
   "version": "0.1.0",
   "description": "Clip articles, videos, and podcasts. Add your take. Share to annotated.com.",
   "permissions": [
@@ -29,9 +29,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content.js"],
-      "css": ["src/content.css"]
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ]
     }
   ],
   "commands": {
@@ -40,8 +46,8 @@
     },
     "start_clipping": {
       "suggested_key": {
-        "default": "Ctrl+Shift+X",
-        "mac": "Command+Shift+X"
+        "default": "Alt+Shift+X",
+        "mac": "MacCtrl+Shift+X"
       },
       "description": "Start Annotated clipping mode"
     }
