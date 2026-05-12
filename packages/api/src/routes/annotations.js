@@ -90,7 +90,10 @@ function resolveUserId(raw) {
   if (byId) return byId.id;
   // Fall back to username lookup
   const byName = db.prepare('SELECT id FROM users WHERE username = ?').get(raw);
-  return byName ? byName.id : null;
+  if (byName) return byName.id;
+  // Extension fallback users are posted as provider_id values.
+  const byProvider = db.prepare('SELECT id FROM users WHERE provider_id = ?').get(raw);
+  return byProvider ? byProvider.id : null;
 }
 
 // Create annotation
