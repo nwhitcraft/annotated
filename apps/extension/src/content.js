@@ -5,6 +5,7 @@ const USER_ID = 'demo-user';
 const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const SHORT_CLIP_SECONDS = 90;
+const ANNOTATION_TYPES = ['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'];
 
 let lastUrl = window.location.href;
 let clippingMode = false;
@@ -13,6 +14,7 @@ let activeRange = null;
 let selecting = false;
 let selectionTimer = null;
 let trackingFrame = null;
+let selectedType = 'Opinion';
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'START_CLIPPING') enterClippingMode();
@@ -238,19 +240,42 @@ function showComposer(rect) {
   composer.setAttribute('aria-label', 'Quote annotation');
   composer.style.visibility = 'hidden';
   composer.innerHTML = `
-    <label class="quote-annotation-bubble__prompt" for="annotated-page-commentary">Your Thoughts Here:</label>
+    <div class="quote-annotation-bubble__tags" role="radiogroup" aria-label="Annotation type">
+      ${ANNOTATION_TYPES.map((t) => `<button type="button" class="quote-annotation-bubble__tag${t === selectedType ? ' quote-annotation-bubble__tag--active' : ''}" data-type="${t}">${t}</button>`).join('')}
+    </div>
     <textarea
       id="annotated-page-commentary"
       class="quote-annotation-bubble__textarea"
       rows="4"
+      placeholder="Write your take…"
     ></textarea>
     <div class="quote-annotation-bubble__actions">
+      <span class="quote-annotation-bubble__hint">↵ to post</span>
       <button class="quote-annotation-bubble__button" type="button">Annotate</button>
     </div>
   `;
 
   composer.addEventListener('mousedown', (event) => event.stopPropagation());
-  composer.querySelector('button').addEventListener('click', () => postAnnotation(composer));
+
+  // Tag selection
+  for (const tagBtn of composer.querySelectorAll('.quote-annotation-bubble__tag')) {
+    tagBtn.addEventListener('click', () => {
+      selectedType = tagBtn.getAttribute('data-type');
+      for (const b of composer.querySelectorAll('.quote-annotation-bubble__tag')) {
+        b.classList.toggle('quote-annotation-bubble__tag--active', b === tagBtn);
+      }
+    });
+  }
+
+  // Enter to post
+  composer.querySelector('textarea').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      postAnnotation(composer);
+    }
+  });
+
+  composer.querySelector('.quote-annotation-bubble__button').addEventListener('click', () => postAnnotation(composer));
 
   document.documentElement.append(composer);
   positionComposer(composer, rect);
@@ -329,6 +354,7 @@ async function postAnnotation(composer) {
         clip_end_sec: mediaClip?.endSec ?? activeClip.clipEndSec ?? null,
         clip_media_path: mediaClip?.mediaPath || null,
         commentary,
+        annotation_type: selectedType,
       }),
     });
 
