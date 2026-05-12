@@ -2,6 +2,93 @@
   background: rgba(99, 102, 241, 0.16) !important;
 }
 
+.annotated-page-composer {
+  position: fixed;
+  z-index: 2147483647;
+  width: min(620px, calc(100vw - 36px));
+  animation: annotated-bubble-in 160ms ease-out;
+}
+
+.quote-annotation-bubble {
+  position: fixed;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(86px, 1fr) auto;
+  gap: 12px;
+  padding: 24px 26px 22px;
+  border: 1px solid #deded9;
+  border-radius: 16px;
+  background: rgba(255, 255, 253, 0.97);
+  box-shadow: 0 20px 58px rgba(26, 26, 26, 0.14);
+  color: #1a1a1a;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.quote-annotation-bubble__prompt {
+  margin: 0;
+  color: #6b6b6b;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 22px;
+  font-style: italic;
+  line-height: 1.2;
+}
+
+.quote-annotation-bubble__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.quote-annotation-bubble__textarea {
+  width: 100%;
+  min-height: 86px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1a1a1a;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.45;
+  outline: none;
+  resize: vertical;
+}
+
+.quote-annotation-bubble__textarea::placeholder {
+  color: #999999;
+}
+
+.quote-annotation-bubble__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.quote-annotation-bubble__button {
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4f46e5;
+  font-family: Newsreader, Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer !important;
+}
+
+.quote-annotation-bubble__button:hover:not(:disabled) {
+  color: #6366f1;
+}
+
+.quote-annotation-bubble__button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55;
+}
+
 #annotated-clipping-overlay {
   position: fixed;
   inset: 0;
@@ -24,4 +111,21 @@
 
 .annotated-clipping-mode * {
   cursor: text !important;
+}
+
+.annotated-clipping-mode .quote-annotation-bubble,
+.annotated-clipping-mode .quote-annotation-bubble * {
+  cursor: auto !important;
+}
+
+@keyframes annotated-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

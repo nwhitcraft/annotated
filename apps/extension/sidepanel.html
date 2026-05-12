@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Annotated</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-primary: #fafaf8;
@@ -61,10 +64,6 @@
     }
 
     .topline {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
       padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
@@ -92,93 +91,6 @@
       font-family: var(--font-sans);
       font-size: 11px;
       font-weight: 600;
-    }
-
-    .auth-button,
-    .avatar-button {
-      display: inline-grid;
-      place-items: center;
-      width: 32px;
-      height: 32px;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      font-size: 11px;
-      font-weight: 700;
-      text-decoration: none;
-    }
-
-    .avatar-button {
-      border-radius: 50%;
-      overflow: hidden;
-    }
-
-    .avatar-button img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .compose {
-      display: grid;
-      gap: 10px;
-      padding-bottom: 14px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .compose-title {
-      margin: 0;
-      color: var(--text-secondary);
-      font-size: 12px;
-    }
-
-    .compose textarea,
-    .compose input,
-    .compose select {
-      width: 100%;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-primary);
-      font: inherit;
-    }
-
-    .compose textarea {
-      min-height: 92px;
-      padding: 8px;
-      font-family: var(--font-serif);
-      font-size: 18px;
-      resize: vertical;
-    }
-
-    .compose-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .compose button,
-    .claim-form button {
-      min-height: 32px;
-      padding: 0 10px;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .clip-preview {
-      margin: 0;
-      color: var(--text-tertiary);
-      font-family: var(--font-serif);
-      font-size: 15px;
-      font-style: italic;
-    }
-
-    .claim-form {
-      display: grid;
-      gap: 8px;
-      padding: 10px 0;
-      border-top: 1px solid var(--border-subtle);
     }
 
     .status {
@@ -317,16 +229,13 @@
   <main class="shell">
     <header class="topline">
       <div class="wordmark">annotated</div>
-      <div id="auth-slot"></div>
     </header>
 
     <div id="status" class="status" hidden></div>
 
     <div class="shortcut-line">
-      <kbd>Command+Shift+A</kbd> to Annotate
+      <kbd>Command+Shift+X</kbd> to Annotate
     </div>
-
-    <section id="compose" class="compose" hidden></section>
 
     <section id="feed-section">
       <header class="feed-header">

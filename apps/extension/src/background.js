@@ -1,6 +1,5 @@
 const stateByTab = new Map();
 const storageArea = chrome.storage.session || chrome.storage.local;
-const WEB_BASE = 'http://localhost:3090';
 
 function tabKey(tabId) {
   return `tab:${tabId}`;
@@ -47,12 +46,6 @@ function sendToTab(tabId, message) {
 
 chrome.action.onClicked.addListener((tab) => {
   openPanel(tab.id);
-});
-
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.tabs.create({ url: `${WEB_BASE}/extension-auth`, active: false }, () => {
-    void chrome.runtime.lastError;
-  });
 });
 
 chrome.commands.onCommand.addListener((command) => {
@@ -134,24 +127,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const activeTabId = tabs[0]?.id;
       const state = await getTabState(activeTabId);
       sendResponse({ state: state || null });
-    });
-    return true;
-  }
-
-  if (msg.type === 'STORE_AUTH_TOKEN') {
-    storageArea.set({
-      auth_token: msg.token,
-      auth_user: msg.user || null,
-    }).then(() => {
-      safeBroadcast({ type: 'AUTH_UPDATED', user: msg.user || null });
-      sendResponse({ ok: true });
-    });
-    return true;
-  }
-
-  if (msg.type === 'GET_AUTH_STATE') {
-    storageArea.get(['auth_token', 'auth_user']).then((state) => {
-      sendResponse({ token: state.auth_token || '', user: state.auth_user || null });
     });
     return true;
   }

@@ -6,15 +6,11 @@
   "permissions": [
     "activeTab",
     "sidePanel",
-    "storage",
-    "tabs"
+    "storage"
   ],
   "host_permissions": [
-    "<all_urls>",
     "http://localhost:3080/*",
-    "http://127.0.0.1:3080/*",
-    "http://localhost:3090/*",
-    "https://annotated.com/*"
+    "http://127.0.0.1:3080/*"
   ],
   "side_panel": {
     "default_path": "sidepanel.html"
@@ -45,7 +41,7 @@
     "start_clipping": {
       "suggested_key": {
         "default": "Ctrl+Shift+X",
-        "mac": "Command+Shift+A"
+        "mac": "Command+Shift+X"
       },
       "description": "Start Annotated clipping mode"
     }

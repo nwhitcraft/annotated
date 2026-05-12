@@ -4,7 +4,6 @@
   "private": true,
   "description": "Annotated Chrome sidebar extension",
   "scripts": {
-    "build": "node scripts/validate-extension.mjs",
-    "validate": "node scripts/validate-extension.mjs"
+    "build": "node scripts/validate-extension.mjs"
   }
 }
