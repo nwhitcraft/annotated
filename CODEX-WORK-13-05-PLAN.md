@@ -296,328 +296,187 @@ Add to the desktop stylesheet (or inline if the desktop uses inline styles):
 
 ---
 
-## Task 4 — Audio Commentary Recording & Playback
+## ~~Task 4 — Audio Commentary~~ REMOVED
 
-### Spec (from CODEX-SPEC v5.1)
-- Record via `MediaRecorder` using offscreen document pattern
-- Codec: `audio/webm;codecs=opus`
-- Bitrate: `audioBitsPerSecond: 32000`
-- Sample rate: `48000`
-- Highpass filter: 80 Hz, Q = 0.7
-- Max duration: 90 seconds
-- FFT analyser: fftSize = 256 (for waveform visualization)
+> **Cut from sprint.** Audio commentary is not in Jason's bounty spec — it came from competitive analysis of ByteTalk. Not worth the implementation time for bounty submission. Can revisit post-launch.
 
-### Web Implementation
+---
 
-#### 4a. Audio recording hook
+## Task 4 — Desktop App Download Page
 
-**New file: `apps/web/src/hooks/useAudioRecorder.js`**
+### Goal
+Replace the subscription/Stripe plan with a simple download page. Stripe requires a registered business address which is not available, so the desktop app is **free for now** with a clear, honest, on-brand message.
 
-```js
-import { useCallback, useEffect, useRef, useState } from 'react';
+### Route
+Add route `/download` to the web app.
 
-const MAX_DURATION_MS = 90_000;
-const CODEC = 'audio/webm;codecs=opus';
-
-export default function useAudioRecorder() {
-  const [recording, setRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [audioUrl, setAudioUrl] = useState(null);
-  const [elapsed, setElapsed] = useState(0);
-  const [analyserData, setAnalyserData] = useState(null);
-
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const streamRef = useRef(null);
-  const timerRef = useRef(null);
-  const analyserRef = useRef(null);
-  const animFrameRef = useRef(null);
-
-  const cleanup = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    mediaRecorderRef.current = null;
-    analyserRef.current = null;
-  }, []);
-
-  useEffect(() => cleanup, [cleanup]);
-
-  const start = useCallback(async () => {
-    chunksRef.current = [];
-    setAudioBlob(null);
-    setAudioUrl(null);
-    setElapsed(0);
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { sampleRate: 48000, channelCount: 1, echoCancellation: true }
-    });
-    streamRef.current = stream;
-
-    // Highpass filter (80 Hz, Q 0.7)
-    const audioCtx = new AudioContext({ sampleRate: 48000 });
-    const source = audioCtx.createMediaStreamSource(stream);
-    const highpass = audioCtx.createBiquadFilter();
-    highpass.type = 'highpass';
-    highpass.frequency.value = 80;
-    highpass.Q.value = 0.7;
-
-    // FFT analyser (fftSize 256)
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    analyserRef.current = analyser;
-
-    source.connect(highpass);
-    highpass.connect(analyser);
-
-    // Create a destination for MediaRecorder from filtered audio
-    const dest = audioCtx.createMediaStreamDestination();
-    analyser.connect(dest);
-
-    const recorder = new MediaRecorder(dest.stream, {
-      mimeType: CODEC,
-      audioBitsPerSecond: 32000,
-    });
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: CODEC });
-      setAudioBlob(blob);
-      setAudioUrl(URL.createObjectURL(blob));
-      cleanup();
-    };
-
-    mediaRecorderRef.current = recorder;
-    recorder.start(500); // collect in 500ms chunks
-    setRecording(true);
-
-    // Elapsed timer
-    const startTime = Date.now();
-    timerRef.current = setInterval(() => {
-      const ms = Date.now() - startTime;
-      setElapsed(ms);
-      if (ms >= MAX_DURATION_MS) {
-        recorder.stop();
-        setRecording(false);
-      }
-    }, 200);
-
-    // Waveform animation
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    function tick() {
-      analyser.getByteFrequencyData(dataArray);
-      setAnalyserData(new Uint8Array(dataArray));
-      animFrameRef.current = requestAnimationFrame(tick);
-    }
-    tick();
-  }, [cleanup]);
-
-  const stop = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-    setRecording(false);
-  }, []);
-
-  const discard = useCallback(() => {
-    setAudioBlob(null);
-    setAudioUrl(null);
-    setElapsed(0);
-  }, []);
-
-  return { recording, audioBlob, audioUrl, elapsed, analyserData, start, stop, discard };
-}
-```
-
-#### 4b. Audio recorder UI component
-
-**New file: `apps/web/src/components/AudioRecorder.jsx`**
+### New page: `apps/web/src/pages/Download.jsx`
 
 ```jsx
-import useAudioRecorder from '../hooks/useAudioRecorder.js';
+import { Link } from 'react-router-dom';
 
-function formatDuration(ms) {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function Waveform({ data }) {
-  if (!data) return null;
-  const bars = 32;
-  const step = Math.floor(data.length / bars);
+export default function Download() {
   return (
-    <div className="waveform" aria-hidden="true">
-      {Array.from({ length: bars }, (_, i) => {
-        const value = data[i * step] || 0;
-        const height = Math.max(3, (value / 255) * 28);
-        return <span key={i} className="waveform-bar" style={{ height: `${height}px` }} />;
-      })}
-    </div>
-  );
-}
+    <section className="download-page">
+      <header className="download-header">
+        <h1>Get the desktop app</h1>
+        <p className="download-subhead">
+          Good news — it's free for you today. We can't set up Stripe
+          payments at this time, so the full desktop experience is on us.
+          Enjoy.
+        </p>
+      </header>
 
-export default function AudioRecorder({ onRecorded, onDiscard }) {
-  const { recording, audioBlob, audioUrl, elapsed, analyserData, start, stop, discard } = useAudioRecorder();
-
-  function handleDiscard() {
-    discard();
-    onDiscard?.();
-  }
-
-  function handleAccept() {
-    if (audioBlob) onRecorded?.(audioBlob, audioUrl);
-  }
-
-  return (
-    <div className="audio-recorder">
-      {!recording && !audioUrl && (
-        <button className="audio-record-btn" onClick={start} title="Record voice note">
-          <span className="audio-record-icon" aria-hidden="true" />
-          Voice note
-        </button>
-      )}
-
-      {recording && (
-        <div className="audio-recording">
-          <span className="audio-recording-dot" />
-          <Waveform data={analyserData} />
-          <span className="audio-elapsed">{formatDuration(elapsed)} / 1:30</span>
-          <button className="button-text" onClick={stop}>Done</button>
+      <div className="download-body">
+        <div className="download-card">
+          <h2>Annotated for Mac</h2>
+          <p>Full media pipeline — clip articles, YouTube, podcasts.
+          Screen-level capture. Local-first storage. AI summaries.</p>
+          <a
+            href="/downloads/Annotated.dmg"
+            className="button button-solid download-btn"
+            download
+          >
+            Download for macOS
+          </a>
+          <p className="download-meta">Requires macOS 13 Ventura or later · Apple Silicon &amp; Intel</p>
         </div>
-      )}
 
-      {!recording && audioUrl && (
-        <div className="audio-preview">
-          <audio src={audioUrl} controls />
-          <div className="audio-preview-actions">
-            <button className="button-text" onClick={handleDiscard}>Discard</button>
-            <button className="button-text" onClick={handleAccept} style={{ color: 'var(--accent)' }}>Attach</button>
-          </div>
+        <div className="download-note">
+          <p>
+            The desktop app is where the full power lives — yt-dlp, ffmpeg,
+            Whisper transcription, screen capture, and offline-first
+            annotation storage. The web and extension cover reading and
+            quick annotations; the desktop covers everything else.
+          </p>
         </div>
-      )}
-    </div>
+      </div>
+
+      <footer className="download-footer">
+        <Link to="/" className="button-text">← Back to feed</Link>
+      </footer>
+    </section>
   );
 }
 ```
 
-#### 4c. Integration point
+### Register the route
 
-The `AudioRecorder` component should be added to `apps/web/src/pages/NewAnnotation.jsx` inside the commentary step (step 3 of the wizard). When the user accepts a recording, store the blob and upload it alongside the annotation via `POST /api/annotations/{id}/audio`.
+**File: `apps/web/src/App.jsx`**
 
-#### 4d. CSS for audio recorder
+Add the import and route:
+```jsx
+import Download from './pages/Download.jsx';
+
+// Inside the Routes:
+<Route path="/download" element={<Download />} />
+```
+
+### Add nav link (optional)
+
+**File: `apps/web/src/components/Layout.jsx`**
+
+Add a "Download" link to the header nav (after "Annotate"):
+```jsx
+<NavLink to="/download">Desktop</NavLink>
+```
+
+### CSS
 
 **File: `apps/web/src/styles/global.css`** — append:
 
 ```css
-/* ── Audio Recorder ──────────────────────────────────────────── */
+/* ── Download Page ───────────────────────────────────────────── */
 
-.audio-recorder {
-  margin: 14px 0;
+.download-page {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 48px 0 80px;
 }
 
-.audio-record-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
+.download-header {
+  padding-bottom: 28px;
   border-bottom: 1px solid var(--border);
-  background: transparent;
+}
+
+.download-header h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 42px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.download-subhead {
+  margin: 12px 0 0;
+  max-width: 520px;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.5;
   color: var(--text-secondary);
-  font-size: 13px;
-  font-family: var(--font-sans);
-  cursor: pointer;
 }
 
-.audio-record-btn:hover {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+.download-body {
+  padding: 32px 0;
 }
 
-.audio-record-icon {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
-.audio-recording {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
+.download-card {
+  padding: 28px 0;
   border-bottom: 1px solid var(--border);
 }
 
-.audio-recording-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--danger);
-  animation: pulse-dot 1.2s ease-in-out infinite;
+.download-card h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
 }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+.download-card p {
+  margin: 0 0 20px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+  max-width: 480px;
 }
 
-.audio-elapsed {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+.download-btn {
+  display: inline-flex;
+  font-size: 15px;
 }
 
-.waveform {
-  display: flex;
-  align-items: end;
-  gap: 2px;
-  height: 28px;
+.download-meta {
+  margin: 12px 0 0 !important;
+  font-size: 12px !important;
+  color: var(--text-tertiary) !important;
 }
 
-.waveform-bar {
-  width: 3px;
-  background: var(--accent);
-  border-radius: 1px;
-  transition: height 120ms ease;
+.download-note {
+  padding: 24px 0;
 }
 
-.audio-preview {
-  display: grid;
-  gap: 8px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+.download-note p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 520px;
 }
 
-.audio-preview audio {
-  width: 100%;
-  height: 32px;
-}
-
-.audio-preview-actions {
-  display: flex;
-  gap: 14px;
+.download-footer {
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
 }
 ```
 
-#### 4e. Backend audio upload endpoint
+This matches the existing newspaper-editorial style — large serif heading, understated subhead, ruled-line sections, plenty of whitespace. The "free for now" message is upfront, honest, and feels editorial rather than apologetic.
 
-**File: `packages/api/src/routes/annotations.js`** — add route:
+### Placeholder DMG
 
-`POST /api/annotations/:id/audio` — accepts `multipart/form-data` with an audio file. Saves to `data/media/` directory. Stores the path in a new `audio_path` column on the annotations table.
-
-Schema migration needed:
-```sql
-ALTER TABLE annotations ADD COLUMN audio_path TEXT DEFAULT NULL;
-```
+Create directory `apps/web/public/downloads/` and put a placeholder file there. The actual `.dmg` will come from the Tauri build (`npm run tauri build` in `apps/desktop/`). For now, either:
+- Put a placeholder `README.txt` explaining the build isn't ready
+- Or point the href to a GitHub releases URL instead: `https://github.com/nicholaswhitcraft/annotated/releases/latest`
 
 ---
 
@@ -700,11 +559,11 @@ Record a 2–3 minute demo showing the full user flow, then submit.
 | 1 | Logout button (web) | 15 min | 🔴 |
 | 2 | Swap mock currentUser | 20 min | 🔴 |
 | 3 | Logout button (desktop) | 15 min | 🔴 |
-| 4 | Audio commentary | 60–90 min | 🟡 |
+| 4 | Desktop download page | 20 min | 🔴 |
 | 5 | X/Twitter OAuth | 45 min | 🟢 |
 | 6 | Fly.io deploy | 30–45 min | 🔴 |
 | 7 | Demo video + submit | 30 min | 🔴 |
 
-🔴 = required for submission · 🟡 = strong differentiator · 🟢 = nice-to-have
+🔴 = required for submission · 🟢 = nice-to-have
 
-**Total estimated: 3–4 hours of focused work.**
+**Total estimated: 2.5–3 hours of focused work.**
