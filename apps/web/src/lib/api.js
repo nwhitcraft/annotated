@@ -25,6 +25,11 @@ export function clearToken() {
   window.localStorage.removeItem(SUBSCRIPTION_TIER_KEY);
 }
 
+export function signOut() {
+  clearToken();
+  notifyUserChanged(null);
+}
+
 export function getCurrentUserId() {
   return window.localStorage.getItem(USER_ID_KEY) || 'demo-user';
 }

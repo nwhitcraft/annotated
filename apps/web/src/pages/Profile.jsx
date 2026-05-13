@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AnnotationItem from '../components/AnnotationItem.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import {
@@ -8,6 +8,7 @@ import {
   getUser,
   getUserAnnotations,
   getUsername,
+  signOut,
   toggleFollow,
   updateProfile,
   uploadAvatar,
@@ -15,6 +16,7 @@ import {
 
 export default function Profile() {
   const { username } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
@@ -88,6 +90,11 @@ export default function Profile() {
     setForm(profileForm(user));
     setEditing(true);
     setSearchParams({ edit: '1' });
+  }
+
+  function handleSignOut() {
+    signOut();
+    navigate('/login', { replace: true });
   }
 
   function changeTab(nextTab) {
@@ -197,6 +204,9 @@ export default function Profile() {
         <p className="profile-stats">
           <strong>{Number(user.stats?.annotations || 0).toLocaleString()}</strong> annotations · <strong>{Number(user.stats?.followers || 0).toLocaleString()}</strong> followers · <strong>{Number(user.stats?.following || 0).toLocaleString()}</strong> following · <strong>{Number(user.stats?.credibility || user.credibility_score || 0).toLocaleString()}</strong> credibility
         </p>
+        {isSelf && (
+          <button className="sign-out-link" type="button" onClick={handleSignOut}>Sign out</button>
+        )}
         <div className="credibility-card">
           <strong>{Number(user.stats?.credibility || user.credibility_score || 0)}</strong>
           <span>Credibility score</span>

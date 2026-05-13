@@ -1161,6 +1161,24 @@ textarea {
   color: var(--text-primary);
 }
 
+.sign-out-link {
+  grid-column: 1 / -1;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sign-out-link:hover {
+  color: var(--danger);
+  border-bottom-color: var(--danger);
+}
+
 .profile-links {
   display: flex;
   flex-wrap: wrap;
