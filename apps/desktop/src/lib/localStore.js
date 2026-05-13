@@ -24,6 +24,29 @@ async function getApiEndpoint() {
   return cachedSettings?.apiEndpoint || 'http://localhost:3080';
 }
 
+async function apiEndpoint(settings = {}) {
+  const endpoint = settings.apiEndpoint || await getApiEndpoint();
+  return endpoint.replace(/\/$/, '');
+}
+
+async function apiRequest(path, options = {}, settings = {}) {
+  const endpoint = await apiEndpoint(settings);
+  const token = getToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(`${endpoint}/api${path}`, {
+    ...options,
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) throw new Error(data?.error || `Request failed: ${response.status}`);
+  return data;
+}
+
 const demoAnnotations = [
   {
     id: 'local-briefing',
@@ -79,6 +102,10 @@ export function clearToken() {
   window.localStorage.removeItem(SUBSCRIPTION_TIER_KEY);
 }
 
+export function signOut() {
+  clearToken();
+}
+
 export function getCachedUser() {
   const id = window.localStorage.getItem(USER_ID_KEY);
   if (!id) return null;
@@ -124,17 +151,82 @@ export function setAuthTokenFromCallback(value) {
 export async function checkAuth(settings = {}) {
   const token = getToken();
   if (!token) return { user: null, error: 'unauthorized' };
-  const endpoint = (settings.apiEndpoint || defaultSettings.apiEndpoint).replace(/\/$/, '');
-  const response = await fetch(`${endpoint}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error) {
+  try {
+    const data = await apiRequest('/auth/me', {}, settings);
+    cacheUser(data);
+    return { user: data };
+  } catch (error) {
     clearToken();
-    return { user: null, error: data.error || 'unauthorized' };
+    return { user: null, error: error.message || 'unauthorized' };
   }
-  cacheUser(data);
-  return { user: data };
+}
+
+export async function getFeed(tab = 'latest', settings = {}) {
+  if (tab === 'following' && !getToken()) throw new Error('Sign in to see your following feed.');
+  let path = '/feed';
+  if (tab === 'trending') path = '/feed/trending';
+  if (['article', 'youtube', 'podcast', 'twitter'].includes(tab)) path = `/feed?type=${tab}`;
+  if (tab?.startsWith('tag:')) path = `/feed?annotation_type=${encodeURIComponent(tab.slice(4))}`;
+  if (tab === 'following') path = `/feed/following/${encodeURIComponent(getCurrentUserId())}`;
+  const data = await apiRequest(path, {}, settings);
+  return data.items || data.annotations || data || [];
+}
+
+export async function getUser(usernameOrId, settings = {}) {
+  return apiRequest(`/users/${encodeURIComponent(usernameOrId)}?viewer_id=${encodeURIComponent(getCurrentUserId())}`, {}, settings);
+}
+
+export async function getUserAnnotations(userId, tab = 'annotations', settings = {}) {
+  const params = new URLSearchParams({ viewer_id: getCurrentUserId() });
+  params.set('status', 'published');
+  if (tab === 'liked') params.set('liked', '1');
+  const data = await apiRequest(`/users/${encodeURIComponent(userId)}/annotations?${params}`, {}, settings);
+  return data.items || data.annotations || [];
+}
+
+export async function toggleFollow(userId, settings = {}) {
+  return apiRequest(`/users/${encodeURIComponent(userId)}/follow`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
+  }, settings);
+}
+
+export async function toggleLike(annotationId, settings = {}) {
+  return apiRequest(`/annotations/${encodeURIComponent(annotationId)}/like`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
+  }, settings);
+}
+
+export async function toggleNoteworthy(annotationId, settings = {}) {
+  return apiRequest(`/annotations/${encodeURIComponent(annotationId)}/noteworthy`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: getCurrentUserId() }),
+  }, settings);
+}
+
+export async function updateProfile(userId, payload, settings = {}) {
+  const data = await apiRequest(`/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }, settings);
+  if (data.id === getCurrentUserId()) cacheUser(data);
+  return data;
+}
+
+export async function uploadAvatar(file, userId = getCurrentUserId(), settings = {}) {
+  const body = new FormData();
+  body.append('avatar', file);
+  if (userId) body.append('user_id', userId);
+  const data = await apiRequest('/users/avatar', {
+    method: 'POST',
+    body,
+  }, settings);
+  if (data.avatar_url && userId === getCurrentUserId()) {
+    const cached = getCachedUser();
+    cacheUser({ ...cached, id: userId, avatar_url: data.avatar_url });
+  }
+  return data;
 }
 
 function readLocal() {

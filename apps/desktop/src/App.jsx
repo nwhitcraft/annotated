@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import Composer from './components/Composer.jsx';
 import DetailView from './components/DetailView.jsx';
+import FeedView from './components/FeedView.jsx';
 import LibraryView from './components/LibraryView.jsx';
+import ProfileView from './components/ProfileView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import {
   addLocalComment,
@@ -22,7 +24,9 @@ import {
 
 const views = [
   { key: 'compose', label: 'Compose' },
+  { key: 'feed', label: 'Feed' },
   { key: 'library', label: 'Library' },
+  { key: 'profile', label: 'Profile' },
   { key: 'detail', label: 'Detail' },
   { key: 'settings', label: 'Settings' },
 ];
@@ -42,6 +46,7 @@ export default function App() {
   const [status, setStatus] = useState('Ready');
   const [screenCaptureIntent, setScreenCaptureIntent] = useState(0);
   const [screenStopIntent, setScreenStopIntent] = useState(0);
+  const [profileKey, setProfileKey] = useState(getCachedUser()?.username || '');
 
   function openComposer() {
     setEditing(null);
@@ -61,6 +66,7 @@ export default function App() {
       checkAuth(value).then((result) => {
         if (result.user) {
           setAuthUser(result.user);
+          setProfileKey(result.user.username || result.user.id);
           setStatus(`Signed in as ${result.user.display_name || result.user.username}`);
         }
       });
@@ -173,7 +179,8 @@ export default function App() {
   function signIn(provider) {
     window.open(authUrl(provider, settings), '_blank', 'noopener,noreferrer');
     setStatus('Opened browser sign-in. Paste the annotated://callback URL here when it returns.');
-    setActiveView('settings');
+    setProfileKey('');
+    setActiveView('profile');
   }
 
   async function connectCallback(value) {
@@ -181,6 +188,7 @@ export default function App() {
     const result = await checkAuth(settings);
     if (result.user) {
       setAuthUser(result.user);
+      setProfileKey(result.user.username || result.user.id);
       setStatus(`Signed in as ${result.user.display_name || result.user.username}`);
       return result.user;
     }
@@ -191,6 +199,7 @@ export default function App() {
     clearToken();
     setAuthUser(null);
     setEditing(null);
+    setProfileKey('');
     setActiveView('compose');
     setStatus('Signed out');
   }
@@ -210,13 +219,25 @@ export default function App() {
     setContextMenu(null);
   }
 
+  function openProfile(usernameOrId) {
+    setProfileKey(usernameOrId || authUser?.username || authUser?.id || '');
+    setActiveView('profile');
+  }
+
   return (
     <div className="desktop-shell">
       <aside className="sidebar">
         <a className="wordmark">annotated</a>
         <nav>
           {views.map((view) => (
-            <button key={view.key} className={activeView === view.key ? 'active' : ''} onClick={() => setActiveView(view.key)}>
+            <button
+              key={view.key}
+              className={activeView === view.key ? 'active' : ''}
+              onClick={() => {
+                if (view.key === 'profile') setProfileKey(authUser?.username || authUser?.id || '');
+                setActiveView(view.key);
+              }}
+            >
               {view.label}
             </button>
           ))}
@@ -237,6 +258,15 @@ export default function App() {
             screenStopIntent={screenStopIntent}
           />
         )}
+        {activeView === 'feed' && (
+          <FeedView
+            settings={settings}
+            authUser={authUser}
+            onOpenProfile={openProfile}
+            onSignIn={signIn}
+            onStatus={setStatus}
+          />
+        )}
         {activeView === 'library' && (
           <LibraryView
             annotations={filtered}
@@ -255,6 +285,22 @@ export default function App() {
         )}
         {activeView === 'detail' && (
           <DetailView annotation={activeAnnotation} onPost={post} onDelete={remove} onExport={exportItem} onTagsChange={updateTags} onComment={addComment} />
+        )}
+        {activeView === 'profile' && (
+          <ProfileView
+            authUser={authUser}
+            profileKey={profileKey}
+            settings={settings}
+            onAuthUser={(user) => {
+              setAuthUser(user);
+              setProfileKey(user?.username || user?.id || '');
+            }}
+            onSignIn={signIn}
+            onCallback={connectCallback}
+            onSignOut={signOut}
+            onOpenProfile={openProfile}
+            onStatus={setStatus}
+          />
         )}
         {activeView === 'settings' && (
           <SettingsView
