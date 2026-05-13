@@ -47,41 +47,9 @@ async function apiRequest(path, options = {}, settings = {}) {
   return data;
 }
 
-const demoAnnotations = [
-  {
-    id: 'local-briefing',
-    user_id: 'local-user',
-    source_url: 'https://www.ft.com/global-economy-resilience',
-    source_type: 'article',
-    source_title: 'Why the global economy keeps defying the pessimists',
-    source_domain: 'ft.com',
-    source_thumbnail: '',
-    clip_text: 'The resilience of consumer spending and the adaptability of businesses have combined to produce outcomes many forecasters did not anticipate.',
-    clip_start_sec: null,
-    clip_end_sec: null,
-    clip_media_path: null,
-    commentary: 'Pessimism sells, but it is not a strategy. The real story is adaptation.',
-    annotation_type: 'Analysis',
-    tags: ['economy', 'briefing'],
-    is_public: 0,
-    synced_at: null,
-    conflict_version: 1,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    comments: [
-      {
-        id: 'comment-1',
-        body: 'This is exactly the kind of local note worth polishing before posting.',
-        created_at: new Date().toISOString(),
-      },
-    ],
-  },
-];
-
 const defaultSettings = {
   apiEndpoint: 'http://localhost:3080',
   frontendUrl: 'http://localhost:3090',
-  hotkey: 'CommandOrControl+Shift+A',
   storageLocation: 'Application support / Annotated / annotated.sqlite',
 };
 
@@ -107,6 +75,7 @@ export function signOut() {
 }
 
 export function getCachedUser() {
+  if (!getToken()) return null;
   const id = window.localStorage.getItem(USER_ID_KEY);
   if (!id) return null;
   return {
@@ -150,7 +119,10 @@ export function setAuthTokenFromCallback(value) {
 
 export async function checkAuth(settings = {}) {
   const token = getToken();
-  if (!token) return { user: null, error: 'unauthorized' };
+  if (!token) {
+    clearToken();
+    return { user: null, error: 'unauthorized' };
+  }
   try {
     const data = await apiRequest('/auth/me', {}, settings);
     cacheUser(data);
@@ -232,8 +204,8 @@ export async function uploadAvatar(file, userId = getCurrentUserId(), settings =
 function readLocal() {
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(demoAnnotations));
-    return demoAnnotations;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    return [];
   }
   return JSON.parse(raw);
 }
@@ -479,12 +451,12 @@ export async function runDesktopDiagnostics() {
       podcast: { ok: false, blocker: 'Run inside Tauri to exercise ffmpeg.' },
       whisper: { ok: false, blocker: 'Run inside Tauri to exercise Whisper.' },
       screen: { ok: false, blocker: 'Screen capture requires Tauri permissions.' },
-      auth: { ok: true, stdout: 'Desktop callback token parser available; deep-link auto-open needs the Tauri deep-link plugin before packaged auth is seamless.' },
+      auth: { ok: true, stdout: 'Desktop callback parser available; packaged builds use the annotated:// deep link to finish OAuth automatically.' },
     };
   }
   const [screen, auth] = await Promise.all([
     invoke('screen_clip_diagnostic'),
-    invoke('handle_auth_callback', { callbackUrl: 'annotated://callback?token=diagnostic' }).then(() => ({ ok: true, stdout: 'Callback parser ready; automatic URL handling still needs packaged deep-link registration.' })).catch((error) => ({ ok: false, blocker: String(error) })),
+    invoke('handle_auth_callback', { callbackUrl: 'annotated://callback?token=diagnostic' }).then(() => ({ ok: true, stdout: 'Callback parser ready; annotated:// deep-link handling is registered in the packaged app.' })).catch((error) => ({ ok: false, blocker: String(error) })),
   ]);
   return {
     youtube: { ok: false, blocker: 'Provide a YouTube URL in a clipping workflow to run yt-dlp.' },

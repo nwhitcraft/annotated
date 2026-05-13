@@ -481,17 +481,6 @@ kbd {
   font-weight: 600;
 }
 
-.composer-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.composer-shortcuts kbd {
-  white-space: nowrap;
-}
-
 .visibility-bubble {
   justify-self: start;
   display: inline-flex;
@@ -554,6 +543,21 @@ kbd {
 
 .button-text {
   color: var(--text-secondary);
+}
+
+.callback-fallback-link {
+  justify-self: start;
+  min-height: 0;
+  padding: 0 0 3px;
+  border-radius: 0;
+  border-bottom: 1px solid currentColor;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.callback-fallback-note {
+  max-width: 520px;
+  line-height: 1.5;
 }
 
 .danger {
@@ -1050,7 +1054,4 @@ kbd {
     grid-template-columns: 1fr;
   }
 
-  .composer-shortcuts {
-    justify-content: flex-start;
-  }
 }

@@ -50,7 +50,6 @@ struct Settings {
     api_endpoint: String,
     #[serde(rename = "frontendUrl", default = "default_frontend_url")]
     frontend_url: String,
-    hotkey: String,
     #[serde(rename = "storageLocation")]
     storage_location: String,
 }
@@ -476,7 +475,6 @@ fn load_settings(app: AppHandle) -> Result<Settings, String> {
     let default = Settings {
         api_endpoint: "http://localhost:3080".to_string(),
         frontend_url: default_frontend_url(),
-        hotkey: "CommandOrControl+Shift+A".to_string(),
         storage_location: path,
     };
     let value: Result<String, _> = conn.query_row(
@@ -753,7 +751,7 @@ fn show_main_window(app: &AppHandle) {
 
 fn set_tray_recording(app: &AppHandle, recording: bool) {
     if let Some(tray) = app.tray_by_id("annotated-tray") {
-        let _ = tray.set_title(Some(if recording { "●" } else { "A" }));
+        let _ = tray.set_title(Some(if recording { "●" } else { "an" }));
         let _ = tray.set_tooltip(Some(if recording {
             "Annotated is clipping"
         } else {
@@ -1130,16 +1128,9 @@ fn handle_auth_callback(callback_url: String) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(ScreenCaptureState::default())) as SharedScreenCaptureState)
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let composer_handle = app.handle().clone();
-            let shortcut_str = "CmdOrControl+Shift+A";
-            app.global_shortcut()
-                .on_shortcut(shortcut_str, move |_app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        let _ = composer_handle.emit("shortcut:composer-toggle", true);
-                    }
-                })?;
             let clip_handle = app.handle().clone();
             let clip_shortcut_str = "Alt+Shift+X";
             app.global_shortcut().on_shortcut(
@@ -1158,7 +1149,7 @@ pub fn run() {
                 .quit_with_text("Quit Annotated")
                 .build()?;
             TrayIconBuilder::with_id("annotated-tray")
-                .title("A")
+                .title("an")
                 .tooltip("Annotated")
                 .menu(&menu)
                 .show_menu_on_left_click(true)

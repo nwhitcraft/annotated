@@ -10,6 +10,7 @@ const JWT_EXPIRY = '7d';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3090';
 const DESKTOP_CALLBACK_URL = process.env.DESKTOP_CALLBACK_URL || 'annotated://callback';
 const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || 3080}`;
+const ALLOW_DEMO_AUTH = process.env.ALLOW_DEMO_AUTH === '1';
 
 // --- Google OAuth ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -17,10 +18,8 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT || '/api/auth/google/callback';
 
 app.get('/google', (c) => {
-  if (!GOOGLE_CLIENT_ID) {
-    // Dev fallback: redirect to demo login
-    const client = c.req.query('client') === 'desktop' ? '&client=desktop' : '';
-    return c.redirect(`/api/auth/demo?provider=google${client}`);
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return oauthNotConfigured(c, 'google');
   }
   const redirectUri = oauthRedirectUri(GOOGLE_REDIRECT);
   const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
@@ -90,9 +89,8 @@ const TWITTER_REDIRECT = process.env.TWITTER_REDIRECT || '/api/auth/twitter/call
 const pkceStore = new Map();
 
 app.get('/twitter', async (c) => {
-  if (!TWITTER_CLIENT_ID) {
-    const client = c.req.query('client') === 'desktop' ? '&client=desktop' : '';
-    return c.redirect(`/api/auth/demo?provider=twitter${client}`);
+  if (!TWITTER_CLIENT_ID || !TWITTER_CLIENT_SECRET) {
+    return oauthNotConfigured(c, 'twitter');
   }
   const state = nanoid(16);
   const codeVerifier = nanoid(64);
@@ -176,6 +174,9 @@ app.get('/twitter/callback', async (c) => {
 
 // --- Demo login (development only) ---
 app.get('/demo', (c) => {
+  if (!ALLOW_DEMO_AUTH) {
+    return c.json({ error: 'Demo auth is disabled' }, 404);
+  }
   const provider = c.req.query('provider') || 'demo';
   const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
   const demoUsers = {
@@ -263,6 +264,14 @@ function callbackTarget(token, client = 'web') {
     return `${DESKTOP_CALLBACK_URL}?token=${encodeURIComponent(token)}`;
   }
   return `${FRONTEND_URL}/auth/callback?token=${encodeURIComponent(token)}`;
+}
+
+function oauthNotConfigured(c, provider) {
+  const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
+  if (client === 'desktop') {
+    return c.json({ error: `${provider} OAuth is not configured` }, 503);
+  }
+  return c.redirect(`${FRONTEND_URL}/login?error=${provider}_not_configured`);
 }
 
 function oauthRedirectUri(pathOrUrl) {

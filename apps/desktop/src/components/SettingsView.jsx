@@ -5,6 +5,7 @@ export default function SettingsView({ settings, authUser, onChange, onSave, onS
   const [diagnostics, setDiagnostics] = useState(null);
   const [callbackValue, setCallbackValue] = useState('');
   const [authError, setAuthError] = useState('');
+  const [showCallbackFallback, setShowCallbackFallback] = useState(false);
 
   async function runDiagnostics() {
     setDiagnostics(await runDesktopDiagnostics());
@@ -35,24 +36,46 @@ export default function SettingsView({ settings, authUser, onChange, onSave, onS
           {authUser ? (
             <h3>{authUser.display_name || authUser.username} <span>@{authUser.username}</span></h3>
           ) : (
-            <h3>Sign in to publish public annotations</h3>
+            <>
+              <h3>Sign in to Annotated</h3>
+              <p>Continue in your browser. When OAuth finishes, Annotated will reopen and connect this Mac automatically.</p>
+            </>
           )}
         </div>
-        <div className="auth-actions">
-          <button className="button button-outline" type="button" onClick={() => onSignIn('google')}>Google</button>
-          <button className="button button-outline" type="button" onClick={() => onSignIn('twitter')}>X</button>
-        </div>
-        <label>
-          Desktop callback URL or token
-          <input
-            value={callbackValue}
-            onChange={(event) => setCallbackValue(event.target.value)}
-            placeholder="annotated://callback?token=..."
-          />
-        </label>
-        <button className="button button-solid" type="button" onClick={connectCallback} disabled={!callbackValue.trim()}>
-          Connect account
-        </button>
+        {!authUser && (
+          <>
+            <div className="auth-actions">
+              <button className="button button-outline" type="button" onClick={() => onSignIn('google')}>
+                Continue with Google
+              </button>
+              <button className="button button-outline" type="button" onClick={() => onSignIn('twitter')}>
+                Continue with X
+              </button>
+            </div>
+            {!showCallbackFallback ? (
+              <button className="button button-text callback-fallback-link" type="button" onClick={() => setShowCallbackFallback(true)}>
+                Browser did not return to Annotated?
+              </button>
+            ) : (
+              <>
+                <p className="callback-fallback-note">
+                  Automatic sign-in should reopen Annotated. Use this only if your browser shows an annotated://callback URL but macOS does not switch back to the app.
+                </p>
+                <label>
+                  Callback URL or token
+                  <input
+                    value={callbackValue}
+                    onChange={(event) => setCallbackValue(event.target.value)}
+                    placeholder="annotated://callback?token=..."
+                  />
+                </label>
+                <button className="button button-solid" type="button" onClick={connectCallback} disabled={!callbackValue.trim()}>
+                  Connect account
+                </button>
+              </>
+            )}
+          </>
+        )}
         {authError && <p className="composer-error">{authError}</p>}
       </section>
       <label>
@@ -62,10 +85,6 @@ export default function SettingsView({ settings, authUser, onChange, onSave, onS
       <label>
         Web app URL
         <input value={settings.frontendUrl || ''} onChange={(event) => onChange({ ...settings, frontendUrl: event.target.value })} />
-      </label>
-      <label>
-        Composer hotkey
-        <input value={settings.hotkey || ''} onChange={(event) => onChange({ ...settings, hotkey: event.target.value })} />
       </label>
       <label>
         Storage location

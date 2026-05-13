@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { listen } from '@tauri-apps/api/event';
 import Composer from './components/Composer.jsx';
 import DetailView from './components/DetailView.jsx';
@@ -32,7 +33,7 @@ const views = [
 ];
 
 export default function App() {
-  const [activeView, setActiveView] = useState('compose');
+  const [activeView, setActiveView] = useState(getCachedUser() ? 'compose' : 'settings');
   const [annotations, setAnnotations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -47,11 +48,6 @@ export default function App() {
   const [screenCaptureIntent, setScreenCaptureIntent] = useState(0);
   const [screenStopIntent, setScreenStopIntent] = useState(0);
   const [profileKey, setProfileKey] = useState(getCachedUser()?.username || '');
-
-  function openComposer() {
-    setEditing(null);
-    setActiveView('compose');
-  }
 
   function startScreenClip() {
     setEditing(null);
@@ -68,18 +64,47 @@ export default function App() {
           setAuthUser(result.user);
           setProfileKey(result.user.username || result.user.id);
           setStatus(`Signed in as ${result.user.display_name || result.user.username}`);
+        } else {
+          setAuthUser(null);
+          setProfileKey('');
+          setActiveView('settings');
+          setStatus('Sign in to continue');
         }
       });
     });
   }, []);
 
   useEffect(() => {
+    let unlisten = null;
+    let cancelled = false;
+
+    async function setupDeepLinks() {
+      try {
+        const startUrls = await getCurrent();
+        if (!cancelled && startUrls?.length) {
+          await connectCallback(startUrls[0]);
+        }
+        unlisten = await onOpenUrl((urls) => {
+          const callbackUrl = urls.find((url) => String(url).startsWith('annotated://callback'));
+          if (callbackUrl) void connectCallback(callbackUrl);
+        });
+      } catch {
+        // Browser preview and older dev builds do not expose deep-link events.
+      }
+    }
+
+    void setupDeepLinks();
+    return () => {
+      cancelled = true;
+      if (typeof unlisten === 'function') unlisten();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.apiEndpoint]);
+
+  useEffect(() => {
     const unlisteners = [];
     (async () => {
       try {
-        unlisteners.push(await listen('shortcut:composer-toggle', () => {
-          openComposer();
-        }));
         unlisteners.push(await listen('tray-start-screen-clip', () => {
           startScreenClip();
         }));
@@ -178,9 +203,9 @@ export default function App() {
 
   function signIn(provider) {
     window.open(authUrl(provider, settings), '_blank', 'noopener,noreferrer');
-    setStatus('Opened browser sign-in. Paste the annotated://callback URL here when it returns.');
+    setStatus('Opened browser sign-in. Annotated will connect automatically after OAuth.');
     setProfileKey('');
-    setActiveView('profile');
+    setActiveView('settings');
   }
 
   async function connectCallback(value) {
@@ -190,6 +215,7 @@ export default function App() {
       setAuthUser(result.user);
       setProfileKey(result.user.username || result.user.id);
       setStatus(`Signed in as ${result.user.display_name || result.user.username}`);
+      setActiveView('compose');
       return result.user;
     }
     throw new Error(result.error || 'Could not verify token');
@@ -200,8 +226,8 @@ export default function App() {
     setAuthUser(null);
     setEditing(null);
     setProfileKey('');
-    setActiveView('compose');
-    setStatus('Signed out');
+    setActiveView('settings');
+    setStatus('Signed out. Sign in to continue.');
   }
 
   function open(annotation) {
@@ -220,8 +246,23 @@ export default function App() {
   }
 
   function openProfile(usernameOrId) {
+    if (!authUser) {
+      setActiveView('settings');
+      setStatus('Sign in to view your profile');
+      return;
+    }
     setProfileKey(usernameOrId || authUser?.username || authUser?.id || '');
     setActiveView('profile');
+  }
+
+  function openView(viewKey) {
+    if (!authUser && viewKey !== 'settings') {
+      setActiveView('settings');
+      setStatus('Sign in to continue');
+      return;
+    }
+    if (viewKey === 'profile') setProfileKey(authUser?.username || authUser?.id || '');
+    setActiveView(viewKey);
   }
 
   return (
@@ -233,16 +274,13 @@ export default function App() {
             <button
               key={view.key}
               className={activeView === view.key ? 'active' : ''}
-              onClick={() => {
-                if (view.key === 'profile') setProfileKey(authUser?.username || authUser?.id || '');
-                setActiveView(view.key);
-              }}
+              onClick={() => openView(view.key)}
             >
               {view.label}
             </button>
           ))}
         </nav>
-        <p className="hotkey-hint">⌥⇧X clips · ⌘⇧A compose</p>
+        <p className="hotkey-hint">⌥⇧X clips</p>
       </aside>
 
       <main className="workspace">

@@ -257,10 +257,6 @@ export default function Composer({
           <p>Annotation Composer</p>
           <h1>Clip privately. Publish only when it belongs in the feed.</h1>
         </div>
-        <div className="composer-shortcuts" aria-label="Desktop shortcuts">
-          <kbd>⌥⇧X clip</kbd>
-          <kbd>⌘⇧A compose</kbd>
-        </div>
       </header>
 
       <label>
