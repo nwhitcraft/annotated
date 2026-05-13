@@ -3,15 +3,18 @@ import { useNavigate } from 'react-router-dom';
 const lessons = [
   {
     title: 'Text Clipping',
-    text: 'Highlight any passage on a webpage. Press Ctrl+Shift+X (Mac: Option+Shift+X). The composer opens with your selection. Add commentary, choose a type, and post.',
+    eyebrow: 'Articles and webpages',
+    text: 'Highlight any passage on a webpage. Press Ctrl+Shift+X on Windows, or Option+Shift+X on Mac. The composer opens with your selection ready to annotate.',
   },
   {
     title: 'Video Clipping',
-    text: "Go to any YouTube video. Press Ctrl+Shift+X (Mac: Option+Shift+X). A recording bubble appears - the extension captures up to 90 seconds of video and audio. Click Stop when you're done. Add your commentary and post.",
+    eyebrow: 'YouTube',
+    text: 'Open a YouTube video and press the same shortcut. The recording timer appears, captures up to 90 seconds, and stops when you press Stop.',
   },
   {
     title: 'Podcast Clipping',
-    text: 'Open a podcast page. Press Ctrl+Shift+X (Mac: Option+Shift+X). The extension records up to 90 seconds of audio. Click Stop. Add your commentary and post.',
+    eyebrow: 'Podcast pages',
+    text: 'Open a podcast page, press the shortcut, and record the audio moment. Add your commentary, choose a type, then annotate.',
   },
 ];
 
@@ -31,14 +34,28 @@ export default function OnboardingTutorial() {
         <li className="active">How to clip</li>
       </ol>
 
-      <section className="shortcut-hero">
-        <img src="/shortcut-keys.png" alt="" />
+      <section className="shortcut-hero" aria-label="Annotated shortcut">
+        <div className="shortcut-artifact">
+          <div className="shortcut-artifact-copy">
+            <span>Universal clipping shortcut</span>
+            <h2>Open the composer from any article, video or podcast.</h2>
+          </div>
+          <div className="shortcut-key-row" aria-hidden="true">
+            <kbd>Ctrl</kbd>
+            <span>+</span>
+            <kbd>Shift</kbd>
+            <span>+</span>
+            <kbd>X</kbd>
+          </div>
+          <p>Mac: Option + Shift + X</p>
+        </div>
       </section>
 
       <div className="tutorial-grid">
         {lessons.map((lesson) => (
           <section className="tutorial-section" key={lesson.title}>
             <div>
+              <span>{lesson.eyebrow}</span>
               <h2>{lesson.title}</h2>
               <p>{lesson.text}</p>
             </div>

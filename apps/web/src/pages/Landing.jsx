@@ -5,20 +5,20 @@ import { getToken, getUsername } from '../lib/api.js';
 
 const productNotes = [
   {
-    label: 'Clip',
-    copy: 'Save the exact passage, timestamp, or episode moment that deserves a public response.',
+    label: 'Articles',
+    copy: 'Highlight the exact passage that matters and attach your commentary to the source.',
   },
   {
-    label: 'Comment',
-    copy: 'Write a clear take with the original source attached, so readers can inspect the argument.',
+    label: 'Video',
+    copy: 'Clip YouTube moments with timestamps so readers can replay the context.',
   },
   {
-    label: 'Discuss',
-    copy: 'Publish into a feed built around threaded commentary instead of disposable bookmarks.',
+    label: 'Podcasts',
+    copy: 'Capture the part of an episode you want to discuss, then publish it into the feed.',
   },
   {
-    label: 'Protect',
-    copy: 'Every clip includes a "File a Claim" button so creators can dispute unfair use. Fair use, made visible.',
+    label: 'Desktop',
+    copy: 'Use the Mac app for private clips and screen capture outside the browser.',
   },
 ];
 
@@ -39,12 +39,13 @@ export default function Landing() {
         </nav>
       </header>
 
-      <main className="landing-main">
-        <section className="landing-hero" aria-labelledby="landing-title">
-          <div className="landing-kicker">Social commentary for the open web</div>
+      <main className="landing-main" aria-labelledby="landing-title">
+        <img className="landing-hero-image" src="/annotated-app-logo.png" alt="" />
+        <section className="landing-hero">
+          <div className="landing-kicker">Annotated</div>
           <h1 id="landing-title">Clip the internet. Publish the argument.</h1>
           <p>
-            Annotated is a place to quote articles, videos, and podcasts with context, then discuss the take in a public thread. Every clip includes a "File a Claim" button so creators can dispute unfair use.
+            Quote articles, videos, podcasts and desktop moments with the original source attached, then discuss the annotation in a public feed built for context.
           </p>
           <div className="landing-auth">
             {username ? (
@@ -52,19 +53,9 @@ export default function Landing() {
             ) : (
               <AuthButtons />
             )}
-            <span>{username ? `Signed in as @${username}.` : 'Sign up or log in with one click.'}</span>
+            <span>{username ? `Signed in as @${username}.` : 'Sign up or log in with Google or X.'}</span>
           </div>
         </section>
-
-        <aside className="landing-proof" aria-label="Annotated preview">
-          <div className="proof-meta">MAYA DESAI · ft.com · article</div>
-          <a href="/feed">Why the global economy keeps defying the pessimists</a>
-          <blockquote>
-            The resilience of consumer spending and the adaptability of businesses have changed the forecast.
-          </blockquote>
-          <h2>The useful layer is not the link. It is the argument attached to it.</h2>
-          <div className="proof-actions">♡ 42 · ○ 8 · <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>File a claim</span></div>
-        </aside>
       </main>
 
       <section className="landing-notes" aria-label="How Annotated works">
