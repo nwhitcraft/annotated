@@ -527,6 +527,66 @@ fn run_tool(mut command: Command, output_path: Option<String>) -> ToolResult {
     }
 }
 
+fn output_file_is_valid(path: &PathBuf) -> bool {
+    fs::metadata(path)
+        .map(|metadata| metadata.len() > 1024)
+        .unwrap_or(false)
+}
+
+fn remove_partial_output(path: &PathBuf) {
+    if path.exists() {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn format_media_timestamp(seconds: i64) -> String {
+    let safe = seconds.max(0);
+    let hours = safe / 3600;
+    let minutes = (safe % 3600) / 60;
+    let secs = safe % 60;
+    format!("{:02}:{:02}:{:02}", hours, minutes, secs)
+}
+
+fn first_http_line(value: &str) -> Option<String> {
+    value
+        .lines()
+        .map(|line| line.trim())
+        .find(|line| line.starts_with("http://") || line.starts_with("https://"))
+        .map(|line| line.to_string())
+}
+
+fn resolve_podcast_audio_url(input: &str) -> Option<String> {
+    let output = Command::new("yt-dlp")
+        .arg("--ignore-config")
+        .arg("-f")
+        .arg("bestaudio/best")
+        .arg("-g")
+        .arg("--no-playlist")
+        .arg("--no-warnings")
+        .arg(input)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    first_http_line(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn tool_failure_summary(method: &str, result: &ToolResult) -> String {
+    let detail = if !result.stderr.trim().is_empty() {
+        result.stderr.trim()
+    } else if !result.stdout.trim().is_empty() {
+        result.stdout.trim()
+    } else {
+        result.blocker.as_deref().unwrap_or("tool failed")
+    };
+    format!(
+        "{}: {}",
+        method,
+        detail.lines().next().unwrap_or("tool failed")
+    )
+}
+
 fn media_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -949,31 +1009,84 @@ fn extract_podcast_audio(
     start: i64,
     end: i64,
 ) -> Result<ToolResult, String> {
-    let media_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("media");
-    fs::create_dir_all(&media_dir).map_err(|error| error.to_string())?;
+    let media_dir = media_dir(&app)?;
     let duration = (end - start).clamp(1, 90);
     let output = media_dir.join(format!("podcast-{}.mp3", Uuid::new_v4()));
-    let mut command = Command::new("ffmpeg");
+    let output_string = output.to_string_lossy().to_string();
+    let mut attempts: Vec<(String, String)> = Vec::new();
+
+    if let Some(resolved_url) = resolve_podcast_audio_url(&input) {
+        attempts.push(("yt-dlp direct audio".to_string(), resolved_url));
+    }
+    attempts.push(("original URL/file".to_string(), input.clone()));
+
+    let mut failures: Vec<String> = Vec::new();
+    for (method, source) in attempts {
+        remove_partial_output(&output);
+        let mut command = Command::new("ffmpeg");
+        command
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-nostdin")
+            .arg("-y")
+            .arg("-ss")
+            .arg(start.to_string())
+            .arg("-i")
+            .arg(source)
+            .arg("-t")
+            .arg(duration.to_string())
+            .arg("-vn")
+            .arg("-map")
+            .arg("0:a:0")
+            .arg("-c:a")
+            .arg("libmp3lame")
+            .arg("-q:a")
+            .arg("4")
+            .arg(&output_string);
+        let result = run_tool(command, Some(output_string.clone()));
+        if result.ok && output_file_is_valid(&output) {
+            return Ok(result);
+        }
+        failures.push(tool_failure_summary(&method, &result));
+    }
+
+    remove_partial_output(&output);
+    let start_ts = format_media_timestamp(start);
+    let end_ts = format_media_timestamp(start + duration);
+    let mut command = Command::new("yt-dlp");
     command
-        .arg("-y")
-        .arg("-ss")
-        .arg(start.to_string())
-        .arg("-i")
-        .arg(input)
-        .arg("-t")
-        .arg(duration.to_string())
-        .arg("-vn")
-        .arg("-acodec")
-        .arg("libmp3lame")
-        .arg(output.to_string_lossy().to_string());
-    Ok(run_tool(
-        command,
-        Some(output.to_string_lossy().to_string()),
-    ))
+        .arg("--ignore-config")
+        .arg("-f")
+        .arg("bestaudio/best")
+        .arg("-x")
+        .arg("--audio-format")
+        .arg("mp3")
+        .arg("--audio-quality")
+        .arg("4")
+        .arg("--download-sections")
+        .arg(format!("*{}-{}", start_ts, end_ts))
+        .arg("-o")
+        .arg(&output_string)
+        .arg("--force-overwrite")
+        .arg("--no-playlist")
+        .arg("--no-warnings")
+        .arg(input);
+    let result = run_tool(command, Some(output_string.clone()));
+    if result.ok && output_file_is_valid(&output) {
+        return Ok(result);
+    }
+    failures.push(tool_failure_summary("yt-dlp section download", &result));
+    remove_partial_output(&output);
+
+    Ok(ToolResult {
+        ok: false,
+        status: result.status,
+        stdout: result.stdout,
+        stderr: failures.join("\n"),
+        output_path: Some(output_string),
+        blocker: Some("Failed to extract podcast audio clip".to_string()),
+    })
 }
 
 #[tauri::command]
@@ -1029,12 +1142,14 @@ pub fn run() {
                 })?;
             let clip_handle = app.handle().clone();
             let clip_shortcut_str = "Alt+Shift+X";
-            app.global_shortcut()
-                .on_shortcut(clip_shortcut_str, move |_app, _shortcut, event| {
+            app.global_shortcut().on_shortcut(
+                clip_shortcut_str,
+                move |_app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
                         let _ = clip_handle.emit("tray-start-screen-clip", true);
                     }
-                })?;
+                },
+            )?;
             let menu = MenuBuilder::new(app)
                 .text("toggle_window", "Show Annotated")
                 .text("quick_clip", "Start 90s Screen Clip")

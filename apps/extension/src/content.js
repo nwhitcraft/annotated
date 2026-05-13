@@ -789,6 +789,15 @@ async function postAnnotation(composer, status = 'published') {
 }
 
 async function attachMediaClip(annotationId, clip) {
+  if (clip.sourceType === 'podcast') {
+    try {
+      await attachSourceClip(annotationId, clip);
+      return;
+    } catch (sourceError) {
+      if (!clip.recordingBlob?.size) throw sourceError;
+    }
+  }
+
   if (clip.recordingBlob?.size) {
     const form = new FormData();
     form.append('clip', clip.recordingBlob, `annotated-${annotationId}.webm`);
@@ -806,6 +815,10 @@ async function attachMediaClip(annotationId, clip) {
     return;
   }
 
+  await attachSourceClip(annotationId, clip);
+}
+
+async function attachSourceClip(annotationId, clip) {
   await fetchWithRetry(() => fetch(`${API_BASE}/api/annotations/${encodeURIComponent(annotationId)}/source-clip`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),

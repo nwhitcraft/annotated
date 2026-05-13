@@ -148,7 +148,11 @@ function clampDuration(duration) {
 
 function safeMediaExtension(name, mimeType = '') {
   const extension = extname(name || '').toLowerCase();
-  if (['.webm', '.mp4', '.mov', '.m4v'].includes(extension)) return extension;
+  if (['.webm', '.mp4', '.mov', '.m4v', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.weba'].includes(extension)) return extension;
+  if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return '.mp3';
+  if (mimeType.includes('m4a') || mimeType.includes('aac')) return '.m4a';
+  if (mimeType.includes('wav')) return '.wav';
+  if (mimeType.includes('ogg') || mimeType.includes('opus')) return '.ogg';
   if (mimeType.includes('mp4')) return '.mp4';
   return '.webm';
 }

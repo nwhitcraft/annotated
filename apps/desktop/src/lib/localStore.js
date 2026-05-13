@@ -312,6 +312,46 @@ export async function stopScreenClip() {
   return invoke('stop_screen_clip');
 }
 
+export async function extractPodcastAudio({ url, start = 0, end = 90 }, settings = {}) {
+  if (!url) throw new Error('Podcast URL is required.');
+  const startSec = Math.max(0, Number(start) || 0);
+  const endSec = Math.max(startSec + 1, Math.min(Number(end) || startSec + 90, startSec + 90));
+
+  if (isTauri) {
+    const result = await invoke('extract_podcast_audio', {
+      input: url,
+      start: startSec,
+      end: endSec,
+    });
+    const outputPath = result.outputPath || result.output_path;
+    if (!result.ok || !outputPath) {
+      const detail = result.blocker || result.stderr || result.stdout || 'Podcast extraction failed.';
+      throw new Error(String(detail).split('\n').find(Boolean) || 'Podcast extraction failed.');
+    }
+    return {
+      type: 'podcast',
+      mediaPath: outputPath,
+      localPath: outputPath,
+      startSec,
+      endSec,
+      duration: endSec - startSec,
+      extractionMethod: 'desktop-native',
+    };
+  }
+
+  const endpoint = await apiEndpoint(settings);
+  const data = await apiRequest('/clip/podcast', {
+    method: 'POST',
+    body: JSON.stringify({ url, start: startSec, end: endSec }),
+  }, settings);
+  const mediaPath = data.mediaPath?.startsWith('/media') ? `${endpoint}${data.mediaPath}` : data.mediaPath;
+  return {
+    ...data,
+    mediaPath,
+    localPath: mediaPath,
+  };
+}
+
 export async function screenClipStatus() {
   if (!isTauri) return { active: false };
   return invoke('screen_clip_status');
@@ -367,13 +407,44 @@ export async function syncAnnotation(annotation) {
         } catch {
           // Keep curl diagnostics when the body is not JSON.
         }
-        throw new Error(detail);
+        if (!canAttachSourceClip(annotation)) throw new Error(detail);
+        await attachSourceClip(endpoint, token, data.id, annotation);
       }
+    } else if (data.id && canAttachSourceClip(annotation)) {
+      await attachSourceClip(endpoint, token, data.id, annotation);
     }
     return { ...annotation, remote_id: data.id };
   } catch (err) {
     throw new Error(err.message || 'API sync failed');
   }
+}
+
+function canAttachSourceClip(annotation) {
+  return ['podcast', 'youtube'].includes(annotation.source_type)
+    && /^https?:\/\//i.test(annotation.source_url || '')
+    && annotation.clip_start_sec !== null
+    && annotation.clip_start_sec !== undefined
+    && annotation.clip_end_sec !== null
+    && annotation.clip_end_sec !== undefined;
+}
+
+async function attachSourceClip(endpoint, token, annotationId, annotation) {
+  const response = await fetch(`${endpoint}/api/annotations/${encodeURIComponent(annotationId)}/source-clip`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      url: annotation.source_url,
+      start: annotation.clip_start_sec,
+      end: annotation.clip_end_sec,
+      source_type: annotation.source_type,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw new Error(data.detail || data.error || `Source clip failed: ${response.status}`);
+  return data;
 }
 
 export async function addLocalComment(annotationId, body) {

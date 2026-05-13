@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { detectSource, parseTags } from '../lib/detect.js';
-import { mediaSrc, startScreenClip, stopScreenClip } from '../lib/localStore.js';
+import { extractPodcastAudio, mediaSrc, startScreenClip, stopScreenClip } from '../lib/localStore.js';
 import SourceType from './SourceType.jsx';
 
 const emptyDraft = {
@@ -62,6 +62,8 @@ export default function Composer({
   const [captureError, setCaptureError] = useState('');
   const [useMicrophone, setUseMicrophone] = useState(true);
   const [useSystemAudio, setUseSystemAudio] = useState(true);
+  const [podcastBusy, setPodcastBusy] = useState(false);
+  const [podcastError, setPodcastError] = useState('');
 
   useEffect(() => {
     setDraft(editing || emptyDraft);
@@ -74,6 +76,7 @@ export default function Composer({
   const isMedia = ['youtube', 'podcast'].includes(draft.source_type);
   const isScreen = draft.source_type === 'screen';
   const attachedScreenClip = isScreen && draft.clip_media_path ? mediaSrc(draft.clip_media_path) : '';
+  const attachedPodcastClip = draft.source_type === 'podcast' && draft.clip_media_path ? mediaSrc(draft.clip_media_path) : '';
 
   useEffect(() => {
     if (screenCaptureIntent > 0) {
@@ -92,10 +95,16 @@ export default function Composer({
 
   function applyDetection() {
     if (!detected) return;
-    setDraft((value) => ({ ...value, ...detected }));
+    setPodcastError('');
+    setDraft((value) => ({
+      ...value,
+      ...detected,
+      clip_media_path: detected.source_type === value.source_type ? value.clip_media_path : '',
+    }));
   }
 
   function chooseSourceMode(sourceType) {
+    setPodcastError('');
     if (sourceType === 'screen') {
       setDraft((value) => ({
         ...value,
@@ -113,6 +122,7 @@ export default function Composer({
       source_url: value.source_url === 'screen://local' ? '' : value.source_url,
       source_title: value.source_type === 'screen' ? '' : value.source_title,
       source_domain: value.source_type === 'screen' ? '' : value.source_domain,
+      clip_media_path: value.source_type === sourceType ? value.clip_media_path : '',
     }));
   }
 
@@ -175,6 +185,39 @@ export default function Composer({
       onStatus?.('Screen clip failed');
     } finally {
       setCaptureBusy(false);
+    }
+  }
+
+  async function extractPodcastClip() {
+    if (draft.source_type !== 'podcast' || podcastBusy) return;
+    const url = draft.source_url.trim();
+    const startSec = Math.max(0, Number(draft.clip_start_sec) || 0);
+    const endSec = Math.max(startSec + 1, Math.min(Number(draft.clip_end_sec) || startSec + 90, startSec + 90));
+    if (!url) {
+      setPodcastError('Paste a podcast, Spotify, Apple Podcasts, or direct audio link first.');
+      return;
+    }
+
+    setPodcastBusy(true);
+    setPodcastError('');
+    onStatus?.('Extracting podcast audio...');
+    try {
+      const clip = await extractPodcastAudio({ url, start: startSec, end: endSec });
+      const mediaPath = clip.localPath || clip.mediaPath || clip.clip_media_path;
+      setDraft((value) => ({
+        ...value,
+        clip_media_path: mediaPath || value.clip_media_path,
+        clip_start_sec: clip.startSec ?? startSec,
+        clip_end_sec: clip.endSec ?? endSec,
+        source_title: clip.title || value.source_title,
+        clip_text: value.clip_text || `Audio excerpt attached (${Math.round(clip.duration || endSec - startSec)}s).`,
+      }));
+      onStatus?.('Podcast clip attached');
+    } catch (err) {
+      setPodcastError(err.message || 'Could not extract podcast audio.');
+      onStatus?.('Podcast extraction failed');
+    } finally {
+      setPodcastBusy(false);
     }
   }
 
@@ -298,15 +341,29 @@ export default function Composer({
       </label>
 
       {isMedia && (
-        <div className="time-fields">
-          <label>
-            Start
-            <input type="number" min="0" value={draft.clip_start_sec ?? ''} onChange={(event) => setDraft({ ...draft, clip_start_sec: event.target.value })} />
-          </label>
-          <label>
-            End
-            <input type="number" min="0" value={draft.clip_end_sec ?? ''} onChange={(event) => setDraft({ ...draft, clip_end_sec: event.target.value })} />
-          </label>
+        <div className="media-clip-panel">
+          <div className="time-fields">
+            <label>
+              Start
+              <input type="number" min="0" value={draft.clip_start_sec ?? ''} onChange={(event) => setDraft({ ...draft, clip_start_sec: event.target.value })} />
+            </label>
+            <label>
+              End
+              <input type="number" min="0" value={draft.clip_end_sec ?? ''} onChange={(event) => setDraft({ ...draft, clip_end_sec: event.target.value })} />
+            </label>
+          </div>
+          {draft.source_type === 'podcast' && (
+            <div className="media-extract-row">
+              <button className="button button-outline" type="button" onClick={extractPodcastClip} disabled={podcastBusy || !draft.source_url.trim()}>
+                {podcastBusy ? 'Extracting Audio' : attachedPodcastClip ? 'Re-extract Audio' : 'Extract Audio'}
+              </button>
+              <span>{attachedPodcastClip ? 'Audio attached locally.' : 'Extracts up to 90 seconds for private preview and public upload.'}</span>
+            </div>
+          )}
+          {attachedPodcastClip && (
+            <audio className="audio-player" controls preload="metadata" src={attachedPodcastClip} />
+          )}
+          {podcastError && <p className="composer-error">{podcastError}</p>}
         </div>
       )}
 
