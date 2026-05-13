@@ -17,16 +17,27 @@ const STORAGE_KEY = 'annotated.desktop.annotations';
 const SETTINGS_KEY = 'annotated.desktop.settings';
 let cachedSettings = null;
 
+function cleanBaseUrl(value, fallback) {
+  const base = String(value || fallback || '').trim();
+  return base.replace(/\/api$/, '').replace(/\/$/, '');
+}
+
+const DEFAULT_API_ENDPOINT = cleanBaseUrl(
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL,
+  'http://localhost:3080',
+);
+const DEFAULT_FRONTEND_URL = cleanBaseUrl(import.meta.env.VITE_FRONTEND_URL, 'http://localhost:3090');
+
 async function getApiEndpoint() {
   if (!cachedSettings) {
     cachedSettings = await loadSettings();
   }
-  return cachedSettings?.apiEndpoint || 'http://localhost:3080';
+  return cachedSettings?.apiEndpoint || DEFAULT_API_ENDPOINT;
 }
 
 async function apiEndpoint(settings = {}) {
   const endpoint = settings.apiEndpoint || await getApiEndpoint();
-  return endpoint.replace(/\/$/, '');
+  return cleanBaseUrl(endpoint, DEFAULT_API_ENDPOINT);
 }
 
 async function apiRequest(path, options = {}, settings = {}) {
@@ -48,8 +59,8 @@ async function apiRequest(path, options = {}, settings = {}) {
 }
 
 const defaultSettings = {
-  apiEndpoint: 'http://localhost:3080',
-  frontendUrl: 'http://localhost:3090',
+  apiEndpoint: DEFAULT_API_ENDPOINT,
+  frontendUrl: DEFAULT_FRONTEND_URL,
   storageLocation: 'Application support / Annotated / annotated.sqlite',
 };
 
@@ -98,8 +109,15 @@ function cacheUser(user) {
 }
 
 export function authUrl(provider, settings = {}) {
-  const endpoint = (settings.apiEndpoint || defaultSettings.apiEndpoint).replace(/\/$/, '');
+  const endpoint = cleanBaseUrl(settings.apiEndpoint, defaultSettings.apiEndpoint);
   return `${endpoint}/api/auth/${provider}?client=desktop`;
+}
+
+export async function openAuthUrl(provider, settings = {}) {
+  const url = authUrl(provider, settings);
+  if (isTauri) return invoke('open_auth_url', { url });
+  window.open(url, '_blank', 'noopener,noreferrer');
+  return true;
 }
 
 export function setAuthTokenFromCallback(value) {
@@ -433,8 +451,16 @@ export async function addLocalComment(annotationId, body) {
 }
 
 export async function loadSettings() {
-  if (isTauri) return invoke('load_settings');
-  return { ...defaultSettings, ...JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') };
+  const loaded = isTauri
+    ? await invoke('load_settings')
+    : JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}');
+  cachedSettings = {
+    ...defaultSettings,
+    ...loaded,
+    apiEndpoint: cleanBaseUrl(loaded?.apiEndpoint, defaultSettings.apiEndpoint),
+    frontendUrl: cleanBaseUrl(loaded?.frontendUrl, defaultSettings.frontendUrl),
+  };
+  return cachedSettings;
 }
 
 export async function saveSettings(settings) {

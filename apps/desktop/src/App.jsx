@@ -9,7 +9,6 @@ import ProfileView from './components/ProfileView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import {
   addLocalComment,
-  authUrl,
   checkAuth,
   clearToken,
   deleteAnnotation,
@@ -17,9 +16,9 @@ import {
   getCachedUser,
   listAnnotations,
   loadSettings,
+  openAuthUrl,
   postAnnotation,
   saveAnnotation,
-  saveSettings,
   setAuthTokenFromCallback,
 } from './lib/localStore.js';
 
@@ -29,7 +28,7 @@ const views = [
   { key: 'library', label: 'Library' },
   { key: 'profile', label: 'Profile' },
   { key: 'detail', label: 'Detail' },
-  { key: 'settings', label: 'Settings' },
+  { key: 'settings', label: 'Account' },
 ];
 
 export default function App() {
@@ -201,11 +200,18 @@ export default function App() {
     setStatus('Export copied to clipboard');
   }
 
-  function signIn(provider) {
-    window.open(authUrl(provider, settings), '_blank', 'noopener,noreferrer');
-    setStatus('Opened browser sign-in. Annotated will connect automatically after OAuth.');
-    setProfileKey('');
-    setActiveView('settings');
+  async function signIn(provider) {
+    const providerName = provider === 'google' ? 'Google' : 'X';
+    try {
+      setStatus(`Opening ${providerName} sign-in in your browser...`);
+      await openAuthUrl(provider, settings);
+      setStatus('Browser sign-in opened. Annotated will connect automatically after OAuth.');
+      setProfileKey('');
+      setActiveView('settings');
+    } catch (error) {
+      setStatus(error.message || `Could not open ${providerName} sign-in.`);
+      setActiveView('settings');
+    }
   }
 
   async function connectCallback(value) {
@@ -342,13 +348,10 @@ export default function App() {
         )}
         {activeView === 'settings' && (
           <SettingsView
-            settings={settings}
             authUser={authUser}
-            onChange={setSettings}
             onSignIn={signIn}
             onCallback={connectCallback}
             onSignOut={signOut}
-            onSave={async (value) => { await saveSettings(value); setStatus('Settings saved'); }}
           />
         )}
       </main>

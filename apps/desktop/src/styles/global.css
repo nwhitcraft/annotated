@@ -665,6 +665,43 @@ kbd {
   gap: 10px;
 }
 
+.auth-actions-stacked {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+}
+
+.oauth-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 253, 0.9);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.oauth-button:hover {
+  border-color: var(--text-primary);
+  background: #fff;
+}
+
+.oauth-mark {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+}
+
+.oauth-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
 .settings-account {
   display: grid;
   gap: 8px;
@@ -796,6 +833,12 @@ kbd {
 .callback-fallback-note {
   max-width: 520px;
   line-height: 1.5;
+}
+
+.callback-fallback-panel {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .danger {

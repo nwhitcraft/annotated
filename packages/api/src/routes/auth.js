@@ -81,9 +81,9 @@ app.get('/google/callback', async (c) => {
 });
 
 // --- X / Twitter OAuth 2.0 (PKCE) ---
-const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID;
-const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET;
-const TWITTER_REDIRECT = process.env.TWITTER_REDIRECT || '/api/auth/twitter/callback';
+const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || process.env.X_CLIENT_ID;
+const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || process.env.X_CLIENT_SECRET;
+const TWITTER_REDIRECT = process.env.TWITTER_REDIRECT || process.env.X_REDIRECT || '/api/auth/twitter/callback';
 
 // In-memory PKCE store (swap for Redis in production)
 const pkceStore = new Map();

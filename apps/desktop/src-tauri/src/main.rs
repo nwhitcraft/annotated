@@ -55,7 +55,18 @@ struct Settings {
 }
 
 fn default_frontend_url() -> String {
-    "http://localhost:3090".to_string()
+    option_env!("VITE_FRONTEND_URL")
+        .unwrap_or("http://localhost:3090")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+fn default_api_endpoint() -> String {
+    option_env!("VITE_API_URL")
+        .or(option_env!("VITE_API_BASE_URL"))
+        .unwrap_or("http://localhost:3080")
+        .trim_end_matches('/')
+        .to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -473,7 +484,7 @@ fn load_settings(app: AppHandle) -> Result<Settings, String> {
     let conn = connect(&app)?;
     let path = db_path(&app)?.display().to_string();
     let default = Settings {
-        api_endpoint: "http://localhost:3080".to_string(),
+        api_endpoint: default_api_endpoint(),
         frontend_url: default_frontend_url(),
         storage_location: path,
     };
@@ -1125,6 +1136,62 @@ fn handle_auth_callback(callback_url: String) -> Result<String, String> {
     Ok(callback_url)
 }
 
+#[tauri::command]
+fn open_auth_url(url: String) -> Result<(), String> {
+    let target = url.trim();
+    if !(target.starts_with("http://") || target.starts_with("https://")) {
+        return Err("unsupported auth URL".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let chrome = Command::new("open")
+            .arg("-a")
+            .arg("Google Chrome")
+            .arg(target)
+            .status();
+        if matches!(chrome, Ok(status) if status.success()) {
+            return Ok(());
+        }
+
+        let fallback = Command::new("open")
+            .arg(target)
+            .status()
+            .map_err(|error| format!("Could not open browser: {}", error))?;
+        return if fallback.success() {
+            Ok(())
+        } else {
+            Err("Could not open browser sign-in.".to_string())
+        };
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("cmd")
+            .args(["/C", "start", "", target])
+            .status()
+            .map_err(|error| format!("Could not open browser: {}", error))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err("Could not open browser sign-in.".to_string())
+        };
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let status = Command::new("xdg-open")
+            .arg(target)
+            .status()
+            .map_err(|error| format!("Could not open browser: {}", error))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err("Could not open browser sign-in.".to_string())
+        };
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(ScreenCaptureState::default())) as SharedScreenCaptureState)
@@ -1193,6 +1260,7 @@ pub fn run() {
             screen_clip_status,
             upload_clip_to_api,
             handle_auth_callback,
+            open_auth_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Annotated desktop app");
