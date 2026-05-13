@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import db from '../db.js';
+import { activeIdentityBan, userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
 
@@ -76,7 +77,7 @@ app.get('/google/callback', async (c) => {
     return c.redirect(callbackTarget(token, client));
   } catch (err) {
     console.error('Google OAuth error:', err.message);
-    return c.redirect(`${FRONTEND_URL}/login?error=google_failed`);
+    return c.redirect(`${FRONTEND_URL}/login?error=${err.code === 'ACCOUNT_BANNED' ? 'account_banned' : 'google_failed'}`);
   }
 });
 
@@ -168,7 +169,7 @@ app.get('/twitter/callback', async (c) => {
     return c.redirect(callbackTarget(token, pkce.client));
   } catch (err) {
     console.error('Twitter OAuth error:', err.message);
-    return c.redirect(`${FRONTEND_URL}/login?error=twitter_failed`);
+    return c.redirect(`${FRONTEND_URL}/login?error=${err.code === 'ACCOUNT_BANNED' ? 'account_banned' : 'twitter_failed'}`);
   }
 });
 
@@ -198,8 +199,9 @@ app.get('/me', (c) => {
 
   try {
     const payload = jwt.verify(auth.slice(7), JWT_SECRET);
-    const user = db.prepare('SELECT id, username, display_name, avatar_url, bio, link, twitter_handle, age, onboarding_completed, subscription_tier, provider, email, created_at FROM users WHERE id = ?').get(payload.sub);
+    const user = db.prepare('SELECT id, username, display_name, avatar_url, bio, link, twitter_handle, age, onboarding_completed, subscription_tier, provider, email, blocked, blocked_until, deleted_at, created_at FROM users WHERE id = ?').get(payload.sub);
     if (!user) return c.json({ error: 'User not found' }, 404);
+    if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
     // Stats
     const annotations = db.prepare("SELECT COUNT(*) as count FROM annotations WHERE user_id = ? AND status = 'published'").get(user.id);
@@ -230,9 +232,22 @@ app.post('/logout', (c) => {
 // --- Helpers ---
 
 function upsertUser({ provider, provider_id, email, display_name, avatar_url, username }) {
+  const ban = activeIdentityBan({ provider, provider_id, email, username });
+  if (ban) {
+    const error = new Error('Account is temporarily banned');
+    error.code = 'ACCOUNT_BANNED';
+    error.banned_until = ban.banned_until;
+    throw error;
+  }
+
   const existing = db.prepare('SELECT * FROM users WHERE provider = ? AND provider_id = ?').get(provider, provider_id);
 
   if (existing) {
+    if (userUnavailable(existing)) {
+      const error = new Error('Account is unavailable');
+      error.code = 'ACCOUNT_BANNED';
+      throw error;
+    }
     // Update profile on each login
     db.prepare(`UPDATE users SET display_name = ?, avatar_url = ?, email = COALESCE(?, email), updated_at = datetime('now') WHERE id = ?`)
       .run(display_name, avatar_url, email, existing.id);

@@ -6,6 +6,7 @@ import { dirname, extname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { extractPodcastClip, extractYouTubeClip } from '@annotated/clip-engine';
 import db from '../db.js';
+import { userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
 const ANNOTATION_TYPES = new Set(['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking']);
@@ -22,7 +23,7 @@ if (!existsSync(MEDIA_DIR)) mkdirSync(MEDIA_DIR, { recursive: true });
 app.get('/', (c) => {
   const { user_id, source_type, annotation_type, limit = '20', offset = '0' } = c.req.query();
   
-  let sql = "SELECT a.*, u.username, u.display_name, u.avatar_url FROM annotations a JOIN users u ON a.user_id = u.id WHERE a.is_public = 1 AND a.status = 'published'";
+  let sql = "SELECT a.*, u.username, u.display_name, u.avatar_url FROM annotations a JOIN users u ON a.user_id = u.id WHERE a.is_public = 1 AND a.status = 'published' AND u.deleted_at IS NULL AND COALESCE(u.blocked, 0) = 0";
   const params = [];
 
   if (user_id) {
@@ -42,7 +43,15 @@ app.get('/', (c) => {
   params.push(Number(limit), Number(offset));
 
   const items = db.prepare(sql).all(...params);
-  const total = db.prepare("SELECT COUNT(*) as count FROM annotations WHERE is_public = 1 AND status = 'published'").get();
+  const total = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM annotations a
+    JOIN users u ON a.user_id = u.id
+    WHERE a.is_public = 1
+      AND a.status = 'published'
+      AND u.deleted_at IS NULL
+      AND COALESCE(u.blocked, 0) = 0
+  `).get();
 
   return c.json({ items, total: total.count });
 });
@@ -177,6 +186,7 @@ app.post('/', async (c) => {
   }
 
   const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
   const requestedStatus = normalizeRequestedStatus(status, 'draft');
   const finalStatus = isPaidUser(user) ? requestedStatus : 'published';
   const publishedAt = finalStatus === 'published' ? currentTimestamp() : null;
@@ -285,6 +295,7 @@ app.patch('/:id/publish', async (c) => {
   if (!user_id) return c.json({ error: 'Missing or invalid user_id' }, 400);
 
   const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
   if (!isPaidUser(user)) return c.json({ error: 'Draft publishing requires a paid subscription' }, 403);
 
   const annotation = db.prepare('SELECT * FROM annotations WHERE id = ? AND user_id = ? AND status != ?')
@@ -325,6 +336,7 @@ app.patch('/:id', async (c) => {
           .get(id, user_id, 'removed');
         if (!annotation) return c.json({ error: 'Annotation not found' }, 404);
         const user = getUserById(user_id);
+        if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
         if (!isPaidUser(user)) return c.json({ error: 'Draft status changes require a paid subscription' }, 403);
         const nextStatus = normalizeRequestedStatus(body.status, annotation.status || 'draft');
         updates.push('status = ?', 'is_public = ?', 'published_at = ?');
@@ -351,6 +363,8 @@ app.post('/:id/noteworthy', async (c) => {
   const { user_id: rawUserId } = await c.req.json();
   const user_id = resolveUserId(rawUserId) || rawUserId;
   if (!user_id) return c.json({ error: 'Missing user_id' }, 400);
+  const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   const existing = db.prepare('SELECT 1 FROM noteworthy WHERE user_id = ? AND annotation_id = ?')
     .get(user_id, annotation_id);
@@ -378,6 +392,8 @@ app.delete('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const user_id = resolveUserId(body.user_id);
   if (!user_id) return c.json({ error: 'Missing or invalid user_id' }, 400);
+  const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   const annotation = db.prepare('SELECT id FROM annotations WHERE id = ? AND user_id = ?')
     .get(id, user_id);
@@ -401,6 +417,8 @@ app.post('/:id/comments', async (c) => {
   if (!rawUserId || !commentBody) return c.json({ error: 'Missing user_id or body' }, 400);
   const user_id = resolveUserId(rawUserId);
   if (!user_id) return c.json({ error: `User not found: ${rawUserId}` }, 404);
+  const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   // Validate parent exists if provided
   if (parent_id) {
@@ -456,6 +474,8 @@ app.post('/:id/like', async (c) => {
   const { id: annotation_id } = c.req.param();
   const { user_id: rawUserId } = await c.req.json();
   const user_id = resolveUserId(rawUserId) || rawUserId;
+  const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   const existing = db.prepare('SELECT 1 FROM likes WHERE user_id = ? AND annotation_id = ?')
     .get(user_id, annotation_id);
@@ -482,6 +502,8 @@ app.post('/:id/pin', async (c) => {
   const { id: annotation_id } = c.req.param();
   const { user_id: rawUserId } = await c.req.json();
   const user_id = resolveUserId(rawUserId) || rawUserId;
+  const user = getUserById(user_id);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   const existing = db.prepare('SELECT 1 FROM pins WHERE user_id = ? AND annotation_id = ?')
     .get(user_id, annotation_id);

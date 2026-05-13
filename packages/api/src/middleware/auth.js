@@ -1,4 +1,6 @@
 import jwt from 'jsonwebtoken';
+import db from '../db.js';
+import { userUnavailable } from '../lib/moderation.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'annotated-dev-secret-change-in-prod';
 
@@ -13,6 +15,8 @@ export function requireAuth(c, next) {
 
   try {
     const payload = jwt.verify(auth.slice(7), JWT_SECRET);
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
+    if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
     c.set('userId', payload.sub);
     c.set('user', payload);
     return next();
@@ -31,8 +35,11 @@ export function optionalAuth(c, next) {
   if (auth?.startsWith('Bearer ')) {
     try {
       const payload = jwt.verify(auth.slice(7), JWT_SECRET);
-      c.set('userId', payload.sub);
-      c.set('user', payload);
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
+      if (!userUnavailable(user)) {
+        c.set('userId', payload.sub);
+        c.set('user', payload);
+      }
     } catch {
       // Invalid token — proceed as anonymous
     }

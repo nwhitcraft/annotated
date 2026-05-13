@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { checkAuth, setCurrentUserId, setToken, setUsername, setAvatarUrl } from '../lib/api.js';
 import AuthButtons from '../components/AuthButtons.jsx';
@@ -38,6 +38,10 @@ export function AuthCallback() {
 }
 
 export default function Login() {
+  const error = useMemo(() => new URLSearchParams(window.location.search).get('error'), []);
+  const errorMessage = error === 'account_banned'
+    ? 'This account is unavailable after a claim review.'
+    : '';
 
   return (
     <main className="login-page">
@@ -47,6 +51,7 @@ export default function Login() {
           <h1>Sign in to join the conversation</h1>
           <p>Clip sources, write commentary, and reply with context.</p>
         </div>
+        {errorMessage && <p className="form-error">{errorMessage}</p>}
         <AuthButtons compact />
         <footer>By continuing, you agree to Terms and Privacy.</footer>
       </section>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { banClaimUser, getClaims, updateClaim } from '../lib/api.js';
 
 const REASON_LABELS = {
   copyright: 'Copyright infringement',
@@ -10,11 +11,14 @@ const REASON_LABELS = {
   other: 'Other',
 };
 
+const FILTERS = ['pending', 'reviewed', 'resolved', 'annotation_removed', 'user_blocked', 'all'];
+
 export default function AdminClaims() {
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('pending');
+  const [drafts, setDrafts] = useState({});
 
   useEffect(() => {
     fetchClaims();
@@ -22,150 +26,153 @@ export default function AdminClaims() {
 
   async function fetchClaims() {
     setLoading(true);
+    setError('');
     try {
-      const res = await fetch(`/api/claims?status=${filter}`);
-      const data = await res.json();
+      const data = await getClaims(filter);
       setClaims(data.items || []);
-    } catch (e) {
-      setError(e.message);
+    } catch (err) {
+      setError(err.message || 'Could not load claims');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleStatus(claimId, newStatus) {
+  async function handleStatus(claim, newStatus) {
     try {
-      await fetch(`/api/claims/${claimId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+      const draft = drafts[claim.id] || {};
+      await updateClaim(claim.id, newStatus, {
+        reviewer_note: draft.note,
+        outcome: draft.outcome || defaultOutcome(newStatus),
       });
-      fetchClaims();
-    } catch (e) {
-      alert(e.message);
+      await fetchClaims();
+    } catch (err) {
+      alert(err.message || 'Could not update claim');
     }
   }
 
-  async function handleBlockUser(userId) {
-    if (!confirm('Block this user? They will be unable to create new annotations.')) return;
+  async function handleBanUser(claim) {
+    const target = claim.username ? `@${claim.username}` : 'the annotation owner';
+    const message = `Ban ${target}? This does not affect the claimant. It removes the account that posted the claimed annotation, hides their annotations, deletes their comments/follows/reactions, and blocks the same identity from signing up again for 30 days.`;
+    if (!confirm(message)) return;
     try {
-      await fetch('/api/claims/block-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, reason: 'Claim review' }),
-      });
-      fetchClaims();
-    } catch (e) {
-      alert(e.message);
+      await banClaimUser(claim.id, (drafts[claim.id]?.note || '').trim() || 'Claim review');
+      await fetchClaims();
+    } catch (err) {
+      alert(err.message || 'Could not ban user');
     }
+  }
+
+  function updateDraft(claimId, key, value) {
+    setDrafts((current) => ({
+      ...current,
+      [claimId]: {
+        ...(current[claimId] || {}),
+        [key]: value,
+      },
+    }));
   }
 
   if (loading) return <div className="page"><p>Loading claims...</p></div>;
-  if (error) return <div className="page"><p>Error: {error}</p></div>;
 
   return (
     <div className="page">
       <Link to="/feed" className="back-link">← Feed</Link>
-      <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: '28px', fontWeight: 400, margin: '24px 0' }}>
-        Claim Review
-      </h1>
+      <header className="editor-heading">
+        <p>Admin</p>
+        <h1>Claim Review</h1>
+      </header>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-        {['pending', 'reviewed', 'resolved', 'annotation_removed', 'user_blocked'].map((s) => (
+      <div className="claim-admin-filters">
+        {FILTERS.map((status) => (
           <button
-            key={s}
-            className={`button ${filter === s ? 'button-solid' : 'button-outline'}`}
-            onClick={() => setFilter(s)}
-            style={{ textTransform: 'capitalize', fontSize: '12px', padding: '6px 12px' }}
+            key={status}
+            className={`button ${filter === status ? 'button-solid' : 'button-outline'}`}
+            onClick={() => setFilter(status)}
+            type="button"
           >
-            {s.replace('_', ' ')}
+            {status.replace('_', ' ')}
           </button>
         ))}
       </div>
 
-      {claims.length === 0 ? (
-        <p className="feed-empty">No {filter} claims.</p>
+      {error ? (
+        <p className="form-error">{error}</p>
+      ) : claims.length === 0 ? (
+        <p className="feed-empty">No {filter.replace('_', ' ')} claims.</p>
       ) : (
         <div className="ruled-list">
           {claims.map((claim) => (
-            <div key={claim.id} style={{ padding: '16px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+            <article className="claim-admin-row" key={claim.id}>
+              <div className="claim-admin-header">
                 <div>
-                  <strong style={{ fontSize: '14px' }}>{claim.display_name || claim.username || 'Unknown'}</strong>
-                  <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginLeft: '8px' }}>
-                    @{claim.username}
-                  </span>
+                  <strong>{claim.display_name || claim.username || 'Unknown annotation owner'}</strong>
+                  {claim.username && <span>@{claim.username}</span>}
+                  {claim.deleted_at && <em>deleted</em>}
                 </div>
-                <span style={{
-                  fontSize: '11px',
-                  padding: '2px 8px',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  textTransform: 'capitalize',
-                }}>
-                  {claim.status.replace('_', ' ')}
-                </span>
+                <span>{claim.status.replace('_', ' ')}</span>
               </div>
 
-              <div style={{ marginBottom: '8px' }}>
-                <strong style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Annotation:</strong>
-                <p style={{ margin: '4px 0', fontFamily: 'var(--font-serif)', fontSize: '16px' }}>
-                  {claim.commentary}
-                </p>
-                <a href={claim.source_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: 'var(--accent)' }}>
+              <section className="claim-admin-section">
+                <strong>Annotation</strong>
+                <p>{claim.commentary}</p>
+                <a href={claim.source_url} target="_blank" rel="noreferrer">
                   {claim.source_title || claim.source_url}
                 </a>
-              </div>
+              </section>
 
-              <div style={{ marginBottom: '8px', padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-                <strong style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Claim:</strong>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}>
-                  <strong>Reason:</strong> {REASON_LABELS[claim.reason_code] || claim.reason_code}
-                </p>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}>
-                  <strong>Claimant:</strong> {claim.claimant_email}
-                </p>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}>
-                  <strong>Description:</strong> {claim.description}
-                </p>
-              </div>
+              <section className="claim-admin-section claim-admin-claim">
+                <strong>Claim</strong>
+                <p><span>Reason:</span> {REASON_LABELS[claim.reason_code] || claim.reason_code}</p>
+                <p><span>Claimant:</span> {claim.claimant_email}</p>
+                <p><span>Description:</span> {claim.description}</p>
+                <p><span>Email notification:</span> {claim.email_notification_status || 'not_sent'}{claim.email_notification_error ? ` - ${claim.email_notification_error}` : ''}</p>
+              </section>
 
-              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                {filter === 'pending' && (
-                  <>
-                    <button
-                      className="button button-solid"
-                      onClick={() => handleStatus(claim.id, 'resolved')}
-                      style={{ fontSize: '12px', padding: '6px 12px' }}
-                    >
-                      Resolve (keep annotation)
-                    </button>
-                    <button
-                      className="button button-outline"
-                      onClick={() => handleStatus(claim.id, 'annotation_removed')}
-                      style={{ fontSize: '12px', padding: '6px 12px' }}
-                    >
-                      Remove annotation
-                    </button>
-                    <button
-                      className="button button-outline"
-                      onClick={() => handleBlockUser(claim.user_id)}
-                      style={{ fontSize: '12px', padding: '6px 12px', color: 'var(--danger)' }}
-                    >
-                      Block user
-                    </button>
-                  </>
-                )}
-                {filter !== 'pending' && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                    Filed {new Date(claim.created_at).toLocaleDateString()}
-                  </span>
-                )}
+              <section className="claim-admin-review">
+                <label>
+                  <span>Internal note</span>
+                  <textarea
+                    value={drafts[claim.id]?.note || claim.reviewer_note || ''}
+                    onChange={(event) => updateDraft(claim.id, 'note', event.target.value)}
+                    placeholder="Why you made this decision"
+                  />
+                </label>
+                <label>
+                  <span>Outcome summary for claimant</span>
+                  <textarea
+                    value={drafts[claim.id]?.outcome || claim.outcome || ''}
+                    onChange={(event) => updateDraft(claim.id, 'outcome', event.target.value)}
+                    placeholder="Short outcome you can paste into the response email"
+                  />
+                </label>
+              </section>
+
+              <div className="claim-admin-actions">
+                <button className="button button-outline" type="button" onClick={() => handleStatus(claim, 'reviewed')}>
+                  Mark reviewed
+                </button>
+                <button className="button button-solid" type="button" onClick={() => handleStatus(claim, 'resolved')}>
+                  Resolve, keep annotation
+                </button>
+                <button className="button button-outline" type="button" onClick={() => handleStatus(claim, 'annotation_removed')}>
+                  Remove annotation
+                </button>
+                <button className="button button-outline danger" type="button" onClick={() => handleBanUser(claim)}>
+                  Ban annotation owner 30 days
+                </button>
+                <span>Filed {new Date(claim.created_at).toLocaleDateString()}</span>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function defaultOutcome(status) {
+  if (status === 'resolved') return 'We reviewed the claim and are keeping the annotation live.';
+  if (status === 'annotation_removed') return 'We reviewed the claim and removed the annotation from public feeds.';
+  if (status === 'reviewed') return 'We have reviewed the claim and are still assessing the final outcome.';
+  return '';
 }

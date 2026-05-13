@@ -1248,6 +1248,134 @@ textarea {
   color: var(--accent-hover);
 }
 
+.claim-admin-filters,
+.claim-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.claim-admin-filters {
+  margin-bottom: 24px;
+}
+
+.claim-admin-filters .button,
+.claim-admin-actions .button {
+  min-height: 32px;
+  padding: 5px 11px;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.claim-admin-row {
+  display: grid;
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.claim-admin-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.claim-admin-header > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.claim-admin-header strong {
+  font-size: 14px;
+}
+
+.claim-admin-header span,
+.claim-admin-header em,
+.claim-admin-actions span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.claim-admin-header > span {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.claim-admin-section {
+  display: grid;
+  gap: 5px;
+}
+
+.claim-admin-section > strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.claim-admin-section p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.claim-admin-section:first-of-type p {
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+
+.claim-admin-section a {
+  width: fit-content;
+  color: var(--accent-hover);
+  font-size: 12px;
+}
+
+.claim-admin-claim {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 253, 0.72);
+}
+
+.claim-admin-claim span {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.claim-admin-review {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.claim-admin-review label {
+  display: grid;
+  gap: 7px;
+}
+
+.claim-admin-review label span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.claim-admin-review textarea {
+  min-height: 92px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.claim-admin-actions {
+  align-items: center;
+}
+
 .profile-header {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -2263,7 +2391,8 @@ textarea {
 
   .avatar-upload-row,
   .tutorial-grid,
-  .download-note-grid {
+  .download-note-grid,
+  .claim-admin-review {
     grid-template-columns: 1fr;
   }
 

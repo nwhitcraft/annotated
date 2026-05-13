@@ -204,10 +204,17 @@ export async function getClaims(status = 'pending') {
   return request(`/claims?status=${encodeURIComponent(status)}`);
 }
 
-export async function updateClaim(id, status) {
+export async function updateClaim(id, status, payload = {}) {
   return request(`/claims/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...payload }),
+  });
+}
+
+export async function banClaimUser(claimId, reason) {
+  return request(`/claims/${encodeURIComponent(claimId)}/ban-user`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
 }
 

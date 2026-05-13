@@ -26,6 +26,10 @@ db.exec(`
     provider_id TEXT NOT NULL,
     email TEXT,
     blocked INTEGER DEFAULT 0,
+    blocked_until TEXT,
+    blocked_reason TEXT,
+    deleted_at TEXT,
+    deletion_reason TEXT,
     subscription_tier TEXT DEFAULT 'free',
     age INTEGER,
     onboarding_completed INTEGER DEFAULT 0,
@@ -114,6 +118,25 @@ db.exec(`
     reason_code TEXT NOT NULL,
     description TEXT NOT NULL,
     status TEXT DEFAULT 'pending',    -- 'pending', 'reviewed', 'resolved', 'annotation_removed', 'user_blocked'
+    reviewer_note TEXT,
+    outcome TEXT,
+    reviewed_at TEXT,
+    resolved_at TEXT,
+    email_notification_status TEXT DEFAULT 'not_sent',
+    email_notification_error TEXT,
+    emailed_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS banned_identities (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    provider TEXT,
+    provider_id TEXT,
+    email TEXT,
+    username TEXT,
+    reason TEXT,
+    banned_until TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -128,6 +151,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_noteworthy_annotation ON noteworthy(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+  CREATE INDEX IF NOT EXISTS idx_banned_provider ON banned_identities(provider, provider_id, banned_until);
+  CREATE INDEX IF NOT EXISTS idx_banned_email ON banned_identities(email, banned_until);
+  CREATE INDEX IF NOT EXISTS idx_banned_username ON banned_identities(username, banned_until);
 `);
 
 const annotationColumnsBeforeMigration = db.prepare('PRAGMA table_info(annotations)').all().map((column) => column.name);
@@ -151,12 +177,23 @@ for (const statement of [
   `ALTER TABLE users ADD COLUMN link TEXT`,
   `ALTER TABLE users ADD COLUMN twitter_handle TEXT`,
   `ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN blocked_until TEXT`,
+  `ALTER TABLE users ADD COLUMN blocked_reason TEXT`,
+  `ALTER TABLE users ADD COLUMN deleted_at TEXT`,
+  `ALTER TABLE users ADD COLUMN deletion_reason TEXT`,
   `ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'`,
   `ALTER TABLE users ADD COLUMN age INTEGER`,
   `ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0`,
   `ALTER TABLE claims ADD COLUMN reason TEXT`,
   `ALTER TABLE claims ADD COLUMN reason_code TEXT`,
   `ALTER TABLE claims ADD COLUMN description TEXT`,
+  `ALTER TABLE claims ADD COLUMN reviewer_note TEXT`,
+  `ALTER TABLE claims ADD COLUMN outcome TEXT`,
+  `ALTER TABLE claims ADD COLUMN reviewed_at TEXT`,
+  `ALTER TABLE claims ADD COLUMN resolved_at TEXT`,
+  `ALTER TABLE claims ADD COLUMN email_notification_status TEXT DEFAULT 'not_sent'`,
+  `ALTER TABLE claims ADD COLUMN email_notification_error TEXT`,
+  `ALTER TABLE claims ADD COLUMN emailed_at TEXT`,
 ]) {
   try {
     db.exec(statement);
@@ -198,6 +235,20 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_noteworthy_annotation ON noteworthy(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type);
+  CREATE TABLE IF NOT EXISTS banned_identities (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    provider TEXT,
+    provider_id TEXT,
+    email TEXT,
+    username TEXT,
+    reason TEXT,
+    banned_until TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_banned_provider ON banned_identities(provider, provider_id, banned_until);
+  CREATE INDEX IF NOT EXISTS idx_banned_email ON banned_identities(email, banned_until);
+  CREATE INDEX IF NOT EXISTS idx_banned_username ON banned_identities(username, banned_until);
 `);
 
 // Add parent_id to comments for nested replies if missing

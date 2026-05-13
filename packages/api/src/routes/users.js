@@ -6,6 +6,7 @@ import { dirname, extname, join } from 'path';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import db from '../db.js';
+import { userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,7 @@ app.get('/suggested', (c) => {
   const items = db.prepare(`
     SELECT id, username, display_name, avatar_url, bio, link, twitter_handle, credibility_score
     FROM users
+    WHERE deleted_at IS NULL AND COALESCE(blocked, 0) = 0
     ORDER BY credibility_score DESC, created_at ASC
     LIMIT ?
   `).all(Math.min(Math.max(Number(limit) || 6, 1), 12));
@@ -40,8 +42,11 @@ app.get('/search', (c) => {
       CASE WHEN f.follower_id IS NOT NULL THEN 1 ELSE 0 END AS following
     FROM users u
     LEFT JOIN follows f ON f.following_id = u.id AND f.follower_id = ?
-    WHERE lower(u.username) LIKE ?
+    WHERE u.deleted_at IS NULL
+      AND COALESCE(u.blocked, 0) = 0
+      AND (lower(u.username) LIKE ?
        OR lower(COALESCE(u.display_name, '')) LIKE ?
+      )
     ORDER BY
       CASE
         WHEN lower(u.username) = lower(?) THEN 0
@@ -89,6 +94,7 @@ app.post('/avatar', async (c) => {
 app.get('/me', (c) => {
   const user = authUser(c);
   if (!user) return c.json({ error: 'Not authenticated' }, 401);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
   return c.json(publicUser(user));
 });
 
@@ -111,6 +117,7 @@ app.post('/username/check', async (c) => {
 app.post('/onboard', async (c) => {
   const user = authUser(c);
   if (!user) return c.json({ error: 'Not authenticated' }, 401);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   const body = await c.req.json().catch(() => ({}));
   const displayName = String(body.display_name || '').trim();
@@ -154,7 +161,7 @@ app.get('/:id', (c) => {
   const { id } = c.req.param();
   const viewerId = c.req.query('viewer_id');
   const user = findUser(id);
-  if (!user) return c.json({ error: 'User not found' }, 404);
+  if (!user || user.deleted_at) return c.json({ error: 'User not found' }, 404);
   const viewer = viewerId ? findUser(viewerId) : null;
   const viewingSelf = viewer?.id === user.id;
 
@@ -197,6 +204,7 @@ app.post('/', async (c) => {
     .get(provider, provider_id);
 
   if (existing) {
+    if (userUnavailable(existing)) return c.json({ error: 'Account unavailable' }, 403);
     db.prepare(`
       UPDATE users
       SET display_name = COALESCE(?, display_name),
@@ -247,6 +255,7 @@ app.put('/:id', async (c) => {
   const { id } = c.req.param();
   const user = findUser(id);
   if (!user) return c.json({ error: 'User not found' }, 404);
+  if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
   const body = await c.req.json();
   const normalized = normalizeProfile(body, { displayNameRequired: true });
@@ -277,6 +286,9 @@ app.post('/:id/follow', async (c) => {
   const { user_id } = await c.req.json();
 
   if (user_id === following_id) return c.json({ error: "Can't follow yourself" }, 400);
+  const follower = findUser(user_id);
+  const followed = findUser(following_id);
+  if (userUnavailable(follower) || userUnavailable(followed)) return c.json({ error: 'Account unavailable' }, 403);
 
   const existing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?')
     .get(user_id, following_id);
@@ -297,7 +309,7 @@ app.get('/:id/annotations', (c) => {
   const { id } = c.req.param();
   const { limit = '20', offset = '0', status = 'published', viewer_id, liked } = c.req.query();
   const user = findUser(id);
-  if (!user) return c.json({ error: 'User not found' }, 404);
+  if (!user || user.deleted_at) return c.json({ error: 'User not found' }, 404);
 
   const viewer = viewer_id ? findUser(viewer_id) : null;
   const isSelf = viewer?.id === user.id;
@@ -312,7 +324,11 @@ app.get('/:id/annotations', (c) => {
       FROM likes l
       JOIN annotations a ON a.id = l.annotation_id
       JOIN users u ON a.user_id = u.id
-      WHERE l.user_id = ? AND a.is_public = 1 AND a.status = 'published'
+      WHERE l.user_id = ?
+        AND a.is_public = 1
+        AND a.status = 'published'
+        AND u.deleted_at IS NULL
+        AND COALESCE(u.blocked, 0) = 0
       ORDER BY l.created_at DESC LIMIT ? OFFSET ?
     `).all(user.id, Number(limit), Number(offset));
 
