@@ -207,6 +207,9 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCStreamOutput, AVCaptur
         }
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         if firstSampleTime == nil {
+            guard mediaType == .video else {
+                return
+            }
             firstSampleTime = presentationTime
             writer.startWriting()
             writer.startSession(atSourceTime: presentationTime)
@@ -268,20 +271,32 @@ final class AppState {
         let elapsed = startedAt.map { max(1, Date().timeIntervalSince($0)) } ?? (options?.duration ?? 0)
         lock.unlock()
 
+        var finalOk = ok
+        var finalError = error
+        let outputPath = options?.outputPath
+        if ok, let outputPath, !outputPath.isEmpty {
+            let fileUrl = URL(fileURLWithPath: outputPath)
+            let fileSize = (try? fileUrl.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if fileSize <= 0 {
+                finalOk = false
+                finalError = "Screen capture did not produce a playable file."
+            }
+        }
+
         let payload = CapturePayload(
-            ok: ok,
-            outputPath: ok ? options?.outputPath : nil,
+            ok: finalOk,
+            outputPath: finalOk ? outputPath : nil,
             duration: elapsed,
             microphone: options?.microphone ?? false,
             systemAudio: options?.systemAudio ?? false,
-            error: error
+            error: finalError
         )
         if let data = try? JSONEncoder().encode(payload),
            let line = String(data: data, encoding: .utf8) {
             print(line)
         }
         fflush(stdout)
-        exit(ok ? 0 : 1)
+        exit(finalOk ? 0 : 1)
     }
 }
 
