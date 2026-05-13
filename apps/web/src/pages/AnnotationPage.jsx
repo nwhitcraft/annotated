@@ -2,8 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import AnnotationItem from '../components/AnnotationItem.jsx';
 import CommentThread from '../components/CommentThread.jsx';
-import { currentUser } from '../lib/mockData.js';
-import { checkAuth, getAnnotation, postComment } from '../lib/api.js';
+import {
+  checkAuth,
+  getAnnotation,
+  getAvatarUrl,
+  getCurrentUserId,
+  getDisplayName,
+  getToken,
+  getUsername,
+  postComment,
+} from '../lib/api.js';
 
 function childrenOf(comment) {
   return comment.replies || comment.children || comment.comments || [];
@@ -33,6 +41,20 @@ function replaceComment(comments, oldId, nextComment) {
   });
 }
 
+function viewerFromStorage() {
+  if (!getToken()) {
+    return { id: 'guest', username: 'guest', display_name: 'Guest', avatar_url: '' };
+  }
+  const username = getUsername();
+  const userId = getCurrentUserId();
+  return {
+    id: userId,
+    username: username || userId,
+    display_name: getDisplayName() || username || 'User',
+    avatar_url: getAvatarUrl() || '',
+  };
+}
+
 export default function AnnotationPage() {
   const { id } = useParams();
   const [annotation, setAnnotation] = useState(null);
@@ -42,7 +64,7 @@ export default function AnnotationPage() {
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimSent, setClaimSent] = useState(false);
   const [claim, setClaim] = useState({ email: '', reason_code: 'copyright', description: '' });
-  const [viewer, setViewer] = useState(currentUser);
+  const [viewer, setViewer] = useState(viewerFromStorage);
 
   useEffect(() => {
     let cancelled = false;

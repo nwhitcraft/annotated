@@ -2,30 +2,28 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import UserAvatar from './UserAvatar.jsx';
 import UserSearch from './UserSearch.jsx';
-import { currentUser } from '../lib/mockData.js';
 import { checkAuth, getAvatarUrl, getCurrentUserId, getDisplayName, getToken, getUsername } from '../lib/api.js';
 
+function viewerFromStorage() {
+  if (!getToken()) return null;
+  const username = getUsername();
+  const userId = getCurrentUserId();
+  return {
+    id: userId,
+    username: username || userId,
+    display_name: getDisplayName() || username || 'User',
+    avatar_url: getAvatarUrl() || '',
+  };
+}
+
 export default function Layout() {
-  const [viewer, setViewer] = useState(currentUser);
+  const [viewer, setViewer] = useState(viewerFromStorage);
 
   useEffect(() => {
     let cancelled = false;
-    const cachedViewer = () => {
-      const cachedUsername = getUsername() || currentUser.username;
-      return {
-        ...currentUser,
-        id: getCurrentUserId(),
-        username: cachedUsername,
-        display_name: getDisplayName() || cachedUsername,
-        avatar_url: getAvatarUrl() || '',
-      };
-    };
     const applyCachedViewer = (event) => {
-      setViewer((current) => ({
-        ...current,
-        ...cachedViewer(),
-        ...(event?.detail || {}),
-      }));
+      const cached = viewerFromStorage();
+      setViewer(cached ? { ...cached, ...(event?.detail || {}) } : null);
     };
 
     applyCachedViewer();
@@ -38,11 +36,7 @@ export default function Layout() {
 
     checkAuth().then((result) => {
       if (cancelled || result.error) return;
-      setViewer({
-        ...currentUser,
-        ...result.user,
-        avatar_url: result.user.avatar_url || '',
-      });
+      setViewer({ ...result.user, avatar_url: result.user.avatar_url || '' });
     });
     return () => {
       cancelled = true;
@@ -58,14 +52,20 @@ export default function Layout() {
           <nav className="main-nav" aria-label="Primary navigation">
             <NavLink to="/feed">Feed</NavLink>
             <NavLink to="/new">Annotate</NavLink>
-            <NavLink to={`/u/${viewer.username}`}>Profile</NavLink>
-            {viewer.username === 'demo' && <NavLink to="/admin/claims">Claims</NavLink>}
+            {viewer && <NavLink to={`/u/${viewer.username}`}>Profile</NavLink>}
+            {viewer?.username === 'demo' && <NavLink to="/admin/claims">Claims</NavLink>}
           </nav>
           <div className="header-tools">
             <UserSearch />
-            <Link to={`/u/${viewer.username}`} className="avatar-link" aria-label="Account">
-              <UserAvatar user={viewer} size="sm" />
-            </Link>
+            {viewer ? (
+              <Link to={`/u/${viewer.username}`} className="avatar-link" aria-label="Account">
+                <UserAvatar user={viewer} size="sm" />
+              </Link>
+            ) : (
+              <Link to="/login" className="avatar-link" aria-label="Sign in">
+                <span className="avatar avatar-sm">?</span>
+              </Link>
+            )}
           </div>
         </div>
       </header>
