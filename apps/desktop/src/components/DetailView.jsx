@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import SourceType from './SourceType.jsx';
+import { mediaSrc } from '../lib/localStore.js';
 
 export default function DetailView({ annotation, onPost, onDelete, onExport, onTagsChange, onComment }) {
   const [tags, setTags] = useState((annotation?.tags || []).join(', '));
@@ -40,6 +41,16 @@ export default function DetailView({ annotation, onPost, onDelete, onExport, onT
       {annotation.clip_text && <blockquote className="detail-quote">{annotation.clip_text}</blockquote>}
       {annotation.clip_start_sec != null && annotation.clip_end_sec != null && (
         <p className="media-range">{annotation.source_type === 'podcast' ? 'Audio excerpt' : 'Video excerpt'} · {annotation.clip_start_sec}s-{annotation.clip_end_sec}s</p>
+      )}
+      {annotation.clip_media_path && ['screen', 'youtube'].includes(annotation.source_type) && (
+        <video className="media-player" controls preload="metadata">
+          <source src={mediaSrc(annotation.clip_media_path)} type={annotation.clip_media_path.endsWith('.mov') ? 'video/quicktime' : 'video/mp4'} />
+        </video>
+      )}
+      {annotation.clip_media_path && annotation.source_type === 'podcast' && (
+        <audio className="audio-player" controls preload="metadata">
+          <source src={mediaSrc(annotation.clip_media_path)} type="audio/mpeg" />
+        </audio>
       )}
       <h1>{annotation.commentary}</h1>
 

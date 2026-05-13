@@ -573,6 +573,10 @@ textarea {
   color: var(--text-primary);
 }
 
+.source-screen {
+  color: #334155;
+}
+
 .annotation-type-tag {
   color: var(--text-secondary);
   font-family: var(--font-mono);

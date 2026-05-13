@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 const TOKEN_KEY = 'annotated.jwt';
@@ -203,6 +203,28 @@ export async function postAnnotation(id) {
   return saveAnnotation(updated);
 }
 
+export function mediaSrc(path) {
+  if (!path) return '';
+  if (/^(https?:|asset:|blob:|data:)/i.test(path)) return path;
+  if (isTauri) return convertFileSrc(path);
+  return path;
+}
+
+export async function startScreenClip(options = {}) {
+  if (!isTauri) throw new Error('Screen clipping requires the Annotated desktop app.');
+  return invoke('start_screen_clip', { request: options });
+}
+
+export async function stopScreenClip() {
+  if (!isTauri) throw new Error('Screen clipping requires the Annotated desktop app.');
+  return invoke('stop_screen_clip');
+}
+
+export async function screenClipStatus() {
+  if (!isTauri) return { active: false };
+  return invoke('screen_clip_status');
+}
+
 export async function syncAnnotation(annotation) {
   const token = getToken();
   if (!token) throw new Error('Sign in before publishing to the public feed.');
@@ -219,6 +241,7 @@ export async function syncAnnotation(annotation) {
       clip_text: annotation.clip_text || null,
       clip_start_sec: annotation.clip_start_sec || null,
       clip_end_sec: annotation.clip_end_sec || null,
+      clip_media_path: annotation.clip_media_path && !isTauri ? annotation.clip_media_path : null,
       commentary: annotation.commentary,
       annotation_type: annotation.annotation_type || 'Opinion',
       is_public: annotation.is_public ? 1 : 0,
@@ -234,7 +257,28 @@ export async function syncAnnotation(annotation) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.error) throw new Error(data.error || `API sync failed: ${response.status}`);
-    return annotation;
+    if (isTauri && annotation.clip_media_path && data.id) {
+      const upload = await invoke('upload_clip_to_api', {
+        endpoint,
+        token,
+        annotationId: data.id,
+        path: annotation.clip_media_path,
+        start: annotation.clip_start_sec || 0,
+        end: annotation.clip_end_sec || 90,
+        sourceType: annotation.source_type || 'screen',
+      });
+      if (!upload.ok) {
+        let detail = upload.blocker || upload.stderr || upload.stdout || 'Clip upload failed';
+        try {
+          const parsed = JSON.parse(upload.stdout || '{}');
+          detail = parsed.error || parsed.detail || detail;
+        } catch {
+          // Keep curl diagnostics when the body is not JSON.
+        }
+        throw new Error(detail);
+      }
+    }
+    return { ...annotation, remote_id: data.id };
   } catch (err) {
     throw new Error(err.message || 'API sync failed');
   }

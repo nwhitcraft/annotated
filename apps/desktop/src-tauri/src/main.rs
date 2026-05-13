@@ -3,8 +3,13 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
-use tauri::{AppHandle, Emitter, Manager};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+use tauri::menu::MenuBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use uuid::Uuid;
 
@@ -62,6 +67,69 @@ struct ToolResult {
     stderr: String,
     output_path: Option<String>,
     blocker: Option<String>,
+}
+
+#[derive(Default)]
+struct ScreenCaptureState {
+    session: Option<ScreenCaptureSession>,
+}
+
+struct ScreenCaptureSession {
+    child: Child,
+    output_path: String,
+    started_at: Instant,
+    started_at_iso: String,
+    duration_seconds: u64,
+    microphone: bool,
+    system_audio: bool,
+}
+
+type SharedScreenCaptureState = Arc<Mutex<ScreenCaptureState>>;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartScreenClipRequest {
+    duration_seconds: Option<u64>,
+    microphone: Option<bool>,
+    system_audio: Option<bool>,
+    display_index: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ScreenCaptureStatus {
+    active: bool,
+    output_path: Option<String>,
+    started_at: Option<String>,
+    elapsed_seconds: u64,
+    duration_seconds: u64,
+    microphone: bool,
+    system_audio: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaptureHelperPayload {
+    ok: bool,
+    output_path: Option<String>,
+    duration: Option<f64>,
+    microphone: Option<bool>,
+    system_audio: Option<bool>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ScreenClipResult {
+    ok: bool,
+    output_path: Option<String>,
+    media_path: Option<String>,
+    duration_seconds: u64,
+    microphone: bool,
+    system_audio: bool,
+    error: Option<String>,
+    stdout: String,
+    stderr: String,
 }
 
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -170,11 +238,17 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         "#,
     )
     .map_err(|error| error.to_string())?;
-    let _ = conn.execute("ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'", []);
+    let _ = conn.execute(
+        "ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'",
+        [],
+    );
     Ok(())
 }
 
-fn row_to_annotation(row: &rusqlite::Row<'_>, comments: Vec<LocalComment>) -> rusqlite::Result<Annotation> {
+fn row_to_annotation(
+    row: &rusqlite::Row<'_>,
+    comments: Vec<LocalComment>,
+) -> rusqlite::Result<Annotation> {
     let tags_json: String = row.get("tags")?;
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
     Ok(Annotation {
@@ -214,7 +288,8 @@ fn load_comments(conn: &Connection, annotation_id: &str) -> Result<Vec<LocalComm
             })
         })
         .map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -230,7 +305,10 @@ fn list_annotations(app: AppHandle) -> Result<Vec<Annotation>, String> {
         .map_err(|error| error.to_string())?;
 
     ids.into_iter()
-        .map(|id| get_annotation(app.clone(), id).and_then(|item| item.ok_or_else(|| "Annotation not found".to_string())))
+        .map(|id| {
+            get_annotation(app.clone(), id)
+                .and_then(|item| item.ok_or_else(|| "Annotation not found".to_string()))
+        })
         .collect()
 }
 
@@ -253,10 +331,17 @@ fn get_annotation(app: AppHandle, id: String) -> Result<Option<Annotation>, Stri
 fn save_annotation(app: AppHandle, annotation: Annotation) -> Result<Annotation, String> {
     let conn = connect(&app)?;
     let now = Utc::now().to_rfc3339();
-    let id = annotation.id.clone().unwrap_or_else(|| format!("local-{}", Uuid::new_v4()));
-    let user_id = annotation.user_id.clone().unwrap_or_else(|| "local-user".to_string());
+    let id = annotation
+        .id
+        .clone()
+        .unwrap_or_else(|| format!("local-{}", Uuid::new_v4()));
+    let user_id = annotation
+        .user_id
+        .clone()
+        .unwrap_or_else(|| "local-user".to_string());
     let comments = annotation.comments.clone().unwrap_or_default();
-    let tags = serde_json::to_string(&annotation.tags.clone().unwrap_or_default()).map_err(|error| error.to_string())?;
+    let tags = serde_json::to_string(&annotation.tags.clone().unwrap_or_default())
+        .map_err(|error| error.to_string())?;
     let created_at = annotation.created_at.clone().unwrap_or_else(|| now.clone());
     let version = annotation.conflict_version.unwrap_or(1);
 
@@ -371,7 +456,11 @@ fn load_settings(app: AppHandle) -> Result<Settings, String> {
         hotkey: "CommandOrControl+Shift+A".to_string(),
         storage_location: path,
     };
-    let value: Result<String, _> = conn.query_row("SELECT value FROM settings WHERE key = 'desktop'", [], |row| row.get(0));
+    let value: Result<String, _> = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'desktop'",
+        [],
+        |row| row.get(0),
+    );
     match value {
         Ok(json) => serde_json::from_str(&json).map_err(|error| error.to_string()),
         Err(_) => Ok(default),
@@ -398,7 +487,11 @@ fn run_tool(mut command: Command, output_path: Option<String>) -> ToolResult {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
             output_path,
-            blocker: if output.status.success() { None } else { Some("tool exited with a non-zero status".to_string()) },
+            blocker: if output.status.success() {
+                None
+            } else {
+                Some("tool exited with a non-zero status".to_string())
+            },
         },
         Err(error) => ToolResult {
             ok: false,
@@ -411,9 +504,403 @@ fn run_tool(mut command: Command, output_path: Option<String>) -> ToolResult {
     }
 }
 
+fn media_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("media");
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    Ok(dir)
+}
+
+fn compile_capture_helper(source: PathBuf, helper: PathBuf) -> Result<(), String> {
+    if !source.exists() {
+        return Err(format!(
+            "Native capture source not found at {}",
+            source.display()
+        ));
+    }
+    if let Some(parent) = helper.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let info_plist = source
+        .parent()
+        .and_then(|native_dir| native_dir.parent())
+        .map(|manifest_dir| manifest_dir.join("Info.plist"));
+    let mut args = vec![
+        "swiftc".to_string(),
+        "-O".to_string(),
+        "-parse-as-library".to_string(),
+        "-framework".to_string(),
+        "ScreenCaptureKit".to_string(),
+        "-framework".to_string(),
+        "AVFoundation".to_string(),
+        "-framework".to_string(),
+        "CoreMedia".to_string(),
+        "-framework".to_string(),
+        "CoreGraphics".to_string(),
+        "-framework".to_string(),
+        "CoreVideo".to_string(),
+        "-o".to_string(),
+        helper.to_string_lossy().to_string(),
+    ];
+    if let Some(path) = info_plist.filter(|path| path.exists()) {
+        args.extend([
+            "-Xlinker".to_string(),
+            "-sectcreate".to_string(),
+            "-Xlinker".to_string(),
+            "__TEXT".to_string(),
+            "-Xlinker".to_string(),
+            "__info_plist".to_string(),
+            "-Xlinker".to_string(),
+            path.to_string_lossy().to_string(),
+        ]);
+    }
+    args.push(source.to_string_lossy().to_string());
+    let output = Command::new("xcrun")
+        .args(args)
+        .output()
+        .map_err(|error| format!("Could not run Swift compiler: {}", error))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+fn capture_helper_path(app: &AppHandle) -> Result<PathBuf, String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        return Err("Screen capture is only implemented for macOS in this build.".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(sidecar_name) = option_env!("ANNOTATED_CAPTURE_SIDECAR") {
+            let mut candidates = Vec::new();
+            let names = [sidecar_name, "annotated-capture"];
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                for name in names {
+                    candidates.push(resource_dir.join(name));
+                }
+                if let Some(contents_dir) = resource_dir.parent() {
+                    for name in names {
+                        candidates.push(contents_dir.join("MacOS").join(name));
+                    }
+                }
+            }
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(exe_dir) = exe.parent() {
+                    for name in names {
+                        candidates.push(exe_dir.join(name));
+                    }
+                }
+            }
+            if let Some(path) = candidates.into_iter().find(|path| path.exists()) {
+                return Ok(path);
+            }
+        }
+
+        if let Some(path) = option_env!("ANNOTATED_CAPTURE_HELPER") {
+            let compiled = PathBuf::from(path);
+            if compiled.exists() {
+                return Ok(compiled);
+            }
+        }
+
+        let helper = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| error.to_string())?
+            .join("native")
+            .join("annotated-capture");
+        if helper.exists() {
+            return Ok(helper);
+        }
+
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("native")
+            .join("AnnotatedCapture.swift");
+        compile_capture_helper(source, helper.clone())?;
+        Ok(helper)
+    }
+}
+
+fn capture_status_from_session(session: &ScreenCaptureSession) -> ScreenCaptureStatus {
+    ScreenCaptureStatus {
+        active: true,
+        output_path: Some(session.output_path.clone()),
+        started_at: Some(session.started_at_iso.clone()),
+        elapsed_seconds: session.started_at.elapsed().as_secs(),
+        duration_seconds: session.duration_seconds,
+        microphone: session.microphone,
+        system_audio: session.system_audio,
+    }
+}
+
+fn parse_helper_payload(stdout: &str) -> Option<CaptureHelperPayload> {
+    stdout
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| line.starts_with('{') && line.ends_with('}'))
+        .and_then(|line| serde_json::from_str(line).ok())
+}
+
+fn empty_screen_capture_status() -> ScreenCaptureStatus {
+    ScreenCaptureStatus {
+        active: false,
+        output_path: None,
+        started_at: None,
+        elapsed_seconds: 0,
+        duration_seconds: 90,
+        microphone: false,
+        system_audio: false,
+    }
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn set_tray_recording(app: &AppHandle, recording: bool) {
+    if let Some(tray) = app.tray_by_id("annotated-tray") {
+        let _ = tray.set_title(Some(if recording { "●" } else { "A" }));
+        let _ = tray.set_tooltip(Some(if recording {
+            "Annotated is clipping"
+        } else {
+            "Annotated"
+        }));
+    }
+}
+
+#[tauri::command]
+fn start_screen_clip(
+    app: AppHandle,
+    state: State<SharedScreenCaptureState>,
+    request: StartScreenClipRequest,
+) -> Result<ScreenCaptureStatus, String> {
+    let mut guard = state.lock().map_err(|error| error.to_string())?;
+    if let Some(session) = guard.session.as_ref() {
+        return Ok(capture_status_from_session(session));
+    }
+
+    let duration = request.duration_seconds.unwrap_or(90).clamp(1, 90);
+    let microphone = request.microphone.unwrap_or(true);
+    let system_audio = request.system_audio.unwrap_or(true);
+    let output = media_dir(&app)?.join(format!("screen-{}.mp4", Uuid::new_v4()));
+    let helper = capture_helper_path(&app)?;
+
+    let mut command = Command::new(helper);
+    command
+        .arg("--output")
+        .arg(&output)
+        .arg("--duration")
+        .arg(duration.to_string())
+        .arg("--microphone")
+        .arg(if microphone { "true" } else { "false" })
+        .arg("--system-audio")
+        .arg(if system_audio { "true" } else { "false" })
+        .arg("--display-index")
+        .arg(request.display_index.unwrap_or(0).to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command.spawn().map_err(|error| error.to_string())?;
+    thread::sleep(Duration::from_millis(350));
+    if child
+        .try_wait()
+        .map_err(|error| error.to_string())?
+        .is_some()
+    {
+        let output = child
+            .wait_with_output()
+            .map_err(|error| error.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let payload = parse_helper_payload(&stdout);
+        let detail = payload
+            .and_then(|item| item.error)
+            .or_else(|| {
+                if stderr.trim().is_empty() {
+                    None
+                } else {
+                    Some(stderr)
+                }
+            })
+            .unwrap_or_else(|| "Screen capture stopped before it could begin.".to_string());
+        return Err(detail);
+    }
+    let status = ScreenCaptureStatus {
+        active: true,
+        output_path: Some(output.to_string_lossy().to_string()),
+        started_at: Some(Utc::now().to_rfc3339()),
+        elapsed_seconds: 0,
+        duration_seconds: duration,
+        microphone,
+        system_audio,
+    };
+
+    guard.session = Some(ScreenCaptureSession {
+        child,
+        output_path: output.to_string_lossy().to_string(),
+        started_at: Instant::now(),
+        started_at_iso: status.started_at.clone().unwrap_or_default(),
+        duration_seconds: duration,
+        microphone,
+        system_audio,
+    });
+    drop(guard);
+
+    set_tray_recording(&app, true);
+    let _ = app.emit("screen-capture-started", status.clone());
+    Ok(status)
+}
+
+#[tauri::command]
+fn stop_screen_clip(
+    app: AppHandle,
+    state: State<SharedScreenCaptureState>,
+) -> Result<ScreenClipResult, String> {
+    let mut guard = state.lock().map_err(|error| error.to_string())?;
+    let session = guard
+        .session
+        .take()
+        .ok_or_else(|| "No active screen capture.".to_string())?;
+    drop(guard);
+
+    #[cfg(unix)]
+    unsafe {
+        let _ = libc::kill(session.child.id() as i32, libc::SIGINT);
+    }
+
+    let fallback_output = session.output_path.clone();
+    let elapsed = session
+        .started_at
+        .elapsed()
+        .as_secs()
+        .clamp(1, session.duration_seconds);
+    let microphone = session.microphone;
+    let system_audio = session.system_audio;
+    let output = session
+        .child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let payload = parse_helper_payload(&stdout);
+    let output_path = payload
+        .as_ref()
+        .and_then(|item| item.output_path.clone())
+        .unwrap_or(fallback_output);
+    let exists = fs::metadata(&output_path)
+        .map(|metadata| metadata.len() > 0)
+        .unwrap_or(false);
+    let helper_error = payload.as_ref().and_then(|item| item.error.clone());
+    let ok =
+        output.status.success() && payload.as_ref().map(|item| item.ok).unwrap_or(exists) && exists;
+    let duration_seconds = payload
+        .as_ref()
+        .and_then(|item| item.duration)
+        .map(|value| value.round().max(1.0) as u64)
+        .unwrap_or(elapsed);
+
+    let result = ScreenClipResult {
+        ok,
+        output_path: if exists {
+            Some(output_path.clone())
+        } else {
+            None
+        },
+        media_path: if exists { Some(output_path) } else { None },
+        duration_seconds,
+        microphone: payload
+            .as_ref()
+            .and_then(|item| item.microphone)
+            .unwrap_or(microphone),
+        system_audio: payload
+            .as_ref()
+            .and_then(|item| item.system_audio)
+            .unwrap_or(system_audio),
+        error: if ok {
+            None
+        } else {
+            helper_error
+                .or_else(|| Some("Screen capture did not produce a playable file.".to_string()))
+        },
+        stdout,
+        stderr,
+    };
+
+    set_tray_recording(&app, false);
+    let _ = app.emit("screen-capture-stopped", result.clone());
+    Ok(result)
+}
+
+#[tauri::command]
+fn screen_clip_status(state: State<SharedScreenCaptureState>) -> ScreenCaptureStatus {
+    let Ok(guard) = state.lock() else {
+        return empty_screen_capture_status();
+    };
+    guard
+        .session
+        .as_ref()
+        .map(capture_status_from_session)
+        .unwrap_or_else(empty_screen_capture_status)
+}
+
+#[tauri::command]
+fn upload_clip_to_api(
+    endpoint: String,
+    token: String,
+    annotation_id: String,
+    path: String,
+    start: Option<i64>,
+    end: Option<i64>,
+    source_type: Option<String>,
+) -> Result<ToolResult, String> {
+    if token.trim().is_empty() {
+        return Err("Sign in before uploading a public clip.".to_string());
+    }
+    let url = format!(
+        "{}/api/annotations/{}/clip-upload",
+        endpoint.trim_end_matches('/'),
+        annotation_id
+    );
+    let mut command = Command::new("curl");
+    command
+        .arg("-sS")
+        .arg("-X")
+        .arg("POST")
+        .arg("-H")
+        .arg(format!("Authorization: Bearer {}", token))
+        .arg("-F")
+        .arg(format!("clip=@{}", path))
+        .arg("-F")
+        .arg(format!("start={}", start.unwrap_or(0)))
+        .arg("-F")
+        .arg(format!("end={}", end.unwrap_or(90)))
+        .arg("-F")
+        .arg(format!(
+            "source_type={}",
+            source_type.unwrap_or_else(|| "screen".to_string())
+        ))
+        .arg(url);
+    Ok(run_tool(command, None))
+}
+
 #[tauri::command]
 fn clip_youtube(app: AppHandle, url: String, start: i64, end: i64) -> Result<ToolResult, String> {
-    let media_dir = app.path().app_data_dir().map_err(|error| error.to_string())?.join("media");
+    let media_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("media");
     fs::create_dir_all(&media_dir).map_err(|error| error.to_string())?;
     let duration = (end - start).clamp(1, 90);
     let output = media_dir.join(format!("youtube-{}.mp4", Uuid::new_v4()));
@@ -426,12 +913,24 @@ fn clip_youtube(app: AppHandle, url: String, start: i64, end: i64) -> Result<Too
         .arg("-o")
         .arg(output.to_string_lossy().to_string())
         .arg(url);
-    Ok(run_tool(command, Some(output.to_string_lossy().to_string())))
+    Ok(run_tool(
+        command,
+        Some(output.to_string_lossy().to_string()),
+    ))
 }
 
 #[tauri::command]
-fn extract_podcast_audio(app: AppHandle, input: String, start: i64, end: i64) -> Result<ToolResult, String> {
-    let media_dir = app.path().app_data_dir().map_err(|error| error.to_string())?.join("media");
+fn extract_podcast_audio(
+    app: AppHandle,
+    input: String,
+    start: i64,
+    end: i64,
+) -> Result<ToolResult, String> {
+    let media_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("media");
     fs::create_dir_all(&media_dir).map_err(|error| error.to_string())?;
     let duration = (end - start).clamp(1, 90);
     let output = media_dir.join(format!("podcast-{}.mp3", Uuid::new_v4()));
@@ -448,7 +947,10 @@ fn extract_podcast_audio(app: AppHandle, input: String, start: i64, end: i64) ->
         .arg("-acodec")
         .arg("libmp3lame")
         .arg(output.to_string_lossy().to_string());
-    Ok(run_tool(command, Some(output.to_string_lossy().to_string())))
+    Ok(run_tool(
+        command,
+        Some(output.to_string_lossy().to_string()),
+    ))
 }
 
 #[tauri::command]
@@ -459,14 +961,25 @@ fn transcribe_with_whisper(input: String) -> Result<ToolResult, String> {
 }
 
 #[tauri::command]
-fn screen_clip_diagnostic() -> ToolResult {
-    ToolResult {
-        ok: false,
-        status: None,
-        stdout: String::new(),
-        stderr: String::new(),
-        output_path: None,
-        blocker: Some("screen capture requires macOS screen-recording permission plus a native capture backend; the private/public workflow is scaffolded but pixels are not captured in this build".to_string()),
+fn screen_clip_diagnostic(app: AppHandle) -> ToolResult {
+    match capture_helper_path(&app) {
+        Ok(helper) => {
+            let mut command = Command::new(helper);
+            command.arg("--preflight");
+            let mut result = run_tool(command, None);
+            if result.ok {
+                result.blocker = None;
+            }
+            result
+        }
+        Err(error) => ToolResult {
+            ok: false,
+            status: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            output_path: None,
+            blocker: Some(error),
+        },
     }
 }
 
@@ -480,15 +993,51 @@ fn handle_auth_callback(callback_url: String) -> Result<String, String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(Arc::new(Mutex::new(ScreenCaptureState::default())) as SharedScreenCaptureState)
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let app_handle = app.handle().clone();
             let shortcut_str = "CmdOrControl+Shift+A";
-            app.global_shortcut().on_shortcut(shortcut_str, move |_app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    let _ = app_handle.emit("shortcut:composer-toggle", true);
-                }
-            })?;
+            app.global_shortcut()
+                .on_shortcut(shortcut_str, move |_app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = app_handle.emit("shortcut:composer-toggle", true);
+                    }
+                })?;
+            let menu = MenuBuilder::new(app)
+                .text("toggle_window", "Show Annotated")
+                .text("quick_clip", "Start 90s Screen Clip")
+                .text("stop_clip", "Stop Screen Clip")
+                .separator()
+                .quit_with_text("Quit Annotated")
+                .build()?;
+            TrayIconBuilder::with_id("annotated-tray")
+                .title("A")
+                .tooltip("Annotated")
+                .menu(&menu)
+                .show_menu_on_left_click(true)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "toggle_window" => show_main_window(app),
+                    "quick_clip" => {
+                        show_main_window(app);
+                        let _ = app.emit("tray-start-screen-clip", true);
+                    }
+                    "stop_clip" => {
+                        let _ = app.emit("tray-stop-screen-clip", true);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -503,6 +1052,10 @@ pub fn run() {
             extract_podcast_audio,
             transcribe_with_whisper,
             screen_clip_diagnostic,
+            start_screen_clip,
+            stop_screen_clip,
+            screen_clip_status,
+            upload_clip_to_api,
             handle_auth_callback,
         ])
         .run(tauri::generate_context!())

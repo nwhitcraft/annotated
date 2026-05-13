@@ -39,6 +39,8 @@ export default function App() {
   const [tagFilter, setTagFilter] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [status, setStatus] = useState('Ready');
+  const [screenCaptureIntent, setScreenCaptureIntent] = useState(0);
+  const [screenStopIntent, setScreenStopIntent] = useState(0);
 
   useEffect(() => {
     refresh();
@@ -54,19 +56,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let unlisten = null;
+    const unlisteners = [];
     (async () => {
       try {
-        unlisten = await listen('shortcut:composer-toggle', () => {
+        unlisteners.push(await listen('shortcut:composer-toggle', () => {
           setEditing(null);
           setActiveView('compose');
-        });
+        }));
+        unlisteners.push(await listen('tray-start-screen-clip', () => {
+          setEditing(null);
+          setActiveView('compose');
+          setScreenCaptureIntent((value) => value + 1);
+        }));
+        unlisteners.push(await listen('tray-stop-screen-clip', () => {
+          setScreenStopIntent((value) => value + 1);
+        }));
       } catch (err) {
-        console.error('Failed to register global shortcut listener:', err);
+        console.error('Failed to register desktop event listener:', err);
       }
     })();
     return () => {
-      if (unlisten) unlisten();
+      unlisteners.forEach((unlisten) => unlisten());
     };
   }, []);
 
@@ -184,7 +194,18 @@ export default function App() {
       </aside>
 
       <main className="workspace">
-        {activeView === 'compose' && <Composer editing={editing} authUser={authUser} onSave={save} onPost={post} onSignIn={signIn} />}
+        {activeView === 'compose' && (
+          <Composer
+            editing={editing}
+            authUser={authUser}
+            onSave={save}
+            onPost={post}
+            onSignIn={signIn}
+            onStatus={setStatus}
+            screenCaptureIntent={screenCaptureIntent}
+            screenStopIntent={screenStopIntent}
+          />
+        )}
         {activeView === 'library' && (
           <LibraryView
             annotations={filtered}

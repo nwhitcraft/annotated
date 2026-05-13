@@ -277,6 +277,13 @@ kbd {
   background: rgba(255, 255, 253, 0.64);
 }
 
+.screen-capture-note header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: baseline;
+}
+
 .screen-capture-note strong,
 .auth-card h3 {
   margin: 0;
@@ -294,6 +301,60 @@ kbd {
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
+}
+
+.capture-toggles,
+.capture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline-check {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 253, 0.72);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.inline-check input {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+}
+
+.capture-state {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.capture-state.recording {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.screen-preview,
+.media-player,
+.audio-player {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: #111111;
+}
+
+.audio-player {
+  background: transparent;
 }
 
 .library-filters {

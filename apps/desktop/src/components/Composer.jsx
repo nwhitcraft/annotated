@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { detectSource, parseTags } from '../lib/detect.js';
+import { mediaSrc, startScreenClip, stopScreenClip } from '../lib/localStore.js';
 import SourceType from './SourceType.jsx';
 
 const emptyDraft = {
@@ -11,6 +12,7 @@ const emptyDraft = {
   clip_text: '',
   clip_start_sec: '',
   clip_end_sec: '',
+  clip_media_path: '',
   commentary: '',
   annotation_type: 'Opinion',
   tags: [],
@@ -27,11 +29,36 @@ const sourceModes = [
 ];
 const MAX_COMMENTARY_LENGTH = 360;
 
-export default function Composer({ editing, authUser, onSave, onPost, onSignIn }) {
+function captureErrorMessage(message) {
+  const value = String(message || '');
+  if (/TCC|declined|screen.?recording|application, window, display capture/i.test(value)) {
+    return 'macOS screen recording permission is required. Open System Settings > Privacy & Security > Screen & System Audio Recording (or Screen Recording), enable Annotated/Terminal, then reopen the app.';
+  }
+  if (/microphone/i.test(value)) {
+    return 'Microphone permission is required for mic capture. Enable it in System Settings > Privacy & Security > Microphone, or turn Microphone off for this clip.';
+  }
+  return value || 'Screen capture failed';
+}
+
+export default function Composer({
+  editing,
+  authUser,
+  onSave,
+  onPost,
+  onSignIn,
+  screenCaptureIntent = 0,
+  screenStopIntent = 0,
+  onStatus,
+}) {
   const [draft, setDraft] = useState(emptyDraft);
   const [tagText, setTagText] = useState('');
   const [visibility, setVisibility] = useState('private');
   const [error, setError] = useState('');
+  const [captureStatus, setCaptureStatus] = useState({ active: false });
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureError, setCaptureError] = useState('');
+  const [useMicrophone, setUseMicrophone] = useState(true);
+  const [useSystemAudio, setUseSystemAudio] = useState(true);
 
   useEffect(() => {
     setDraft(editing || emptyDraft);
@@ -43,6 +70,22 @@ export default function Composer({ editing, authUser, onSave, onPost, onSignIn }
   const detected = useMemo(() => detectSource(draft.source_url), [draft.source_url]);
   const isMedia = ['youtube', 'podcast'].includes(draft.source_type);
   const isScreen = draft.source_type === 'screen';
+  const attachedScreenClip = isScreen && draft.clip_media_path ? mediaSrc(draft.clip_media_path) : '';
+
+  useEffect(() => {
+    if (screenCaptureIntent > 0) {
+      chooseSourceMode('screen');
+      beginScreenCapture();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenCaptureIntent]);
+
+  useEffect(() => {
+    if (screenStopIntent > 0) {
+      finishScreenCapture();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenStopIntent]);
 
   function applyDetection() {
     if (!detected) return;
@@ -68,6 +111,68 @@ export default function Composer({ editing, authUser, onSave, onPost, onSignIn }
       source_title: value.source_type === 'screen' ? '' : value.source_title,
       source_domain: value.source_type === 'screen' ? '' : value.source_domain,
     }));
+  }
+
+  async function beginScreenCapture() {
+    if (captureStatus.active || captureBusy) return;
+    setCaptureError('');
+    setCaptureBusy(true);
+    onStatus?.('Starting screen clip...');
+    setDraft((value) => ({
+      ...value,
+      source_type: 'screen',
+      source_url: 'screen://local',
+      source_title: value.source_title || 'Screen clip',
+      source_domain: 'Local screen',
+    }));
+    try {
+      const status = await startScreenClip({
+        durationSeconds: 90,
+        microphone: useMicrophone,
+        systemAudio: useSystemAudio,
+        displayIndex: 0,
+      });
+      setCaptureStatus(status);
+      onStatus?.('Screen clip recording');
+    } catch (err) {
+      setCaptureError(captureErrorMessage(err.message || 'Could not start screen capture'));
+      onStatus?.('Screen clip could not start');
+    } finally {
+      setCaptureBusy(false);
+    }
+  }
+
+  async function finishScreenCapture() {
+    if (!captureStatus.active || captureBusy) return;
+    setCaptureError('');
+    setCaptureBusy(true);
+    onStatus?.('Saving screen clip...');
+    try {
+      const result = await stopScreenClip();
+      setCaptureStatus({ active: false });
+      if (!result.ok || !result.outputPath) {
+        throw new Error(result.error || 'Screen capture did not produce a file.');
+      }
+      const duration = result.durationSeconds || 90;
+      setDraft((value) => ({
+        ...value,
+        source_type: 'screen',
+        source_url: 'screen://local',
+        source_title: value.source_title || 'Screen clip',
+        source_domain: 'Local screen',
+        clip_media_path: result.outputPath,
+        clip_start_sec: 0,
+        clip_end_sec: duration,
+        clip_text: value.clip_text || `Screen recording attached (${duration}s).`,
+      }));
+      onStatus?.('Screen clip attached');
+    } catch (err) {
+      setCaptureStatus({ active: false });
+      setCaptureError(captureErrorMessage(err.message || 'Could not finish screen capture'));
+      onStatus?.('Screen clip failed');
+    } finally {
+      setCaptureBusy(false);
+    }
   }
 
   async function save() {
@@ -136,8 +241,35 @@ export default function Composer({ editing, authUser, onSave, onPost, onSignIn }
         </div>
       ) : (
         <div className="screen-capture-note">
-          <strong>Screen clipping scaffold</strong>
-          <span>Native capture needs macOS screen-recording permission and a Tauri capture backend. For now this saves the annotation privately with screen context.</span>
+          <header>
+            <strong>Screen capture</strong>
+            <span>Record the current display for up to 90 seconds. Private clips stay on this Mac; Public uploads after posting.</span>
+          </header>
+          <div className="capture-toggles" aria-label="Capture layers">
+            <label className="inline-check">
+              <input type="checkbox" checked={useSystemAudio} disabled={captureStatus.active} onChange={(event) => setUseSystemAudio(event.target.checked)} />
+              System audio
+            </label>
+            <label className="inline-check">
+              <input type="checkbox" checked={useMicrophone} disabled={captureStatus.active} onChange={(event) => setUseMicrophone(event.target.checked)} />
+              Microphone
+            </label>
+          </div>
+          <div className="capture-actions">
+            <button className="button button-solid" type="button" onClick={beginScreenCapture} disabled={captureStatus.active || captureBusy}>
+              Start Capture
+            </button>
+            <button className="button button-outline" type="button" onClick={finishScreenCapture} disabled={!captureStatus.active || captureBusy}>
+              Stop & Attach
+            </button>
+          </div>
+          <p className={`capture-state ${captureStatus.active ? 'recording' : ''}`}>
+            {captureStatus.active ? 'Recording...' : draft.clip_media_path ? 'Clip attached' : 'Ready to capture'}
+          </p>
+          {attachedScreenClip && (
+            <video className="screen-preview" controls preload="metadata" src={attachedScreenClip} />
+          )}
+          {captureError && <p className="composer-error">{captureError}</p>}
         </div>
       )}
 

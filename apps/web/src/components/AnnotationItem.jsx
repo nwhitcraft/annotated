@@ -2,13 +2,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import ActionRow from './ActionRow.jsx';
 import SourceType from './SourceType.jsx';
 import UserAvatar from './UserAvatar.jsx';
+import { API_ORIGIN } from '../lib/api.js';
 import { domainFromUrl, formatTime, timeAgo } from '../lib/format.js';
+
+function mediaUrl(path) {
+  if (!path) return '';
+  if (/^(https?:|blob:|data:)/i.test(path)) return path;
+  if (path.startsWith('/media')) return `${API_ORIGIN}${path}`;
+  return path;
+}
 
 export default function AnnotationItem({ annotation, expanded = false, canDelete = false, onDelete }) {
   const navigate = useNavigate();
   const domain = annotation.source_domain || domainFromUrl(annotation.source_url);
   const hasRange = annotation.clip_start_sec != null && annotation.clip_end_sec != null;
   const isYouTubeClip = annotation.source_type === 'youtube' && annotation.clip_media_path;
+  const isVideoClip = ['youtube', 'screen'].includes(annotation.source_type) && annotation.clip_media_path;
   const author = {
     username: annotation.username,
     display_name: annotation.display_name,
@@ -54,7 +63,7 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
         >
           {annotation.source_title || annotation.source_url}
         </a>
-        {annotation.source_thumbnail && !isYouTubeClip && (
+        {annotation.source_thumbnail && !isVideoClip && (
           <a
             className="source-thumbnail"
             href={annotation.source_url}
@@ -83,9 +92,9 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
         </p>
       )}
 
-      {annotation.clip_media_path && annotation.source_type === 'youtube' && (
+      {isVideoClip && (
         <video controls className="media-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={annotation.clip_media_path} type="video/mp4" />
+          <source src={mediaUrl(annotation.clip_media_path)} type={annotation.clip_media_path.endsWith('.mov') ? 'video/quicktime' : 'video/mp4'} />
         </video>
       )}
 
@@ -104,7 +113,7 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
 
       {annotation.clip_media_path && annotation.source_type === 'podcast' && (
         <audio controls className="audio-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={annotation.clip_media_path} type={annotation.clip_media_path.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg'} />
+          <source src={mediaUrl(annotation.clip_media_path)} type={annotation.clip_media_path.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg'} />
         </audio>
       )}
 

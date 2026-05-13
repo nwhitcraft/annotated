@@ -3,6 +3,7 @@ const config = {
   youtube: { label: 'video', className: 'source-youtube' },
   podcast: { label: 'podcast', className: 'source-podcast' },
   twitter: { label: 'x post', className: 'source-twitter' },
+  screen: { label: 'screen', className: 'source-screen' },
 };
 
 export default function SourceType({ type = 'article' }) {
