@@ -28,6 +28,51 @@ const sourceModes = [
   { key: 'screen', label: 'Screen' },
 ];
 const MAX_COMMENTARY_LENGTH = 360;
+const RECORDING_WAVE_DELAYS = [-1, -0.85, -0.7, -0.55, -0.4, -0.25, -0.1, -0.25, -0.4, -0.55, -0.7, -0.85, -1];
+
+function formatTimer(seconds) {
+  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = String(Math.floor(safe / 60)).padStart(2, '0');
+  const secs = String(safe % 60).padStart(2, '0');
+  return `${minutes}:${secs}`;
+}
+
+function RecordingTimer({ remaining, onStop, disabled }) {
+  return (
+    <section className="recording-popup" aria-label="Screen clip recording">
+      <div className="recording-popup__head">
+        <div className="recording-popup__badge">
+          <span className="recording-popup__dot" aria-hidden="true" />
+          <span>Recording</span>
+        </div>
+        <span className="recording-popup__source">Screen clip</span>
+      </div>
+      <div className="recording-popup__timer-block">
+        <span className={`recording-popup__time ${remaining <= 10 ? 'warn' : ''}`}>{formatTimer(remaining)}</span>
+        <span className="recording-popup__meta">remaining</span>
+      </div>
+      <div className="recording-popup__wave" aria-hidden="true">
+        {RECORDING_WAVE_DELAYS.map((delay, index) => (
+          <i key={`${delay}-${index}`} style={{ animationDelay: `${delay}s` }} />
+        ))}
+      </div>
+      <div className="recording-popup__footer">
+        <div className="recording-popup__hint">
+          <span>or press</span>
+          <span className="recording-popup__keys" aria-label="Option Shift X">
+            <span className="recording-popup__key">⌥</span>
+            <span className="recording-popup__key">⇧</span>
+            <span className="recording-popup__key">X</span>
+          </span>
+        </div>
+        <button className="recording-popup__stop" type="button" onClick={onStop} disabled={disabled} aria-label="Stop recording">
+          <span className="recording-popup__stop-icon" aria-hidden="true" />
+          <span>Stop</span>
+        </button>
+      </div>
+    </section>
+  );
+}
 
 function captureErrorMessage(message) {
   const value = String(message || '');
@@ -64,6 +109,7 @@ export default function Composer({
   const [useSystemAudio, setUseSystemAudio] = useState(true);
   const [podcastBusy, setPodcastBusy] = useState(false);
   const [podcastError, setPodcastError] = useState('');
+  const [captureNow, setCaptureNow] = useState(Date.now());
 
   useEffect(() => {
     setDraft(editing || emptyDraft);
@@ -92,6 +138,13 @@ export default function Composer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenStopIntent]);
+
+  useEffect(() => {
+    if (!captureStatus.active) return undefined;
+    setCaptureNow(Date.now());
+    const intervalId = window.setInterval(() => setCaptureNow(Date.now()), 250);
+    return () => window.clearInterval(intervalId);
+  }, [captureStatus.active, captureStatus.startedAt]);
 
   function applyDetection() {
     if (!detected) return;
@@ -249,6 +302,10 @@ export default function Composer({
   }
 
   const canSave = Boolean(draft.source_url && draft.commentary.trim() && draft.commentary.length <= MAX_COMMENTARY_LENGTH);
+  const captureDuration = Math.max(1, Number(captureStatus.durationSeconds) || 90);
+  const captureStartedAt = Date.parse(captureStatus.startedAt || '') || (captureNow - (Number(captureStatus.elapsedSeconds) || 0) * 1000);
+  const captureElapsed = captureStatus.active ? Math.max(Number(captureStatus.elapsedSeconds) || 0, (captureNow - captureStartedAt) / 1000) : 0;
+  const captureRemaining = Math.max(0, captureDuration - captureElapsed);
 
   return (
     <section className="composer-panel" aria-label="Annotation composer">
@@ -300,17 +357,18 @@ export default function Composer({
               Microphone
             </label>
           </div>
-          <div className="capture-actions">
-            <button className="button button-solid" type="button" onClick={beginScreenCapture} disabled={captureStatus.active || captureBusy}>
-              Start Capture
-            </button>
-            <button className="button button-outline" type="button" onClick={finishScreenCapture} disabled={!captureStatus.active || captureBusy}>
-              Stop & Attach
-            </button>
-          </div>
-          <p className={`capture-state ${captureStatus.active ? 'recording' : ''}`}>
-            {captureStatus.active ? 'Recording...' : draft.clip_media_path ? 'Clip attached' : 'Ready to capture'}
-          </p>
+          {captureStatus.active ? (
+            <RecordingTimer remaining={captureRemaining} onStop={finishScreenCapture} disabled={captureBusy} />
+          ) : (
+            <div className="capture-actions">
+              <button className="button button-solid" type="button" onClick={beginScreenCapture} disabled={captureBusy}>
+                Start Capture
+              </button>
+              <p className="capture-state">
+                {draft.clip_media_path ? 'Clip attached' : 'Ready to capture'}
+              </p>
+            </div>
+          )}
           {attachedScreenClip && (
             <video className="screen-preview" controls preload="metadata" src={attachedScreenClip} />
           )}

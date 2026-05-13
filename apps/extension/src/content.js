@@ -382,13 +382,37 @@ function showRecordingBubble() {
   bubble.id = RECORDING_BUBBLE_ID;
   bubble.className = 'annotated-recording-bubble';
   bubble.setAttribute('aria-label', 'Media clip recording');
+  const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '') || /Mac/i.test(navigator.userAgent || '');
+  const sourceLabel = mediaSession?.clip?.sourceType === 'podcast' ? 'Podcast clip' : 'Video clip';
   bubble.innerHTML = `
-    <div class="annotated-recording-bubble__status">
-      <span class="annotated-recording-bubble__dot" aria-hidden="true"></span>
-      <span class="annotated-recording-bubble__label">Recording...</span>
-      <span class="annotated-recording-bubble__time">00:00 / 01:30</span>
+    <div class="annotated-recording-bubble__head">
+      <div class="annotated-recording-bubble__badge">
+        <span class="annotated-recording-bubble__dot" aria-hidden="true"></span>
+        <span class="annotated-recording-bubble__label">Recording</span>
+      </div>
+      <span class="annotated-recording-bubble__source">${sourceLabel}</span>
     </div>
-    <button class="annotated-recording-bubble__stop" type="button">■ Stop</button>
+    <div class="annotated-recording-bubble__timer-block">
+      <span class="annotated-recording-bubble__time">${formatClock(SHORT_CLIP_SECONDS)}</span>
+      <span class="annotated-recording-bubble__meta">remaining</span>
+    </div>
+    <div class="annotated-recording-bubble__wave" aria-hidden="true">
+      ${[-1, -0.85, -0.7, -0.55, -0.4, -0.25, -0.1, -0.25, -0.4, -0.55, -0.7, -0.85, -1].map((delay) => `<i style="animation-delay:${delay}s"></i>`).join('')}
+    </div>
+    <div class="annotated-recording-bubble__footer">
+      <div class="annotated-recording-bubble__hint">
+        <span>or press</span>
+        <span class="annotated-recording-bubble__keys" aria-label="${isMac ? 'Option Shift X' : 'Control Shift X'}">
+          ${isMac
+            ? '<span class="annotated-recording-bubble__key">⌥</span><span class="annotated-recording-bubble__key">⇧</span><span class="annotated-recording-bubble__key">X</span>'
+            : '<span class="annotated-recording-bubble__key">Ctrl</span><span class="annotated-recording-bubble__key">⇧</span><span class="annotated-recording-bubble__key">X</span>'}
+        </span>
+      </div>
+      <button class="annotated-recording-bubble__stop" type="button" aria-label="Stop recording">
+        <span class="annotated-recording-bubble__stop-icon" aria-hidden="true"></span>
+        <span>Stop</span>
+      </button>
+    </div>
     <p class="annotated-recording-bubble__note" hidden></p>
   `;
   bubble.addEventListener('mousedown', (event) => event.stopPropagation());
@@ -410,7 +434,10 @@ function updateRecordingBubble() {
 
   const bubble = document.getElementById(RECORDING_BUBBLE_ID);
   if (bubble) {
-    bubble.querySelector('.annotated-recording-bubble__time').textContent = `${formatClock(elapsed)} / ${formatClock(SHORT_CLIP_SECONDS)}`;
+    const remaining = Math.max(0, SHORT_CLIP_SECONDS - elapsed);
+    const timer = bubble.querySelector('.annotated-recording-bubble__time');
+    timer.textContent = formatClock(remaining);
+    timer.classList.toggle('warn', remaining <= 10);
     const note = bubble.querySelector('.annotated-recording-bubble__note');
     if (mediaSession.captureError) {
       note.hidden = false;
@@ -427,8 +454,8 @@ function positionRecordingBubble() {
   if (!bubble) return;
 
   const margin = 14;
-  const width = Math.min(360, window.innerWidth - margin * 2);
-  const height = bubble.offsetHeight || 96;
+  const width = Math.min(440, window.innerWidth - margin * 2);
+  const height = bubble.offsetHeight || 220;
   const left = Math.max(margin, (window.innerWidth - width) / 2);
   const top = Math.max(margin, (window.innerHeight - height) / 2);
 
@@ -445,6 +472,7 @@ async function stopMediaRecording(reason) {
 
   const bubble = document.getElementById(RECORDING_BUBBLE_ID);
   bubble?.querySelector('button')?.setAttribute('disabled', 'true');
+  bubble?.classList.add('finished');
   const label = bubble?.querySelector('.annotated-recording-bubble__label');
   if (label) label.textContent = 'Preparing clip...';
 
