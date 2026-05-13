@@ -37,6 +37,9 @@ function captureErrorMessage(message) {
   if (/microphone/i.test(value)) {
     return 'Microphone permission is required for mic capture. Enable it in System Settings > Privacy & Security > Microphone, or turn Microphone off for this clip.';
   }
+  if (/did not produce a playable file|produce a file/i.test(value)) {
+    return 'Screen capture did not produce a playable file. Check that Annotated and its capture helper are enabled in System Settings > Privacy & Security > Screen & System Audio Recording, then restart the app.';
+  }
   return value || 'Screen capture failed';
 }
 

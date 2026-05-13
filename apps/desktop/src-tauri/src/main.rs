@@ -230,6 +230,28 @@ fn migrate(conn: &Connection) -> Result<(), String> {
           value TEXT NOT NULL
         );
 
+        "#,
+    )
+    .map_err(|error| error.to_string())?;
+    for statement in [
+        "ALTER TABLE annotations ADD COLUMN source_thumbnail TEXT",
+        "ALTER TABLE annotations ADD COLUMN clip_text TEXT",
+        "ALTER TABLE annotations ADD COLUMN clip_start_sec INTEGER",
+        "ALTER TABLE annotations ADD COLUMN clip_end_sec INTEGER",
+        "ALTER TABLE annotations ADD COLUMN clip_media_path TEXT",
+        "ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'",
+        "ALTER TABLE comments ADD COLUMN parent_id TEXT REFERENCES comments(id)",
+        "ALTER TABLE comments ADD COLUMN synced_at TEXT",
+        "ALTER TABLE comments ADD COLUMN conflict_version INTEGER NOT NULL DEFAULT 1",
+    ] {
+        let _ = conn.execute(statement, []);
+    }
+    let _ = conn.execute(
+        "UPDATE annotations SET annotation_type = 'Opinion' WHERE annotation_type IS NULL",
+        [],
+    );
+    conn.execute_batch(
+        r#"
         CREATE INDEX IF NOT EXISTS idx_annotations_public ON annotations(is_public);
         CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type);
         CREATE INDEX IF NOT EXISTS idx_annotations_synced ON annotations(synced_at);
@@ -238,10 +260,6 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         "#,
     )
     .map_err(|error| error.to_string())?;
-    let _ = conn.execute(
-        "ALTER TABLE annotations ADD COLUMN annotation_type TEXT DEFAULT 'Opinion'",
-        [],
-    );
     Ok(())
 }
 
@@ -339,6 +357,11 @@ fn save_annotation(app: AppHandle, annotation: Annotation) -> Result<Annotation,
         .user_id
         .clone()
         .unwrap_or_else(|| "local-user".to_string());
+    let fallback_username = if user_id == "local-user" {
+        "local".to_string()
+    } else {
+        user_id.clone()
+    };
     let comments = annotation.comments.clone().unwrap_or_default();
     let tags = serde_json::to_string(&annotation.tags.clone().unwrap_or_default())
         .map_err(|error| error.to_string())?;
@@ -351,7 +374,7 @@ fn save_annotation(app: AppHandle, annotation: Annotation) -> Result<Annotation,
         VALUES (?, ?, ?, ?, 1)
         ON CONFLICT(id) DO NOTHING
         "#,
-        params![&user_id, "local", "Local User", &now],
+        params![&user_id, fallback_username, "Local User", &now],
     )
     .map_err(|error| error.to_string())?;
 
