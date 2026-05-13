@@ -51,7 +51,15 @@
 
 .quote-annotation-bubble__actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 14px;
+}
+
+.quote-annotation-bubble__counter {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .quote-annotation-bubble__button {
