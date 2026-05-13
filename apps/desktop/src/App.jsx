@@ -8,6 +8,7 @@ import {
   addLocalComment,
   authUrl,
   checkAuth,
+  clearToken,
   deleteAnnotation,
   exportAnnotation,
   getCachedUser,
@@ -164,6 +165,14 @@ export default function App() {
     throw new Error(result.error || 'Could not verify token');
   }
 
+  function signOut() {
+    clearToken();
+    setAuthUser(null);
+    setEditing(null);
+    setActiveView('compose');
+    setStatus('Signed out');
+  }
+
   function open(annotation) {
     setActiveId(annotation.id);
     setActiveView('detail');
@@ -232,6 +241,7 @@ export default function App() {
             onChange={setSettings}
             onSignIn={signIn}
             onCallback={connectCallback}
+            onSignOut={signOut}
             onSave={async (value) => { await saveSettings(value); setStatus('Settings saved'); }}
           />
         )}

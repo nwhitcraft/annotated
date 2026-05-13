@@ -395,6 +395,53 @@ kbd {
   gap: 10px;
 }
 
+.settings-account {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-divider {
+  height: 1px;
+  margin: 8px 0 4px;
+  background: var(--border);
+}
+
+.settings-account > div > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: 18px;
+}
+
+.settings-account h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.settings-account-note {
+  margin: 0;
+  max-width: 520px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-sign-out {
+  justify-self: start;
+  min-height: 0;
+  padding: 0 0 4px;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+}
+
+.settings-sign-out:hover {
+  color: var(--danger);
+}
+
 .composer-error {
   margin: 0;
   color: var(--danger);

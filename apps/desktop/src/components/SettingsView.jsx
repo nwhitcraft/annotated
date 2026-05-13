@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { runDesktopDiagnostics } from '../lib/localStore.js';
 
-export default function SettingsView({ settings, authUser, onChange, onSave, onSignIn, onCallback }) {
+export default function SettingsView({ settings, authUser, onChange, onSave, onSignIn, onCallback, onSignOut }) {
   const [diagnostics, setDiagnostics] = useState(null);
   const [callbackValue, setCallbackValue] = useState('');
   const [authError, setAuthError] = useState('');
@@ -78,6 +78,19 @@ export default function SettingsView({ settings, authUser, onChange, onSave, onS
         <button className="button button-solid" onClick={() => onSave(settings)}>Save settings</button>
         <button className="button button-outline" onClick={runDiagnostics}>Run desktop diagnostics</button>
       </div>
+      <section className="settings-account">
+        <div className="settings-divider" />
+        <div>
+          <p>Account</p>
+          <h3>{authUser ? 'Signed in on this Mac' : 'No account connected'}</h3>
+        </div>
+        <p className="settings-account-note">
+          Sign out clears the local session on this device. Private annotations and desktop settings remain on this Mac.
+        </p>
+        <button className="button button-text settings-sign-out" type="button" onClick={onSignOut} disabled={!authUser}>
+          Sign out
+        </button>
+      </section>
       {diagnostics && (
         <div className="diagnostic-list">
           {Object.entries(diagnostics).map(([name, result]) => (
