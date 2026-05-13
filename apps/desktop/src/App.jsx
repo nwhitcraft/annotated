@@ -43,6 +43,17 @@ export default function App() {
   const [screenCaptureIntent, setScreenCaptureIntent] = useState(0);
   const [screenStopIntent, setScreenStopIntent] = useState(0);
 
+  function openComposer() {
+    setEditing(null);
+    setActiveView('compose');
+  }
+
+  function startScreenClip() {
+    setEditing(null);
+    setActiveView('compose');
+    setScreenCaptureIntent((value) => value + 1);
+  }
+
   useEffect(() => {
     refresh();
     loadSettings().then((value) => {
@@ -61,13 +72,10 @@ export default function App() {
     (async () => {
       try {
         unlisteners.push(await listen('shortcut:composer-toggle', () => {
-          setEditing(null);
-          setActiveView('compose');
+          openComposer();
         }));
         unlisteners.push(await listen('tray-start-screen-clip', () => {
-          setEditing(null);
-          setActiveView('compose');
-          setScreenCaptureIntent((value) => value + 1);
+          startScreenClip();
         }));
         unlisteners.push(await listen('tray-stop-screen-clip', () => {
           setScreenStopIntent((value) => value + 1);
@@ -79,6 +87,20 @@ export default function App() {
     return () => {
       unlisteners.forEach((unlisten) => unlisten());
     };
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      const key = String(event.key || '').toLowerCase();
+      const isX = key === 'x' || event.code === 'KeyX';
+      if (event.repeat || !isX || !event.shiftKey || (!event.altKey && !event.ctrlKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      startScreenClip();
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, []);
 
   async function refresh(nextActiveId) {
@@ -199,7 +221,7 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <p className="hotkey-hint">⌘⇧A opens the composer</p>
+        <p className="hotkey-hint">⌥⇧X clips · ⌘⇧A compose</p>
       </aside>
 
       <main className="workspace">

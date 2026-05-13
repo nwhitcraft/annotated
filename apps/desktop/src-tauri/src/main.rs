@@ -1019,12 +1019,20 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(ScreenCaptureState::default())) as SharedScreenCaptureState)
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let app_handle = app.handle().clone();
+            let composer_handle = app.handle().clone();
             let shortcut_str = "CmdOrControl+Shift+A";
             app.global_shortcut()
                 .on_shortcut(shortcut_str, move |_app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        let _ = app_handle.emit("shortcut:composer-toggle", true);
+                        let _ = composer_handle.emit("shortcut:composer-toggle", true);
+                    }
+                })?;
+            let clip_handle = app.handle().clone();
+            let clip_shortcut_str = "Alt+Shift+X";
+            app.global_shortcut()
+                .on_shortcut(clip_shortcut_str, move |_app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = clip_handle.emit("tray-start-screen-clip", true);
                     }
                 })?;
             let menu = MenuBuilder::new(app)
@@ -1042,7 +1050,6 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle_window" => show_main_window(app),
                     "quick_clip" => {
-                        show_main_window(app);
                         let _ = app.emit("tray-start-screen-clip", true);
                     }
                     "stop_clip" => {

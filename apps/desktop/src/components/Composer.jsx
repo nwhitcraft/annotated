@@ -214,7 +214,10 @@ export default function Composer({
           <p>Annotation Composer</p>
           <h1>Clip privately. Publish only when it belongs in the feed.</h1>
         </div>
-        <kbd>⌘⇧A</kbd>
+        <div className="composer-shortcuts" aria-label="Desktop shortcuts">
+          <kbd>⌥⇧X clip</kbd>
+          <kbd>⌘⇧A compose</kbd>
+        </div>
       </header>
 
       <label>
@@ -319,6 +322,11 @@ export default function Composer({
         <small className="field-counter">{draft.commentary.length}/{MAX_COMMENTARY_LENGTH}</small>
       </label>
 
+      <div className="visibility-bubble" role="radiogroup" aria-label="Desktop annotation visibility">
+        <button className={visibility === 'private' ? 'active' : ''} onClick={() => setVisibility('private')} type="button">Private</button>
+        <button className={visibility === 'public' ? 'active' : ''} onClick={() => setVisibility('public')} type="button">Public</button>
+      </div>
+
       <label>
         Annotation type
         <div className="tag-picker" role="radiogroup" aria-label="Annotation type">
@@ -350,11 +358,6 @@ export default function Composer({
           {visibility === 'public' ? 'Publish Public' : 'Save Private'}
         </button>
       </footer>
-
-      <div className="visibility-bubble" role="radiogroup" aria-label="Desktop annotation visibility">
-        <button className={visibility === 'private' ? 'active' : ''} onClick={() => setVisibility('private')} type="button">Private</button>
-        <button className={visibility === 'public' ? 'active' : ''} onClick={() => setVisibility('public')} type="button">Public</button>
-      </div>
     </section>
   );
 }

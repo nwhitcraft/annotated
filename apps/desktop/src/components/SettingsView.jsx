@@ -64,7 +64,7 @@ export default function SettingsView({ settings, authUser, onChange, onSave, onS
         <input value={settings.frontendUrl || ''} onChange={(event) => onChange({ ...settings, frontendUrl: event.target.value })} />
       </label>
       <label>
-        Global hotkey
+        Composer hotkey
         <input value={settings.hotkey || ''} onChange={(event) => onChange({ ...settings, hotkey: event.target.value })} />
       </label>
       <label>
