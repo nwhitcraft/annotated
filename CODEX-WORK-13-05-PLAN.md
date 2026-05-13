@@ -333,9 +333,8 @@ export default function Download() {
           <p>Full media pipeline — clip articles, YouTube, podcasts.
           Screen-level capture. Local-first storage. AI summaries.</p>
           <a
-            href="/downloads/Annotated.dmg"
+            href="https://pub-8e1040a752d1451998c6bbdb3e4117d2.r2.dev/Annotated.dmg"
             className="button button-solid download-btn"
-            download
           >
             Download for macOS
           </a>
