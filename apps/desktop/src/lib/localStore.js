@@ -302,6 +302,26 @@ export async function stopScreenClip() {
   return invoke('stop_screen_clip');
 }
 
+export async function cancelScreenClip() {
+  if (!isTauri) throw new Error('Screen clipping requires the Annotated desktop app.');
+  return invoke('cancel_screen_clip');
+}
+
+export async function readSelectedText() {
+  if (!isTauri) return '';
+  return invoke('read_selected_text');
+}
+
+export async function showAppWindow() {
+  if (!isTauri) return true;
+  return invoke('show_app_window');
+}
+
+export async function startDetachedScreenClip() {
+  if (!isTauri) throw new Error('Screen clipping requires the Annotated desktop app.');
+  return invoke('start_detached_screen_clip');
+}
+
 export async function extractPodcastAudio({ url, start = 0, end = 90 }, settings = {}) {
   if (!url) throw new Error('Podcast URL is required.');
   const startSec = Math.max(0, Number(start) || 0);

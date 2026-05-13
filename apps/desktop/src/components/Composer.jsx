@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { detectSource, parseTags } from '../lib/detect.js';
-import { extractPodcastAudio, mediaSrc, startScreenClip, stopScreenClip } from '../lib/localStore.js';
+import { cancelScreenClip, extractPodcastAudio, mediaSrc, startScreenClip, stopScreenClip } from '../lib/localStore.js';
 import SourceType from './SourceType.jsx';
 
 const emptyDraft = {
@@ -37,7 +37,7 @@ function formatTimer(seconds) {
   return `${minutes}:${secs}`;
 }
 
-function RecordingTimer({ remaining, onStop, disabled }) {
+function RecordingTimer({ remaining, onStop, onCancel, disabled }) {
   return (
     <section className="recording-popup" aria-label="Screen clip recording">
       <div className="recording-popup__head">
@@ -49,7 +49,7 @@ function RecordingTimer({ remaining, onStop, disabled }) {
       </div>
       <div className="recording-popup__timer-block">
         <span className={`recording-popup__time ${remaining <= 10 ? 'warn' : ''}`}>{formatTimer(remaining)}</span>
-        <span className="recording-popup__meta">remaining</span>
+        <span className="recording-popup__meta">remaining of 90 seconds</span>
       </div>
       <div className="recording-popup__wave" aria-hidden="true">
         {RECORDING_WAVE_DELAYS.map((delay, index) => (
@@ -65,10 +65,15 @@ function RecordingTimer({ remaining, onStop, disabled }) {
             <span className="recording-popup__key">X</span>
           </span>
         </div>
-        <button className="recording-popup__stop" type="button" onClick={onStop} disabled={disabled} aria-label="Stop recording">
-          <span className="recording-popup__stop-icon" aria-hidden="true" />
-          <span>Stop</span>
-        </button>
+        <div className="recording-popup__actions">
+          <button className="recording-popup__cancel" type="button" onClick={onCancel} disabled={disabled}>
+            Cancel
+          </button>
+          <button className="recording-popup__stop" type="button" onClick={onStop} disabled={disabled} aria-label="Stop recording">
+            <span className="recording-popup__stop-icon" aria-hidden="true" />
+            <span>Stop</span>
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -163,8 +168,8 @@ export default function Composer({
         ...value,
         source_type: 'screen',
         source_url: 'screen://local',
-        source_title: value.source_title || 'Screen clip',
-        source_domain: 'Local screen',
+        source_title: value.source_title || 'Screen recording',
+        source_domain: '',
         clip_text: value.clip_text || '',
       }));
       return;
@@ -188,8 +193,8 @@ export default function Composer({
       ...value,
       source_type: 'screen',
       source_url: 'screen://local',
-      source_title: value.source_title || 'Screen clip',
-      source_domain: 'Local screen',
+      source_title: value.source_title || 'Screen recording',
+      source_domain: '',
     }));
     try {
       const status = await startScreenClip({
@@ -224,18 +229,35 @@ export default function Composer({
         ...value,
         source_type: 'screen',
         source_url: 'screen://local',
-        source_title: value.source_title || 'Screen clip',
-        source_domain: 'Local screen',
+        source_title: value.source_title || 'Screen recording',
+        source_domain: '',
         clip_media_path: result.outputPath,
         clip_start_sec: 0,
         clip_end_sec: duration,
-        clip_text: value.clip_text || `Screen recording attached (${duration}s).`,
+        clip_text: value.clip_text || `Screen recording attached (${duration}s, 90s max).`,
       }));
       onStatus?.('Screen clip attached');
     } catch (err) {
       setCaptureStatus({ active: false });
       setCaptureError(captureErrorMessage(err.message || 'Could not finish screen capture'));
       onStatus?.('Screen clip failed');
+    } finally {
+      setCaptureBusy(false);
+    }
+  }
+
+  async function cancelScreenCapture() {
+    if (!captureStatus.active || captureBusy) return;
+    setCaptureBusy(true);
+    setCaptureError('');
+    onStatus?.('Cancelling screen clip...');
+    try {
+      await cancelScreenClip();
+      setCaptureStatus({ active: false });
+      onStatus?.('Screen clip cancelled');
+    } catch (err) {
+      setCaptureError(captureErrorMessage(err.message || 'Could not cancel screen capture'));
+      onStatus?.('Screen clip cancel failed');
     } finally {
       setCaptureBusy(false);
     }
@@ -307,6 +329,13 @@ export default function Composer({
   const captureElapsed = captureStatus.active ? Math.max(Number(captureStatus.elapsedSeconds) || 0, (captureNow - captureStartedAt) / 1000) : 0;
   const captureRemaining = Math.max(0, captureDuration - captureElapsed);
 
+  useEffect(() => {
+    if (!captureStatus.active || captureRemaining > 0 || captureBusy) return undefined;
+    void finishScreenCapture();
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureStatus.active, captureRemaining, captureBusy]);
+
   return (
     <section className="composer-panel" aria-label="Annotation composer">
       <header className="composer-toolbar">
@@ -345,7 +374,7 @@ export default function Composer({
         <div className="screen-capture-note">
           <header>
             <strong>Screen capture</strong>
-            <span>Record the current display for up to 90 seconds. Private clips stay on this Mac; Public uploads after posting.</span>
+            <span>Record the current display for up to 90 seconds with optional system audio and microphone.</span>
           </header>
           <div className="capture-toggles" aria-label="Capture layers">
             <label className="inline-check">
@@ -358,7 +387,7 @@ export default function Composer({
             </label>
           </div>
           {captureStatus.active ? (
-            <RecordingTimer remaining={captureRemaining} onStop={finishScreenCapture} disabled={captureBusy} />
+            <RecordingTimer remaining={captureRemaining} onStop={finishScreenCapture} onCancel={cancelScreenCapture} disabled={captureBusy} />
           ) : (
             <div className="capture-actions">
               <button className="button button-solid" type="button" onClick={beginScreenCapture} disabled={captureBusy}>
@@ -376,7 +405,7 @@ export default function Composer({
         </div>
       )}
 
-      {draft.source_domain && (
+      {draft.source_domain && !isScreen && (
         <p className="detected-source">
           <SourceType type={draft.source_type} />
           <strong>{draft.source_title}</strong>
@@ -385,12 +414,12 @@ export default function Composer({
       )}
 
       <label>
-        {isScreen ? 'Screen context' : isMedia ? 'Clip note' : 'Clip text'}
+        {isScreen ? 'Source' : isMedia ? 'Clip note' : 'Clip text'}
         <textarea
           className="quote-input"
           value={draft.clip_text || ''}
           onChange={(event) => setDraft({ ...draft, clip_text: event.target.value })}
-          placeholder={isScreen ? 'Describe what is on screen, or paste OCR text for a book/PDF clip...' : isMedia ? 'Optional note about the selected moment...' : 'Paste the passage you want to annotate...'}
+          placeholder={isScreen ? 'Describe the source, or paste selected/OCR text for a book, PDF, video, or audio clip...' : isMedia ? 'Optional note about the selected moment...' : 'Paste the passage you want to annotate...'}
         />
       </label>
 

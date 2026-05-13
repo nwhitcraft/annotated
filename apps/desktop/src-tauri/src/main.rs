@@ -2,6 +2,7 @@ use chrono::Utc;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -9,7 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use uuid::Uuid;
 
@@ -935,6 +936,51 @@ fn stop_screen_clip(
 }
 
 #[tauri::command]
+fn cancel_screen_clip(
+    app: AppHandle,
+    state: State<SharedScreenCaptureState>,
+) -> Result<ScreenClipResult, String> {
+    let mut guard = state.lock().map_err(|error| error.to_string())?;
+    let session = guard
+        .session
+        .take()
+        .ok_or_else(|| "No active screen capture.".to_string())?;
+    drop(guard);
+
+    #[cfg(unix)]
+    unsafe {
+        let _ = libc::kill(session.child.id() as i32, libc::SIGINT);
+    }
+
+    let elapsed = session
+        .started_at
+        .elapsed()
+        .as_secs()
+        .clamp(1, session.duration_seconds);
+    let output = session
+        .child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
+    let _ = fs::remove_file(&session.output_path);
+
+    let result = ScreenClipResult {
+        ok: true,
+        output_path: None,
+        media_path: None,
+        duration_seconds: elapsed,
+        microphone: session.microphone,
+        system_audio: session.system_audio,
+        error: None,
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    };
+
+    set_tray_recording(&app, false);
+    let _ = app.emit("screen-capture-cancelled", result.clone());
+    Ok(result)
+}
+
+#[tauri::command]
 fn screen_clip_status(state: State<SharedScreenCaptureState>) -> ScreenCaptureStatus {
     let Ok(guard) = state.lock() else {
         return empty_screen_capture_status();
@@ -1192,19 +1238,138 @@ fn open_auth_url(url: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn show_app_window(app: AppHandle) -> Result<(), String> {
+    show_main_window(&app);
+    Ok(())
+}
+
+fn capture_controller_position(
+    app: &AppHandle,
+    width: f64,
+    height: f64,
+    margin: f64,
+) -> Option<(f64, f64)> {
+    let monitor = app.primary_monitor().ok().flatten()?;
+    let work_area = monitor.work_area();
+    let scale = monitor.scale_factor();
+    let x =
+        work_area.position.x as f64 / scale + work_area.size.width as f64 / scale - width - margin;
+    let y = work_area.position.y as f64 / scale + work_area.size.height as f64 / scale
+        - height
+        - margin;
+    Some((x, y))
+}
+
+#[tauri::command]
+fn start_detached_screen_clip(app: AppHandle) -> Result<(), String> {
+    let width = 392.0;
+    let height = 244.0;
+    let margin = 22.0;
+
+    if let Some(window) = app.get_webview_window("capture-controller") {
+        if let Some((x, y)) = capture_controller_position(&app, width, height, margin) {
+            let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+        }
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        return Ok(());
+    }
+
+    let mut builder = WebviewWindowBuilder::new(
+        &app,
+        "capture-controller",
+        WebviewUrl::App("index.html?window=capture".into()),
+    )
+    .title("Annotated Clip")
+    .inner_size(width, height)
+    .min_inner_size(width, height)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .transparent(true)
+    .skip_taskbar(true)
+    .focused(false);
+
+    if let Some((x, y)) = capture_controller_position(&app, width, height, margin) {
+        builder = builder.position(x, y);
+    } else {
+        builder = builder.center();
+    }
+
+    builder
+        .build()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn read_selected_text() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let previous = Command::new("pbpaste")
+            .output()
+            .map(|output| output.stdout)
+            .unwrap_or_default();
+        let sentinel = format!("annotated-selection-probe-{}", Uuid::new_v4());
+        if let Ok(mut child) = Command::new("pbcopy").stdin(Stdio::piped()).spawn() {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(sentinel.as_bytes());
+            }
+            let _ = child.wait();
+        }
+
+        let copy_status = Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"c\" using command down")
+            .status()
+            .map_err(|error| format!("Could not request selected text: {}", error))?;
+
+        thread::sleep(Duration::from_millis(160));
+        let copied = Command::new("pbpaste")
+            .output()
+            .map_err(|error| format!("Could not read selected text: {}", error))?
+            .stdout;
+
+        if let Ok(mut child) = Command::new("pbcopy").stdin(Stdio::piped()).spawn() {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(&previous);
+            }
+            let _ = child.wait();
+        }
+
+        if !copy_status.success() {
+            return Ok(String::new());
+        }
+
+        let mut selected = String::from_utf8_lossy(&copied).trim().to_string();
+        if selected.is_empty() || selected == sentinel {
+            return Ok(String::new());
+        }
+        if selected.chars().count() > 12_000 {
+            selected = selected.chars().take(12_000).collect();
+        }
+        return Ok(selected);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(String::new())
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(ScreenCaptureState::default())) as SharedScreenCaptureState)
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let clip_handle = app.handle().clone();
             let clip_shortcut_str = "Alt+Shift+X";
             app.global_shortcut().on_shortcut(
                 clip_shortcut_str,
-                move |_app, _shortcut, event| {
+                move |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        let _ = clip_handle.emit("tray-start-screen-clip", true);
+                        let _ = app.emit("tray-start-screen-clip", true);
                     }
                 },
             )?;
@@ -1223,6 +1388,7 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle_window" => show_main_window(app),
                     "quick_clip" => {
+                        show_main_window(app);
                         let _ = app.emit("tray-start-screen-clip", true);
                     }
                     "stop_clip" => {
@@ -1257,7 +1423,11 @@ pub fn run() {
             screen_clip_diagnostic,
             start_screen_clip,
             stop_screen_clip,
+            cancel_screen_clip,
             screen_clip_status,
+            read_selected_text,
+            show_app_window,
+            start_detached_screen_clip,
             upload_clip_to_api,
             handle_auth_callback,
             open_auth_url,

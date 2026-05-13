@@ -59,11 +59,13 @@ export default function SettingsView({ authUser, onSignIn, onCallback, onSignOut
       <section className="auth-card">
         {authUser ? (
           <>
-            <div>
+            <div className="connected-account-heading">
               <p>Connected account</p>
-              <h3>{authUser.display_name || authUser.username} <span>@{authUser.username}</span></h3>
+              <h3>
+                <span className="connected-account-name">{authUser.display_name || authUser.username}</span>
+                <span className="connected-account-handle">@{authUser.username}</span>
+              </h3>
             </div>
-            <p>Private clips stay on this Mac. Public annotations sync to Annotated when you publish them.</p>
             <button className="button button-text settings-sign-out" type="button" onClick={onSignOut}>
               Sign out
             </button>

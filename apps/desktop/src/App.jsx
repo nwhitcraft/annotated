@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import Composer from './components/Composer.jsx';
 import DetailView from './components/DetailView.jsx';
 import FeedView from './components/FeedView.jsx';
 import LibraryView from './components/LibraryView.jsx';
 import ProfileView from './components/ProfileView.jsx';
+import QuickClipOverlay from './components/QuickClipOverlay.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import {
   addLocalComment,
@@ -18,8 +20,11 @@ import {
   loadSettings,
   openAuthUrl,
   postAnnotation,
+  readSelectedText,
   saveAnnotation,
   setAuthTokenFromCallback,
+  startDetachedScreenClip,
+  showAppWindow,
 } from './lib/localStore.js';
 
 const views = [
@@ -47,11 +52,75 @@ export default function App() {
   const [screenCaptureIntent, setScreenCaptureIntent] = useState(0);
   const [screenStopIntent, setScreenStopIntent] = useState(0);
   const [profileKey, setProfileKey] = useState(getCachedUser()?.username || '');
+  const [quickClip, setQuickClip] = useState(null);
 
   function startScreenClip() {
     setEditing(null);
+    setQuickClip(null);
     setActiveView('compose');
     setScreenCaptureIntent((value) => value + 1);
+  }
+
+  function screenClipResultToDraft(result) {
+    if (!result?.ok || !result.outputPath) return null;
+    const duration = result.durationSeconds || 90;
+    return {
+      source_url: 'screen://local',
+      source_type: 'screen',
+      source_title: 'Screen recording',
+      source_domain: '',
+      source_thumbnail: '',
+      clip_text: `Screen recording attached (${duration}s, 90s max).`,
+      clip_start_sec: 0,
+      clip_end_sec: duration,
+      clip_media_path: result.outputPath,
+      commentary: '',
+      annotation_type: 'Opinion',
+      tags: [],
+      is_public: 0,
+    };
+  }
+
+  function selectedTextFromFocusedElement() {
+    const active = document.activeElement;
+    if (active && typeof active.value === 'string' && Number.isInteger(active.selectionStart) && Number.isInteger(active.selectionEnd)) {
+      const selected = active.value.slice(active.selectionStart, active.selectionEnd).trim();
+      if (selected) return selected;
+    }
+    const selected = window.getSelection?.().toString().trim();
+    return selected || '';
+  }
+
+  async function startGlobalClip() {
+    setEditing(null);
+    const localSelection = selectedTextFromFocusedElement();
+    if (localSelection) {
+      await showAppWindow();
+      setQuickClip({ quote: localSelection });
+      setStatus('Selection ready to annotate');
+      return;
+    }
+
+    try {
+      const selected = String(await readSelectedText() || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (selected) {
+        await showAppWindow();
+        setQuickClip({ quote: selected });
+        setStatus('Selection ready to annotate');
+        return;
+      }
+    } catch (error) {
+      console.warn('Selected text capture failed:', error);
+    }
+    try {
+      await startDetachedScreenClip();
+      setStatus('Screen clip recording');
+    } catch (error) {
+      await showAppWindow();
+      setStatus(error.message || 'Could not start screen clip');
+    }
   }
 
   useEffect(() => {
@@ -105,10 +174,38 @@ export default function App() {
     (async () => {
       try {
         unlisteners.push(await listen('tray-start-screen-clip', () => {
-          startScreenClip();
+          void startGlobalClip();
         }));
         unlisteners.push(await listen('tray-stop-screen-clip', () => {
           setScreenStopIntent((value) => value + 1);
+        }));
+        unlisteners.push(await listen('desktop-detached-screen-clip-started', async () => {
+          try {
+            await getCurrentWindow().hide();
+          } catch {
+            // Browser previews and some dev shells do not expose native window controls.
+          }
+          setStatus('Screen clip recording');
+        }));
+        unlisteners.push(await listen('desktop-screen-clip-finished', async (event) => {
+          try {
+            const result = event.payload;
+            const draft = screenClipResultToDraft(result);
+            await showAppWindow();
+            if (!draft) {
+              setStatus('Screen clip did not produce a file');
+              return;
+            }
+            setEditing(draft);
+            setQuickClip(null);
+            setActiveView('compose');
+            setStatus('Screen clip attached');
+          } catch (error) {
+            setStatus(error.message || 'Could not attach screen clip');
+          }
+        }));
+        unlisteners.push(await listen('desktop-screen-clip-cancelled', () => {
+          setStatus('Screen clip cancelled');
         }));
       } catch (err) {
         console.error('Failed to register desktop event listener:', err);
@@ -126,7 +223,7 @@ export default function App() {
       if (event.repeat || !isX || !event.shiftKey || (!event.altKey && !event.ctrlKey)) return;
       event.preventDefault();
       event.stopPropagation();
-      startScreenClip();
+      void startGlobalClip();
     }
 
     window.addEventListener('keydown', handleKeyDown, true);
@@ -160,6 +257,17 @@ export default function App() {
     const saved = await saveAnnotation(item);
     setStatus('Saved locally');
     await refresh(saved.id);
+    setEditing(null);
+    setActiveView('detail');
+    return saved;
+  }
+
+  async function saveQuickClip(item, publishNow = false) {
+    const saved = await saveAnnotation(item);
+    setStatus('Saved locally');
+    await refresh(saved.id);
+    setActiveId(saved.id);
+    if (publishNow) await post(saved.id);
     setEditing(null);
     setActiveView('detail');
     return saved;
@@ -355,6 +463,17 @@ export default function App() {
           />
         )}
       </main>
+
+      {quickClip && (
+        <QuickClipOverlay
+          quote={quickClip.quote}
+          authUser={authUser}
+          onClose={() => setQuickClip(null)}
+          onSave={saveQuickClip}
+          onSignIn={signIn}
+          onStatus={setStatus}
+        />
+      )}
 
       <footer className="status-bar">
         <span>{status}</span>
