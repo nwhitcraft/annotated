@@ -9,6 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'annotated-dev-secret-change-in-pro
 const JWT_EXPIRY = '7d';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3090';
 const DESKTOP_CALLBACK_URL = process.env.DESKTOP_CALLBACK_URL || 'annotated://callback';
+const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || 3080}`;
 
 // --- Google OAuth ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -21,7 +22,7 @@ app.get('/google', (c) => {
     const client = c.req.query('client') === 'desktop' ? '&client=desktop' : '';
     return c.redirect(`/api/auth/demo?provider=google${client}`);
   }
-  const redirectUri = `${new URL(c.req.url).origin}${GOOGLE_REDIRECT}`;
+  const redirectUri = oauthRedirectUri(GOOGLE_REDIRECT);
   const client = c.req.query('client') === 'desktop' ? 'desktop' : 'web';
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -41,7 +42,7 @@ app.get('/google/callback', async (c) => {
   if (!code) return c.json({ error: 'Missing authorization code' }, 400);
 
   try {
-    const redirectUri = `${new URL(c.req.url).origin}${GOOGLE_REDIRECT}`;
+    const redirectUri = oauthRedirectUri(GOOGLE_REDIRECT);
     // Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -110,7 +111,7 @@ app.get('/twitter', async (c) => {
     if (Date.now() - v.created > 600000) pkceStore.delete(k);
   }
 
-  const redirectUri = `${new URL(c.req.url).origin}${TWITTER_REDIRECT}`;
+  const redirectUri = oauthRedirectUri(TWITTER_REDIRECT);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: TWITTER_CLIENT_ID,
@@ -133,7 +134,7 @@ app.get('/twitter/callback', async (c) => {
   pkceStore.delete(state);
 
   try {
-    const redirectUri = `${new URL(c.req.url).origin}${TWITTER_REDIRECT}`;
+    const redirectUri = oauthRedirectUri(TWITTER_REDIRECT);
     const basic = btoa(`${TWITTER_CLIENT_ID}:${TWITTER_CLIENT_SECRET}`);
     const tokenRes = await fetch('https://api.x.com/2/oauth2/token', {
       method: 'POST',
@@ -262,6 +263,13 @@ function callbackTarget(token, client = 'web') {
     return `${DESKTOP_CALLBACK_URL}?token=${encodeURIComponent(token)}`;
   }
   return `${FRONTEND_URL}/auth/callback?token=${encodeURIComponent(token)}`;
+}
+
+function oauthRedirectUri(pathOrUrl) {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const origin = API_PUBLIC_URL.replace(/\/$/, '');
+  const path = String(pathOrUrl || '').startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+  return `${origin}${path}`;
 }
 
 export { JWT_SECRET };
