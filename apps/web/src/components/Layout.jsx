@@ -52,6 +52,7 @@ export default function Layout() {
           <nav className="main-nav" aria-label="Primary navigation">
             <NavLink to="/feed">Feed</NavLink>
             <NavLink to="/new">Annotate</NavLink>
+            <NavLink to="/download">Desktop</NavLink>
             {viewer && <NavLink to={`/u/${viewer.username}`}>Profile</NavLink>}
             {viewer?.username === 'demo' && <NavLink to="/admin/claims">Claims</NavLink>}
           </nav>

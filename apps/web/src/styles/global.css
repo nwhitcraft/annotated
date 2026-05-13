@@ -446,6 +446,10 @@ textarea {
 }
 
 .feed-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
   margin: 0 0 16px;
 }
 
@@ -476,6 +480,13 @@ textarea {
 .text-tabs button.active {
   color: var(--accent-hover);
   border-bottom-color: var(--accent-hover);
+}
+
+.feed-pro-button {
+  flex: 0 0 auto;
+  min-height: 31px;
+  padding: 5px 11px;
+  font-size: 12px;
 }
 
 .ruled-list {
@@ -959,6 +970,123 @@ textarea {
 .notice.error {
   color: var(--danger);
   font-size: 13px;
+}
+
+.page-download {
+  padding-top: 6px;
+}
+
+.download-heading {
+  display: grid;
+  gap: 10px;
+  padding: 0 0 26px;
+  border-bottom: 1px solid var(--border);
+}
+
+.download-heading > p:first-child,
+.download-kicker {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.download-heading h1 {
+  max-width: 620px;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(42px, 7vw, 66px);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.download-subhead {
+  max-width: 620px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.36;
+}
+
+.download-card {
+  display: grid;
+  gap: 22px;
+  margin: 26px 0 0;
+  padding: 22px 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.download-card h2,
+.download-notes h2 {
+  margin: 5px 0 0;
+  font-family: var(--font-serif);
+  font-size: 31px;
+  font-weight: 600;
+  line-height: 1.08;
+}
+
+.download-card p,
+.download-note-grid p {
+  max-width: 610px;
+  margin: 9px 0 0;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.download-card-action {
+  display: grid;
+  gap: 9px;
+  justify-items: start;
+}
+
+.download-button {
+  min-height: 40px;
+  padding: 9px 15px;
+}
+
+.download-card-action p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.download-notes {
+  padding: 29px 0 12px;
+}
+
+.download-note-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 26px;
+  margin-top: 18px;
+}
+
+.download-note-grid article {
+  padding-top: 13px;
+  border-top: 1px solid var(--border);
+}
+
+.download-note-grid span {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.download-note-grid p {
+  font-size: 16px;
+}
+
+.download-back-link {
+  margin-top: 24px;
 }
 
 .load-more {
@@ -1838,6 +1966,16 @@ textarea {
     gap: 16px;
   }
 
+  .feed-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .feed-pro-button {
+    align-self: flex-start;
+  }
+
   .profile-header {
     grid-template-columns: 1fr;
   }
@@ -1856,7 +1994,8 @@ textarea {
   }
 
   .avatar-upload-row,
-  .tutorial-grid {
+  .tutorial-grid,
+  .download-note-grid {
     grid-template-columns: 1fr;
   }
 }

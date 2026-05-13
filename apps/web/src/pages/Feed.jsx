@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import AnnotationItem from '../components/AnnotationItem.jsx';
 import { getFeed } from '../lib/api.js';
 
@@ -60,7 +61,12 @@ export default function Feed() {
   return (
     <div className="page page-feed">
       <header className="feed-heading">
-        <p>Latest commentary</p>
+        <div>
+          <p>Latest commentary</p>
+        </div>
+        <Link className="button button-solid feed-pro-button" to="/download">
+          Get Annotated Pro
+        </Link>
       </header>
 
       <nav className="text-tabs" aria-label="Feed filters">
