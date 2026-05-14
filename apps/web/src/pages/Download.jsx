@@ -1,7 +1,5 @@
 import { Link } from 'react-router-dom';
 
-const MAC_DOWNLOAD_URL = 'https://pub-8e1040a752d1451998c6bbdb3e4117d2.r2.dev/Annotated.dmg';
-
 export default function Download() {
   return (
     <div className="page page-download">
@@ -22,10 +20,10 @@ export default function Download() {
           </p>
         </div>
         <div className="download-card-action">
-          <a className="button button-solid download-button" href={MAC_DOWNLOAD_URL}>
-            Download Annotated.dmg
-          </a>
-          <p>Requires macOS 13 Ventura or later · Apple Silicon &amp; Intel</p>
+          <button className="button button-solid download-button" type="button" disabled>
+            Mac download coming soon
+          </button>
+          <p>The desktop build is being finalized. Use the Chrome extension for clipping in the meantime.</p>
         </div>
       </section>
 
