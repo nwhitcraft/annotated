@@ -7,9 +7,17 @@ function tabKey(tabId) {
 }
 
 function safeBroadcast(message) {
-  chrome.runtime.sendMessage(message, () => {
-    void chrome.runtime.lastError;
-  });
+  try {
+    chrome.runtime.sendMessage(message, () => {
+      try {
+        void chrome.runtime.lastError;
+      } catch {
+        // Extension page changed while a broadcast was in flight.
+      }
+    });
+  } catch {
+    // Best effort only.
+  }
 }
 
 async function saveTabState(tabId, patch) {
@@ -40,9 +48,17 @@ async function openPanel(tabId) {
 
 function sendToTab(tabId, message) {
   if (!tabId) return;
-  chrome.tabs.sendMessage(tabId, message, () => {
-    void chrome.runtime.lastError;
-  });
+  try {
+    chrome.tabs.sendMessage(tabId, message, () => {
+      try {
+        void chrome.runtime.lastError;
+      } catch {
+        // Tab content script belonged to a previous extension context.
+      }
+    });
+  } catch {
+    // Best effort only.
+  }
 }
 
 chrome.action.onClicked.addListener((tab) => {

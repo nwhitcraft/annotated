@@ -4,6 +4,7 @@ const WEB_BASE = 'https://annotated-nwhitcraft.fly.dev';
 let currentPage = null;
 let authToken = '';
 let authUser = null;
+let loadingFeed = false;
 
 const statusEl = document.getElementById('status');
 const feedTitleEl = document.getElementById('feed-title');
@@ -13,6 +14,10 @@ const onboardingBannerEl = document.getElementById('onboarding-banner');
 
 hydrate();
 loadAuth().then(() => ensureUser());
+
+window.addEventListener('focus', refreshFeedIfVisible);
+document.addEventListener('visibilitychange', refreshFeedIfVisible);
+window.setInterval(refreshFeedIfVisible, 5000);
 
 feedListEl?.addEventListener('click', (event) => {
   const button = event.target.closest('[data-comment-url]');
@@ -259,9 +264,17 @@ function renderPageStatus() {
   `;
 }
 
-async function loadFeed() {
+function refreshFeedIfVisible() {
+  if (document.visibilityState === 'hidden') return;
+  loadFeed({ showLoading: false });
+}
+
+async function loadFeed(options = {}) {
   if (!feedListEl) return;
-  feedListEl.innerHTML = '<p class="feed-empty">Loading...</p>';
+  if (loadingFeed) return;
+  loadingFeed = true;
+  const showLoading = options.showLoading !== false;
+  if (showLoading) feedListEl.innerHTML = '<p class="feed-empty">Loading...</p>';
 
   try {
     if (isAnnotatedPage(currentPage)) {
@@ -293,7 +306,9 @@ async function loadFeed() {
 
     renderFeed(title, items.slice(0, 50));
   } catch {
-    renderFeed('Feed', []);
+    if (showLoading) renderFeed('Feed', []);
+  } finally {
+    loadingFeed = false;
   }
 }
 

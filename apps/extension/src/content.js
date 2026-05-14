@@ -926,6 +926,7 @@ async function postAnnotation(composer, status = 'published') {
   button.disabled = true;
   button.textContent = 'Posting';
 
+  let postedPage = null;
   try {
     await ensureUser();
     const headers = { 'Content-Type': 'application/json' };
@@ -982,14 +983,17 @@ async function postAnnotation(composer, status = 'published') {
     errorEl.hidden = true;
     errorEl.textContent = '';
     pendingAnnotation = null;
+    postedPage = getPageInfo();
     window.setTimeout(exitClippingMode, 600);
-    safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
   } catch (error) {
     composer.dataset.posting = 'false';
     button.disabled = false;
     button.textContent = 'Try again';
     showComposerError(errorEl, humanError(error));
+    return;
   }
+
+  notifyAnnotationPosted(postedPage);
 }
 
 function showComposerError(errorEl, message) {
@@ -1101,12 +1105,21 @@ function formatClock(seconds) {
 
 function safeSend(message) {
   try {
+    if (!chrome?.runtime?.id) return;
     chrome.runtime.sendMessage(message, () => {
-      void chrome.runtime.lastError;
+      try {
+        void chrome.runtime.lastError;
+      } catch {
+        // Extension was reloaded while this page still had the old content script.
+      }
     });
   } catch {
     // The annotation is already posted; side-panel refresh is best effort.
   }
+}
+
+function notifyAnnotationPosted(page) {
+  window.setTimeout(() => safeSend({ type: 'ANNOTATION_POSTED', page }), 0);
 }
 
 function detectPage() {
