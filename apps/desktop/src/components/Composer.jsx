@@ -81,11 +81,11 @@ function RecordingTimer({ remaining, onStop, onCancel, disabled }) {
 
 function captureErrorMessage(message) {
   const value = String(message || '');
-  if (/TCC|declined|screen.?recording|application, window, display capture/i.test(value)) {
-    return 'macOS screen recording permission is required. Open System Settings > Privacy & Security > Screen & System Audio Recording (or Screen Recording), enable Annotated/Terminal, then reopen the app.';
+  if (/TCC|declined|denied|not authorized|screen.?recording|system audio|application, window, display capture|SCStream/i.test(value)) {
+    return 'macOS Screen & System Audio Recording permission is required. Open System Settings > Privacy & Security, enable Annotated, then quit and reopen the app.';
   }
   if (/microphone/i.test(value)) {
-    return 'Microphone permission is required for mic capture. Enable it in System Settings > Privacy & Security > Microphone, or turn Microphone off for this clip.';
+    return 'Microphone permission is unavailable. Turn Microphone off for this clip; screen and system audio can still be captured.';
   }
   if (/did not produce a playable file|produce a file/i.test(value)) {
     return 'Screen capture did not produce a playable file. Check that Annotated and its capture helper are enabled in System Settings > Privacy & Security > Screen & System Audio Recording, then restart the app.';
@@ -110,7 +110,7 @@ export default function Composer({
   const [captureStatus, setCaptureStatus] = useState({ active: false });
   const [captureBusy, setCaptureBusy] = useState(false);
   const [captureError, setCaptureError] = useState('');
-  const [useMicrophone, setUseMicrophone] = useState(true);
+  const [useMicrophone, setUseMicrophone] = useState(false);
   const [useSystemAudio, setUseSystemAudio] = useState(true);
   const [podcastBusy, setPodcastBusy] = useState(false);
   const [podcastError, setPodcastError] = useState('');
@@ -204,6 +204,7 @@ export default function Composer({
         displayIndex: 0,
       });
       setCaptureStatus(status);
+      setUseMicrophone(Boolean(status.microphone));
       onStatus?.('Screen clip recording');
     } catch (err) {
       setCaptureError(captureErrorMessage(err.message || 'Could not start screen capture'));
@@ -374,7 +375,7 @@ export default function Composer({
         <div className="screen-capture-note">
           <header>
             <strong>Screen capture</strong>
-            <span>Record the current display for up to 90 seconds with optional system audio and microphone.</span>
+            <span>Record the current display for up to 90 seconds with system audio. Microphone is optional narration.</span>
           </header>
           <div className="capture-toggles" aria-label="Capture layers">
             <label className="inline-check">

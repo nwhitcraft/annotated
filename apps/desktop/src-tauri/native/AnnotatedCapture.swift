@@ -42,13 +42,6 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCStreamOutput, AVCaptur
     }
 
     func start() async throws {
-        if options.microphone {
-            let granted = await AVCaptureDevice.requestAccess(for: .audio)
-            if !granted {
-                throw CaptureError("Microphone permission was not granted")
-            }
-        }
-
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard !content.displays.isEmpty else {
             throw CaptureError("No capturable display was found")
@@ -314,6 +307,21 @@ func value(after flag: String, in args: [String]) -> String? {
     return args[index + 1]
 }
 
+func microphoneAllowedIfRequested(_ requested: Bool) async -> Bool {
+    guard requested else {
+        return false
+    }
+
+    switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    case .authorized:
+        return true
+    case .notDetermined:
+        return await AVCaptureDevice.requestAccess(for: .audio)
+    default:
+        return false
+    }
+}
+
 @main
 struct AnnotatedCapture {
     static func main() async {
@@ -343,7 +351,11 @@ struct AnnotatedCapture {
         }
 
         let duration = TimeInterval(Double(value(after: "--duration", in: args) ?? "90") ?? 90)
-        let microphone = boolArg(value(after: "--microphone", in: args))
+        let requestedMicrophone = boolArg(value(after: "--microphone", in: args))
+        let microphone = await microphoneAllowedIfRequested(requestedMicrophone)
+        if requestedMicrophone && !microphone {
+            fputs("Annotated microphone permission was unavailable; continuing with screen and system audio only.\n", stderr)
+        }
         let systemAudio = boolArg(value(after: "--system-audio", in: args))
         let displayIndex = Int(value(after: "--display-index", in: args) ?? "0") ?? 0
 

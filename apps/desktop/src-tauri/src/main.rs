@@ -871,7 +871,7 @@ fn start_screen_clip(
     }
 
     let duration = request.duration_seconds.unwrap_or(90).clamp(1, 90);
-    let microphone = request.microphone.unwrap_or(true);
+    let microphone = request.microphone.unwrap_or(false);
     let system_audio = request.system_audio.unwrap_or(true);
     let output = media_dir(&app)?.join(format!("screen-{}.mp4", Uuid::new_v4()));
     let helper = capture_helper_path(&app)?;

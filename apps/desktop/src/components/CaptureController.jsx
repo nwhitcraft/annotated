@@ -14,11 +14,11 @@ function formatTimer(seconds) {
 
 function captureErrorMessage(message) {
   const value = String(message || '');
-  if (/TCC|declined|screen.?recording|application, window, display capture/i.test(value)) {
-    return 'macOS screen recording permission is required. Enable Annotated in System Settings > Privacy & Security > Screen & System Audio Recording, then reopen the app.';
+  if (/TCC|declined|denied|not authorized|screen.?recording|system audio|application, window, display capture|SCStream/i.test(value)) {
+    return 'macOS Screen & System Audio Recording permission is required. Enable Annotated in System Settings > Privacy & Security, then quit and reopen Annotated.';
   }
   if (/microphone/i.test(value)) {
-    return 'Microphone permission is required for mic capture. Enable it in System Settings > Privacy & Security > Microphone, or turn Microphone off for this clip.';
+    return 'Microphone permission is unavailable, so Annotated will continue without microphone narration. Screen and system audio clipping do not need the microphone.';
   }
   if (/did not produce a playable file|produce a file/i.test(value)) {
     return 'Screen capture did not produce a playable file. Check Screen & System Audio Recording permissions, then restart Annotated.';
@@ -55,7 +55,7 @@ export default function CaptureController() {
       try {
         const status = await startScreenClip({
           durationSeconds: 90,
-          microphone: true,
+          microphone: false,
           systemAudio: true,
           displayIndex: 0,
         });
