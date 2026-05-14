@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
-const extensionDownloadUrl = '';
+const extensionDownloadUrl = 'https://7c03a6efd538a8d97cb687c37298ad46.r2.cloudflarestorage.com/annotated-chrome-extension-download';
 
 const installSteps = [
   {
@@ -46,7 +46,7 @@ export default function OnboardingExtension() {
           <strong>Install the launch-test extension</strong>
           <p>The Chrome Web Store listing is coming soon. For now, install the development version by loading the extension folder manually.</p>
           {extensionDownloadUrl ? (
-            <a className="button button-solid" href={extensionDownloadUrl}>Download Chrome extension</a>
+            <a className="button button-solid" href={extensionDownloadUrl} target="_blank" rel="noreferrer">Download Chrome extension</a>
           ) : (
             <button className="button button-solid" type="button" disabled>Download Chrome extension</button>
           )}
