@@ -39,9 +39,14 @@ export function AuthCallback() {
 
 export default function Login() {
   const error = useMemo(() => new URLSearchParams(window.location.search).get('error'), []);
-  const errorMessage = error === 'account_banned'
-    ? 'This account is unavailable after a claim review.'
-    : '';
+  const errorMessages = {
+    account_banned: 'This account is unavailable after a claim review.',
+    google_not_configured: 'Google sign-in is not configured for this environment yet.',
+    twitter_not_configured: 'X sign-in is not configured for this environment yet.',
+    google_failed: 'Google sign-in did not complete. Please try again.',
+    twitter_failed: 'X sign-in did not complete. Please try again.',
+  };
+  const errorMessage = errorMessages[error] || '';
 
   return (
     <main className="login-page">

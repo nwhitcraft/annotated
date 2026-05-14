@@ -24,13 +24,13 @@ const providers = [
   },
 ];
 
-export default function AuthButtons({ compact = false }) {
+export default function AuthButtons({ compact = false, className = '' }) {
   function go(provider) {
     window.location.href = authUrl(provider);
   }
 
   return (
-    <div className={`auth-button-group ${compact ? 'auth-button-group-compact' : ''}`}>
+    <div className={`auth-button-group ${compact ? 'auth-button-group-compact' : ''} ${className}`.trim()}>
       {providers.map((provider) => (
         <button key={provider.key} className="oauth-button" onClick={() => go(provider.key)}>
           <span className="oauth-mark" aria-hidden="true">{provider.mark}</span>
