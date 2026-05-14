@@ -926,14 +926,15 @@ async function postAnnotation(composer, status = 'published') {
   button.disabled = true;
   button.textContent = 'Posting';
 
-  let postedPage = null;
+  const mediaClip = isMediaClip(activeClip);
+  const postKey = postingKey(activeClip, commentary, status);
+  let annotationId = pendingAnnotation?.key === postKey ? pendingAnnotation.id : null;
+  let serverPosted = false;
+
   try {
     await ensureUser();
     const headers = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-    const mediaClip = isMediaClip(activeClip);
-    const postKey = postingKey(activeClip, commentary, status);
-    let annotationId = pendingAnnotation?.key === postKey ? pendingAnnotation.id : null;
 
     if (!annotationId) {
       const response = await fetch(`${API_BASE}/api/annotations`, {
@@ -979,21 +980,19 @@ async function postAnnotation(composer, status = 'published') {
       }
     }
 
-    button.textContent = 'Posted';
-    errorEl.hidden = true;
-    errorEl.textContent = '';
-    pendingAnnotation = null;
-    postedPage = getPageInfo();
-    window.setTimeout(exitClippingMode, 600);
+    serverPosted = true;
+    finishPostedComposer(errorEl, button);
   } catch (error) {
+    if (serverPosted || (annotationId && isExtensionContextInvalidated(error))) {
+      finishPostedComposer(errorEl, button);
+      return;
+    }
     composer.dataset.posting = 'false';
     button.disabled = false;
     button.textContent = 'Try again';
     showComposerError(errorEl, humanError(error));
     return;
   }
-
-  notifyAnnotationPosted(postedPage);
 }
 
 function showComposerError(errorEl, message) {
@@ -1017,6 +1016,18 @@ function postingKey(clip, commentary, status) {
 
 function humanError(error) {
   return error?.message || 'Something went wrong. Try again.';
+}
+
+function isExtensionContextInvalidated(error) {
+  return /extension context invalidated/i.test(humanError(error));
+}
+
+function finishPostedComposer(errorEl, button) {
+  button.textContent = 'Posted';
+  errorEl.hidden = true;
+  errorEl.textContent = '';
+  pendingAnnotation = null;
+  window.setTimeout(exitClippingMode, 250);
 }
 
 async function attachMediaClip(annotationId, clip) {
@@ -1116,10 +1127,6 @@ function safeSend(message) {
   } catch {
     // The annotation is already posted; side-panel refresh is best effort.
   }
-}
-
-function notifyAnnotationPosted(page) {
-  window.setTimeout(() => safeSend({ type: 'ANNOTATION_POSTED', page }), 0);
 }
 
 function detectPage() {
