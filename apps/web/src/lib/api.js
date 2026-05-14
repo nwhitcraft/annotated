@@ -91,7 +91,8 @@ export async function checkAuth() {
     const user = await request('/users/me');
     cacheUser(user);
     return { onboardingCompleted: Boolean(user.onboarding_completed), user };
-  } catch {
+  } catch (error) {
+    if (error.status === 401 || error.status === 404) signOut();
     return { error: 'unauthorized' };
   }
 }
@@ -133,7 +134,11 @@ async function request(path, options = {}) {
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) throw new Error(data?.error || `Request failed: ${response.status}`);
+  if (!response.ok || data?.error) {
+    const error = new Error(data?.error || `Request failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 

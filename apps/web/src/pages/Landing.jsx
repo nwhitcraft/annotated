@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import AuthButtons from '../components/AuthButtons.jsx';
-import { getToken, getUsername } from '../lib/api.js';
+import { checkAuth, getToken, getUsername } from '../lib/api.js';
 
 const productNotes = [
   {
@@ -26,7 +26,20 @@ export default function Landing() {
   const [username, setUsername] = useState('');
 
   useEffect(() => {
-    setUsername(getToken() ? getUsername() || 'demo' : '');
+    if (!getToken()) {
+      setUsername('');
+      return undefined;
+    }
+
+    let cancelled = false;
+    setUsername(getUsername() || '');
+    checkAuth().then((result) => {
+      if (cancelled) return;
+      setUsername(result.error ? '' : result.user?.username || '');
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
