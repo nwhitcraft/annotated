@@ -835,7 +835,7 @@ function showComposer(rect) {
   document.documentElement.append(composer);
   positionComposer(composer, rect);
   composer.style.visibility = '';
-  textarea.focus();
+  textarea.focus({ preventScroll: true });
 }
 
 async function refreshAuthUser() {
@@ -896,13 +896,16 @@ function positionComposer(composer, rect) {
   if (!placeBelow && spaceAbove < minUsableSpace && spaceBelow > spaceAbove) placeBelow = true;
   const availableSpace = Math.max(minUsableSpace, placeBelow ? spaceBelow : spaceAbove);
   const height = Math.min(measuredHeight, availableSpace);
-  const top = placeBelow
-    ? Math.min(rect.bottom + gap, window.innerHeight - height - margin)
-    : Math.max(margin, rect.top - height - gap);
+  const desiredTop = placeBelow ? rect.bottom + gap : rect.top - height - gap;
+  const top = clamp(desiredTop, margin, Math.max(margin, window.innerHeight - height - margin));
 
   composer.style.left = `${left}px`;
   composer.style.top = `${top}px`;
   composer.style.maxHeight = `${availableSpace}px`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function updateAnchoredUi() {

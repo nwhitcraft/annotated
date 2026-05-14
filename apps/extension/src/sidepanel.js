@@ -83,10 +83,10 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-function hydrate() {
+function hydrate(options = {}) {
   chrome.runtime.sendMessage({ type: 'GET_ACTIVE_STATE' }, (response) => {
     if (chrome.runtime.lastError) return;
-    renderState(response?.state);
+    renderState(response?.state, { showLoading: options.showLoading !== false });
   });
 }
 
@@ -255,20 +255,24 @@ async function ensureUser() {
   }
 }
 
-function renderState(state) {
+function renderState(state, options = {}) {
+  const previousPageKey = pageIdentity(currentPage);
+  const showLoading = options.showLoading !== false;
   if (!state) {
-    loadFeed();
+    loadFeed({ showLoading: showLoading && !hasRenderedFeed() });
     return;
   }
 
   if (Object.prototype.hasOwnProperty.call(state, 'page')) currentPage = state.page || null;
   pendingPageUrl = currentPage ? '' : state.pendingUrl || '';
+  const nextPageKey = pageIdentity(currentPage);
+  const pageChanged = previousPageKey !== nextPageKey;
   renderPageStatus();
   if (pendingPageUrl && !currentPage) {
-    renderPendingPage();
+    if (showLoading || !hasRenderedFeed()) renderPendingPage();
     return;
   }
-  loadFeed();
+  loadFeed({ showLoading: showLoading && (pageChanged || !hasRenderedFeed()) });
 }
 
 function renderPageStatus() {
@@ -300,7 +304,7 @@ function renderPendingPage() {
 
 function refreshFeedIfVisible() {
   if (document.visibilityState === 'hidden') return;
-  hydrate();
+  hydrate({ showLoading: false });
 }
 
 async function loadFeed(options = {}) {
@@ -357,6 +361,10 @@ function pageIdentity(page) {
 
 function isLatestFeedRequest(requestId, pageKey) {
   return requestId === feedRequestId && pageKey === pageIdentity(currentPage);
+}
+
+function hasRenderedFeed() {
+  return Boolean(feedListEl?.childElementCount);
 }
 
 function renderAnnotatedPageState() {
