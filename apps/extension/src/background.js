@@ -20,6 +20,20 @@ function safeBroadcast(message) {
   }
 }
 
+function activeTabId() {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs[0]?.id || null);
+    });
+  });
+}
+
+async function broadcastIfActive(tabId, message) {
+  if (!tabId) return;
+  const activeId = await activeTabId();
+  if (activeId === tabId) safeBroadcast(message);
+}
+
 async function saveTabState(tabId, patch) {
   if (!tabId) return null;
   const previous = stateByTab.get(tabId) || {};
@@ -61,6 +75,10 @@ function sendToTab(tabId, message) {
   }
 }
 
+function requestPageInfo(tabId) {
+  sendToTab(tabId, { type: 'REQUEST_PAGE_INFO' });
+}
+
 chrome.action.onClicked.addListener((tab) => {
   openPanel(tab.id);
 });
@@ -90,6 +108,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'PAGE_INFO') {
     saveTabState(tabId, {
+      pendingUrl: '',
       page: {
         url: msg.url,
         pageUrl: msg.pageUrl,
@@ -101,9 +120,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         publishedAt: msg.publishedAt,
         thumbnail: msg.thumbnail,
       },
-    }).then((state) => {
-      safeBroadcast({ type: 'PAGE_DETECTED', state });
-    });
+    }).then((state) => broadcastIfActive(tabId, { type: 'PAGE_DETECTED', state }));
     return;
   }
 
@@ -125,6 +142,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     };
 
     saveTabState(tabId, {
+      pendingUrl: '',
       clip,
       page: {
         url: msg.url,
@@ -139,7 +157,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       },
     })
       .then((state) => {
-        safeBroadcast({ type: 'CLIP_TEXT', state });
+        broadcastIfActive(tabId, { type: 'CLIP_TEXT', state });
         if (msg.openPanel) openPanel(tabId);
       });
     return;
@@ -149,6 +167,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const activeTabId = tabs[0]?.id;
       const state = await getTabState(activeTabId);
+      requestPageInfo(activeTabId);
       sendResponse({ state: state || null });
     });
     return true;
@@ -183,4 +202,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendToTab(tabs[0]?.id, { type: 'START_CLIPPING' });
     });
   }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url) {
+    saveTabState(tabId, {
+      pendingUrl: changeInfo.url,
+      page: null,
+      clip: null,
+    }).then((state) => broadcastIfActive(tabId, { type: 'TAB_NAVIGATED', state }));
+  }
+
+  if (changeInfo.status === 'complete') {
+    requestPageInfo(tabId);
+  }
+});
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  const state = await getTabState(tabId);
+  safeBroadcast({ type: 'ACTIVE_TAB_CHANGED', state });
+  requestPageInfo(tabId);
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  chrome.tabs.query({ active: true, windowId }, async (tabs) => {
+    const tabId = tabs[0]?.id;
+    const state = await getTabState(tabId);
+    safeBroadcast({ type: 'ACTIVE_TAB_CHANGED', state });
+    requestPageInfo(tabId);
+  });
 });

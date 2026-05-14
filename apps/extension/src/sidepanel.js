@@ -5,6 +5,8 @@ let currentPage = null;
 let authToken = '';
 let authUser = null;
 let loadingFeed = false;
+let pendingPageUrl = '';
+let feedRequestId = 0;
 
 const statusEl = document.getElementById('status');
 const feedTitleEl = document.getElementById('feed-title');
@@ -52,7 +54,7 @@ document.addEventListener('submit', (event) => {
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'PAGE_DETECTED' || msg.type === 'STATE_UPDATED') {
+  if (['PAGE_DETECTED', 'STATE_UPDATED', 'ACTIVE_TAB_CHANGED', 'TAB_NAVIGATED', 'CLIP_TEXT'].includes(msg.type)) {
     renderState(msg.state);
   }
 
@@ -248,13 +250,28 @@ function renderState(state) {
     return;
   }
 
-  currentPage = state.page || currentPage;
+  if (Object.prototype.hasOwnProperty.call(state, 'page')) currentPage = state.page || null;
+  pendingPageUrl = currentPage ? '' : state.pendingUrl || '';
   renderPageStatus();
+  if (pendingPageUrl && !currentPage) {
+    renderPendingPage();
+    return;
+  }
   loadFeed();
 }
 
 function renderPageStatus() {
-  if (!currentPage) return;
+  if (!currentPage) {
+    statusEl.hidden = !pendingPageUrl;
+    if (pendingPageUrl) {
+      statusEl.innerHTML = `
+        <span class="status-dot article"></span>
+        <span class="status-source">loading</span>
+        <span class="status-title">${escapeHtml(hostnameFromUrl(pendingPageUrl) || 'Current page')}</span>
+      `;
+    }
+    return;
+  }
 
   statusEl.hidden = false;
   statusEl.innerHTML = `
@@ -264,20 +281,30 @@ function renderPageStatus() {
   `;
 }
 
+function renderPendingPage() {
+  feedTitleEl.textContent = 'Current page';
+  feedCountEl.textContent = '';
+  feedListEl.innerHTML = '<p class="feed-empty">Loading this page...</p>';
+}
+
 function refreshFeedIfVisible() {
   if (document.visibilityState === 'hidden') return;
-  loadFeed({ showLoading: false });
+  hydrate();
 }
 
 async function loadFeed(options = {}) {
   if (!feedListEl) return;
-  if (loadingFeed) return;
+  const requestId = feedRequestId + 1;
+  feedRequestId = requestId;
   loadingFeed = true;
+  const page = currentPage ? { ...currentPage } : null;
+  const pageKey = pageIdentity(page);
   const showLoading = options.showLoading !== false;
   if (showLoading) feedListEl.innerHTML = '<p class="feed-empty">Loading...</p>';
 
   try {
-    if (isAnnotatedPage(currentPage)) {
+    if (isAnnotatedPage(page)) {
+      if (!isLatestFeedRequest(requestId, pageKey)) return;
       renderAnnotatedPageState();
       return;
     }
@@ -285,9 +312,9 @@ async function loadFeed(options = {}) {
     let title = 'Your feed';
     let items = [];
 
-    if (currentPage?.url) {
+    if (page?.url) {
       const viewerId = authUser?.id || 'demo-user';
-      const pageFeed = await fetchJson(`/api/feed/page?url=${encodeURIComponent(currentPage.url)}&viewer_id=${encodeURIComponent(viewerId)}&limit=50`);
+      const pageFeed = await fetchJson(`/api/feed/page?url=${encodeURIComponent(page.url)}&viewer_id=${encodeURIComponent(viewerId)}&limit=50`);
       items = pageFeed.items || [];
       if (items.length) title = 'On this page';
     }
@@ -304,12 +331,21 @@ async function loadFeed(options = {}) {
       title = 'Latest';
     }
 
+    if (!isLatestFeedRequest(requestId, pageKey)) return;
     renderFeed(title, items.slice(0, 50));
   } catch {
-    if (showLoading) renderFeed('Feed', []);
+    if (showLoading && isLatestFeedRequest(requestId, pageKey)) renderFeed('Feed', []);
   } finally {
-    loadingFeed = false;
+    if (requestId === feedRequestId) loadingFeed = false;
   }
+}
+
+function pageIdentity(page) {
+  return page?.url || page?.pageUrl || '';
+}
+
+function isLatestFeedRequest(requestId, pageKey) {
+  return requestId === feedRequestId && pageKey === pageIdentity(currentPage);
 }
 
 function renderAnnotatedPageState() {
@@ -408,6 +444,14 @@ function isAnnotatedUrl(value) {
       || ((hostname === 'localhost' || hostname === '127.0.0.1') && url.port === '3090');
   } catch {
     return false;
+  }
+}
+
+function hostnameFromUrl(value) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
   }
 }
 

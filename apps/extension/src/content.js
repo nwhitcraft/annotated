@@ -38,6 +38,7 @@ chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'START_CLIPPING') handleClippingShortcut('shortcut');
   if (msg.type === 'EXIT_CLIPPING') exitClippingMode();
+  if (msg.type === 'REQUEST_PAGE_INFO') detectPage();
   if (msg.type === 'AUTH_UPDATED') {
     authUser = msg.user || null;
     chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
@@ -77,6 +78,35 @@ let mediaRetryTimer = null;
 let mediaPreparing = false;
 let lastShortcutAt = 0;
 let pendingAnnotation = null;
+
+function handleUrlChange() {
+  if (window.location.href === lastUrl) return;
+  lastUrl = window.location.href;
+  exitClippingMode();
+  detectPage();
+}
+
+for (const method of ['pushState', 'replaceState']) {
+  try {
+    const original = history[method];
+    history[method] = function annotatedHistoryState(...args) {
+      const result = original.apply(this, args);
+      window.setTimeout(handleUrlChange, 0);
+      return result;
+    };
+  } catch {
+    // Some pages lock down history methods; the mutation observer still catches URL changes.
+  }
+}
+
+window.addEventListener('popstate', () => window.setTimeout(handleUrlChange, 0));
+window.addEventListener('pageshow', () => {
+  lastUrl = window.location.href;
+  detectPage();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') detectPage();
+});
 
 const MEDIA_UI_SELECTORS = [
   '[data-testid="now-playing-widget"]',
@@ -1213,11 +1243,7 @@ const startObserver = () => {
   if (!target) return;
 
   const observer = new MutationObserver(() => {
-    if (window.location.href !== lastUrl) {
-      lastUrl = window.location.href;
-      exitClippingMode();
-      detectPage();
-    }
+    handleUrlChange();
   });
   observer.observe(target, { childList: true, subtree: true });
 };
