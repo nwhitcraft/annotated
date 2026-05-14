@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
-const shortcutTitle = 'One shortcut. Anything.';
+const shortcutTitle = 'One shortcut.';
 
 const shortcutPlatforms = [
   {
