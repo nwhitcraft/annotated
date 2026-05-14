@@ -93,7 +93,7 @@ app.post('/avatar', async (c) => {
 
 // Current user profile for frontend route guards
 app.get('/me', (c) => {
-  const user = authUser(c);
+  const user = reconcileUsername(authUser(c));
   if (!user) return c.json({ error: 'Not authenticated' }, 401);
   if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
   return c.json(publicUser(user));
@@ -406,6 +406,10 @@ function usernameTaken(username) {
   return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(username) = lower(?)').get(username));
 }
 
+function usernameTakenByOther(username, userId) {
+  return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(username) = lower(?) AND id != ?').get(username, userId));
+}
+
 function suggestUsername(value) {
   const normalized = String(value || 'user')
     .trim()
@@ -421,6 +425,23 @@ function suggestUsername(value) {
     if (!usernameTaken(candidate)) return candidate;
   }
   return `${base}_${nanoid(4).toLowerCase()}`;
+}
+
+function reconcileUsername(user) {
+  if (!user) return null;
+  const normalized = normalizeUsername(user.username || 'user');
+  const preferredUsername = normalized.error
+    ? suggestUsername(normalized.base || user.username || 'user')
+    : normalized.username;
+  const hasCaseCollision = usernameTakenByOther(preferredUsername, user.id);
+  const nextUsername = hasCaseCollision && !isAdminUser(user)
+    ? suggestUsername(preferredUsername)
+    : preferredUsername;
+
+  if (nextUsername === user.username) return user;
+  db.prepare('UPDATE users SET username = ?, updated_at = datetime(\'now\') WHERE id = ?')
+    .run(nextUsername, user.id);
+  return { ...user, username: nextUsername };
 }
 
 function normalizeProfile(body, { displayNameRequired }) {

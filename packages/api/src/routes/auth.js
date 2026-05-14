@@ -200,7 +200,7 @@ app.get('/me', (c) => {
 
   try {
     const payload = jwt.verify(auth.slice(7), JWT_SECRET);
-    const user = db.prepare('SELECT id, username, display_name, avatar_url, bio, link, twitter_handle, age, onboarding_completed, subscription_tier, provider, email, blocked, blocked_until, deleted_at, created_at FROM users WHERE id = ?').get(payload.sub);
+    const user = reconcileUsername(db.prepare('SELECT id, username, display_name, avatar_url, bio, link, twitter_handle, age, onboarding_completed, subscription_tier, provider, email, blocked, blocked_until, deleted_at, created_at FROM users WHERE id = ?').get(payload.sub));
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
 
@@ -298,6 +298,20 @@ function usernameTaken(username) {
 
 function usernameTakenByOther(username, userId) {
   return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(username) = lower(?) AND id != ?').get(username, userId));
+}
+
+function reconcileUsername(user) {
+  if (!user) return null;
+  const preferredUsername = normalizeUsername(user.username || 'user');
+  const hasCaseCollision = usernameTakenByOther(preferredUsername, user.id);
+  const nextUsername = hasCaseCollision && !isAdminUser(user)
+    ? suggestUsername(preferredUsername)
+    : preferredUsername;
+
+  if (nextUsername === user.username) return user;
+  db.prepare('UPDATE users SET username = ?, updated_at = datetime(\'now\') WHERE id = ?')
+    .run(nextUsername, user.id);
+  return { ...user, username: nextUsername };
 }
 
 function suggestUsername(value) {
