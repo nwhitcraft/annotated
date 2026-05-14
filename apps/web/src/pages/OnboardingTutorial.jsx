@@ -1,5 +1,22 @@
 import { useNavigate } from 'react-router-dom';
 
+const shortcutTitle = 'One shortcut. Anything.';
+
+const shortcutPlatforms = [
+  {
+    label: 'Mac',
+    modifier: 'option',
+    modifierLabel: 'Option',
+    shortcut: 'Option + Shift + X',
+  },
+  {
+    label: 'Windows',
+    modifier: 'ctrl',
+    modifierLabel: 'Ctrl',
+    shortcut: 'Ctrl + Shift + X',
+  },
+];
+
 const lessons = [
   {
     title: 'Text Clipping',
@@ -35,19 +52,32 @@ export default function OnboardingTutorial() {
       </ol>
 
       <section className="shortcut-hero" aria-label="Annotated shortcut">
-        <div className="shortcut-artifact">
-          <div className="shortcut-artifact-copy">
-            <span>Universal clipping shortcut</span>
-            <h2>Open the composer from any article, video or podcast.</h2>
+        <div className="shortcut-showcase">
+          <header className="shortcut-showcase-header">
+            <span>How it works</span>
+            <h2 aria-label={shortcutTitle}>
+              {Array.from(shortcutTitle).map((char, index) => (
+                char === ' ' ? (
+                  <span className="shortcut-title-space" aria-hidden="true" key={`space-${index}`} />
+                ) : (
+                  <span className="shortcut-title-char" aria-hidden="true" key={`${char}-${index}`} style={{ '--char-index': index }}>
+                    {char}
+                  </span>
+                )
+              ))}
+            </h2>
+            <p>Highlight a sentence, listen to a podcast, or watch a clip. Press the keys and it is ready to annotate.</p>
+          </header>
+
+          <div className="shortcut-platform-grid" aria-label="Keyboard shortcuts">
+            {shortcutPlatforms.map((platform) => (
+              <article className="shortcut-platform" key={platform.label}>
+                <h3>{platform.label}</h3>
+                <ShortcutKeyboard platform={platform} />
+                <p>{platform.shortcut}</p>
+              </article>
+            ))}
           </div>
-          <div className="shortcut-key-row" aria-hidden="true">
-            <kbd>Ctrl</kbd>
-            <span>+</span>
-            <kbd>Shift</kbd>
-            <span>+</span>
-            <kbd>X</kbd>
-          </div>
-          <p>Mac: Option + Shift + X</p>
         </div>
       </section>
 
@@ -69,5 +99,48 @@ export default function OnboardingTutorial() {
         </button>
       </div>
     </div>
+  );
+}
+
+function ShortcutKeyboard({ platform }) {
+  return (
+    <div className="shortcut-keyboard" aria-hidden="true">
+      <ShortcutKey type="shift" label="Shift" />
+      <ShortcutKey isBlank />
+      <ShortcutKey type="x" label="X" />
+      <ShortcutKey isBlank />
+      <ShortcutKey type={platform.modifier} label={platform.modifierLabel} />
+      <ShortcutKey isBlank />
+    </div>
+  );
+}
+
+function ShortcutKey({ type, label, isBlank = false }) {
+  if (isBlank) {
+    return <span className="shortcut-key shortcut-key-blank" />;
+  }
+
+  return (
+    <span className={`shortcut-key shortcut-key-${type} shortcut-key-active`}>
+      {type === 'shift' && <ShiftGlyph />}
+      {type === 'option' && <OptionGlyph />}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function ShiftGlyph() {
+  return (
+    <svg className="shortcut-key-symbol" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 4 L20 12 L16 12 L16 19 L8 19 L8 12 L4 12 Z" stroke="currentColor" strokeWidth="1.7" fill="none" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function OptionGlyph() {
+  return (
+    <svg className="shortcut-key-symbol" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 6 L9 6 L15 18 L21 18 M14 6 L21 6" stroke="currentColor" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
