@@ -8,9 +8,6 @@ const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const RECORDING_BUBBLE_ID = 'annotated-recording-bubble';
 const SHORT_CLIP_SECONDS = 90;
-const RECORDING_FRAME_RATE = 24;
-const RECORDING_WIDTH = 426;
-const RECORDING_HEIGHT = 240;
 const MAX_COMMENTARY_LENGTH = 360;
 const ANNOTATION_TYPES = ['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking'];
 const VIDEO_MIME_TYPES = [
@@ -37,7 +34,7 @@ chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
 
 // Listen for auth updates from background
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'START_CLIPPING') enterClippingMode();
+  if (msg.type === 'START_CLIPPING') handleClippingShortcut('shortcut');
   if (msg.type === 'EXIT_CLIPPING') exitClippingMode();
   if (msg.type === 'AUTH_UPDATED') {
     authUser = msg.user || null;
@@ -75,6 +72,7 @@ let selectedType = 'Opinion';
 let mediaSession = null;
 let activeAnchorElement = null;
 let mediaRetryTimer = null;
+let lastShortcutAt = 0;
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
@@ -179,7 +177,7 @@ function clipFromMedia(openPanel = false, options = {}) {
   if (!media) return null;
   if (page.sourceType === 'article' && !media.isPlaying && !knownMediaPage) return null;
 
-  const sourceType = page.sourceType === 'article' || (knownMediaPage && media.isVideo)
+  const sourceType = page.sourceType === 'article'
     ? (media.isVideo ? 'video' : 'podcast')
     : page.sourceType;
 
@@ -200,6 +198,19 @@ function clipFromMedia(openPanel = false, options = {}) {
     selectedAt: Date.now(),
     openPanel,
   };
+}
+
+function handleClippingShortcut(reason = 'shortcut') {
+  const now = Date.now();
+  if (now - lastShortcutAt < 250) return;
+  lastShortcutAt = now;
+
+  if (mediaSession) {
+    void stopMediaRecording(reason);
+    return;
+  }
+
+  enterClippingMode();
 }
 
 function enterClippingMode() {
@@ -247,7 +258,6 @@ function cancelMediaRecording() {
   if (!session) return;
   session.stopping = true;
   window.clearInterval(session.intervalId);
-  if (session.drawFrame) cancelAnimationFrame(session.drawFrame);
   try {
     if (session.recorder && session.recorder.state !== 'inactive') session.recorder.stop();
   } catch {
@@ -265,6 +275,8 @@ function startMediaRecording(clip, media) {
   document.getElementById(COMPOSER_ID)?.remove();
   document.getElementById(OVERLAY_ID)?.remove();
   document.documentElement.classList.add('annotated-media-recording-mode');
+  const rect = media.element.getBoundingClientRect();
+  createOverlay(rect && rect.width && rect.height ? rect : centerRect());
 
   mediaSession = {
     clip,
@@ -277,9 +289,6 @@ function startMediaRecording(clip, media) {
     mimeType: '',
     recorder: null,
     captureStream: null,
-    outputStream: null,
-    canvas: null,
-    drawFrame: null,
     intervalId: null,
     stopping: false,
     captureError: '',
@@ -296,27 +305,16 @@ function startVideoCapture(session) {
   try {
     const captureStream = session.element.captureStream?.() || session.element.mozCaptureStream?.();
     if (!captureStream) throw new Error('captureStream is unavailable for this video');
+    if (!captureStream.getVideoTracks().length) throw new Error('No video track available for recording');
 
     session.captureStream = captureStream;
-    const canvas = document.createElement('canvas');
-    canvas.width = RECORDING_WIDTH;
-    canvas.height = RECORDING_HEIGHT;
-    session.canvas = canvas;
-
-    const context = canvas.getContext('2d', { alpha: false });
-    if (!context || !canvas.captureStream) throw new Error('Canvas recording is unavailable');
-
-    const outputStream = canvas.captureStream(RECORDING_FRAME_RATE);
-    for (const track of captureStream.getAudioTracks()) outputStream.addTrack(track);
-    session.outputStream = outputStream;
-
     const mimeType = pickVideoMimeType();
     const recorderOptions = {
-      videoBitsPerSecond: 350_000,
-      audioBitsPerSecond: 64_000,
+      videoBitsPerSecond: 1_200_000,
+      audioBitsPerSecond: 96_000,
     };
     if (mimeType) recorderOptions.mimeType = mimeType;
-    const recorder = new MediaRecorder(outputStream, recorderOptions);
+    const recorder = new MediaRecorder(captureStream, recorderOptions);
     session.mimeType = mimeType;
     session.recorder = recorder;
 
@@ -327,19 +325,6 @@ function startVideoCapture(session) {
       session.captureError = 'Recording failed';
     });
 
-    const draw = () => {
-      if (mediaSession !== session || session.stopping) return;
-      try {
-        context.fillStyle = '#000';
-        context.fillRect(0, 0, RECORDING_WIDTH, RECORDING_HEIGHT);
-        context.drawImage(session.element, 0, 0, RECORDING_WIDTH, RECORDING_HEIGHT);
-      } catch {
-        session.captureError = 'Canvas capture failed';
-      }
-      session.drawFrame = requestAnimationFrame(draw);
-    };
-
-    draw();
     recorder.start(1000);
   } catch (error) {
     session.captureError = error.message || 'Recording unavailable';
@@ -540,7 +525,6 @@ async function stopMediaRecording(reason) {
 }
 
 async function stopVideoCapture(session) {
-  if (session.drawFrame) cancelAnimationFrame(session.drawFrame);
   const fallbackType = session.mimeType || (session.clip.sourceType === 'podcast' ? 'audio/webm' : 'video/webm');
   if (!session.recorder || session.recorder.state === 'inactive') {
     if (session.chunks.length) session.blob = new Blob(session.chunks, { type: fallbackType });
@@ -572,9 +556,7 @@ function isAnnotatedAppPage() {
 }
 
 function stopCaptureTracks(session) {
-  for (const stream of [session.captureStream, session.outputStream]) {
-    for (const track of stream?.getTracks?.() || []) track.stop();
-  }
+  for (const track of session.captureStream?.getTracks?.() || []) track.stop();
 }
 
 function createOverlay(rect) {
@@ -967,7 +949,8 @@ window.addEventListener('keydown', (event) => {
   if (!event.repeat && isClippingShortcut(event)) {
     event.preventDefault();
     event.stopPropagation();
-    enterClippingMode();
+    event.stopImmediatePropagation?.();
+    handleClippingShortcut('shortcut');
   }
 
   if (clippingMode && event.key.startsWith('Arrow')) {
