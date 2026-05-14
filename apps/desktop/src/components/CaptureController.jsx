@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { cancelScreenClip, startScreenClip, stopScreenClip } from '../lib/localStore.js';
+import { cancelScreenClip, openCapturePermissions, startScreenClip, stopScreenClip } from '../lib/localStore.js';
 
 const RECORDING_WAVE_DELAYS = [-1, -0.85, -0.7, -0.55, -0.4, -0.25, -0.1, -0.25, -0.4, -0.55, -0.7, -0.85, -1];
 
@@ -30,6 +30,14 @@ function isNoActiveCaptureError(error) {
   return /no active screen capture/i.test(String(error?.message || error || ''));
 }
 
+function permissionKindFromMessage(message) {
+  return /microphone/i.test(String(message || '')) ? 'microphone' : 'screen';
+}
+
+function isPermissionMessage(message) {
+  return /permission|privacy|screen recording|microphone|TCC|declined/i.test(String(message || ''));
+}
+
 export default function CaptureController() {
   const [captureStatus, setCaptureStatus] = useState({ active: false, durationSeconds: 90 });
   const [captureNow, setCaptureNow] = useState(Date.now());
@@ -51,11 +59,20 @@ export default function CaptureController() {
           systemAudio: true,
           displayIndex: 0,
         });
+        if (cancelled) {
+          await cancelScreenClip().catch(() => {});
+          await emit('desktop-screen-clip-cancelled', true);
+          return;
+        }
         setCaptureNow(Date.now());
         setCaptureStatus(status);
         await emit('desktop-detached-screen-clip-started', status);
       } catch (err) {
-        setError(captureErrorMessage(err?.message || err));
+        const message = captureErrorMessage(err?.message || err);
+        setError(message);
+        if (isPermissionMessage(message)) {
+          await openCapturePermissions(permissionKindFromMessage(message)).catch(() => {});
+        }
         setCaptureStatus((value) => ({ ...value, active: false }));
       } finally {
         if (!cancelled) setBusy(false);
@@ -75,6 +92,19 @@ export default function CaptureController() {
     return () => window.clearInterval(intervalId);
   }, [captureStatus.active]);
 
+  useEffect(() => {
+    let unlisten = null;
+    listen('desktop-screen-clip-shortcut-cancel', () => {
+      void cancel();
+    }).then((value) => {
+      unlisten = value;
+    }).catch(() => {});
+    return () => {
+      if (typeof unlisten === 'function') unlisten();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureStatus.active, busy]);
+
   async function closeWindow() {
     try {
       await getCurrentWindow().close();
@@ -84,7 +114,10 @@ export default function CaptureController() {
   }
 
   async function stop() {
-    if (busy || !captureStatus.active) return;
+    if (busy || !captureStatus.active) {
+      await closeWindow();
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -102,15 +135,20 @@ export default function CaptureController() {
         return;
       }
       setCaptureStatus((value) => ({ ...value, active: false }));
-      setError(captureErrorMessage(err?.message || err || 'Could not stop screen capture'));
+      const message = captureErrorMessage(err?.message || err || 'Could not stop screen capture');
+      setError(message);
+      if (isPermissionMessage(message)) {
+        await openCapturePermissions(permissionKindFromMessage(message)).catch(() => {});
+      }
     } finally {
       setBusy(false);
     }
   }
 
   async function cancel() {
-    if (busy) return;
-    if (!captureStatus.active) {
+    if (busy || !captureStatus.active) {
+      await cancelScreenClip().catch(() => {});
+      await emit('desktop-screen-clip-cancelled', true);
       await closeWindow();
       return;
     }
@@ -127,7 +165,11 @@ export default function CaptureController() {
         await closeWindow();
         return;
       }
-      setError(captureErrorMessage(err?.message || err || 'Could not cancel screen capture'));
+      const message = captureErrorMessage(err?.message || err || 'Could not cancel screen capture');
+      setError(message);
+      if (isPermissionMessage(message)) {
+        await openCapturePermissions(permissionKindFromMessage(message)).catch(() => {});
+      }
     } finally {
       setBusy(false);
     }
@@ -174,7 +216,7 @@ export default function CaptureController() {
             </span>
           </div>
           <div className="recording-popup__actions">
-            <button className="recording-popup__cancel" type="button" onClick={cancel} disabled={busy}>
+            <button className="recording-popup__cancel" type="button" onClick={cancel}>
               {captureStatus.active ? 'Cancel' : 'Close'}
             </button>
             <button className="recording-popup__stop" type="button" onClick={stop} disabled={busy || !captureStatus.active}>
@@ -183,7 +225,16 @@ export default function CaptureController() {
             </button>
           </div>
         </div>
-        {error && <p className="composer-error">{error}</p>}
+        {error && (
+          <div className="recording-popup__error">
+            <p className="composer-error">{error}</p>
+            {isPermissionMessage(error) && (
+              <button className="recording-popup__permission" type="button" onClick={() => openCapturePermissions(permissionKindFromMessage(error))}>
+                Open permissions
+              </button>
+            )}
+          </div>
+        )}
       </section>
     </main>
   );

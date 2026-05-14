@@ -1364,8 +1364,10 @@ fn read_selected_text() -> Result<String, String> {
 #[cfg(target_os = "macos")]
 fn frontmost_bundle_identifier() -> Option<String> {
     let output = Command::new("osascript")
+        .arg("-l")
+        .arg("JavaScript")
         .arg("-e")
-        .arg("tell application \"System Events\" to get bundle identifier of first application process whose frontmost is true")
+        .arg("ObjC.import('AppKit'); $.NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier.js")
         .output()
         .ok()?;
     if !output.status.success() {
@@ -1392,12 +1394,77 @@ fn frontmost_app_is_browser() -> bool {
     )
 }
 
-#[cfg(target_os = "macos")]
-fn forward_clip_shortcut_to_frontmost_app() {
-    let _ = Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to key code 7 using {option down, shift down}")
-        .status();
+#[cfg(not(target_os = "macos"))]
+fn frontmost_app_is_browser() -> bool {
+    false
+}
+
+const CLIP_SHORTCUT: &str = "Alt+Shift+X";
+
+fn set_desktop_clip_shortcut(app: &AppHandle, enabled: bool, registered: &AtomicBool) {
+    if enabled {
+        if registered
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+        if app
+            .global_shortcut()
+            .on_shortcut(CLIP_SHORTCUT, move |app, _shortcut, event| {
+                if event.state != ShortcutState::Pressed {
+                    return;
+                }
+                if app.get_webview_window("capture-controller").is_some() {
+                    let _ = app.emit("desktop-screen-clip-shortcut-cancel", true);
+                } else {
+                    let _ = app.emit("tray-start-screen-clip", true);
+                }
+            })
+            .is_err()
+        {
+            registered.store(false, Ordering::SeqCst);
+        }
+        return;
+    }
+
+    if registered
+        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        let _ = app.global_shortcut().unregister(CLIP_SHORTCUT);
+    }
+}
+
+#[tauri::command]
+fn open_capture_permissions(kind: Option<String>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let target = if kind
+            .as_deref()
+            .map(|value| value.eq_ignore_ascii_case("microphone"))
+            .unwrap_or(false)
+        {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        } else {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        };
+        let status = Command::new("open")
+            .arg(target)
+            .status()
+            .map_err(|error| format!("Could not open System Settings: {}", error))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err("Could not open System Settings.".to_string())
+        };
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = kind;
+        Err("Capture permissions are only opened automatically on macOS.".to_string())
+    }
 }
 
 pub fn run() {
@@ -1406,31 +1473,22 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let forwarding_shortcut = Arc::new(AtomicBool::new(false));
-            let clip_shortcut_str = "Alt+Shift+X";
-            let forwarding_shortcut_for_handler = Arc::clone(&forwarding_shortcut);
-            app.global_shortcut().on_shortcut(
-                clip_shortcut_str,
-                move |app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        if forwarding_shortcut_for_handler.swap(false, Ordering::SeqCst) {
-                            return;
-                        }
-                        #[cfg(target_os = "macos")]
-                        if frontmost_app_is_browser() {
-                            let forwarding_shortcut = Arc::clone(&forwarding_shortcut_for_handler);
-                            forwarding_shortcut.store(true, Ordering::SeqCst);
-                            thread::spawn(move || {
-                                forward_clip_shortcut_to_frontmost_app();
-                                thread::sleep(Duration::from_millis(450));
-                                forwarding_shortcut.store(false, Ordering::SeqCst);
-                            });
-                            return;
-                        }
-                        let _ = app.emit("tray-start-screen-clip", true);
-                    }
-                },
-            )?;
+            let shortcut_registered = Arc::new(AtomicBool::new(false));
+            let app_handle = app.handle().clone();
+            set_desktop_clip_shortcut(
+                &app_handle,
+                !frontmost_app_is_browser(),
+                shortcut_registered.as_ref(),
+            );
+            let shortcut_registered_for_thread = Arc::clone(&shortcut_registered);
+            thread::spawn(move || loop {
+                set_desktop_clip_shortcut(
+                    &app_handle,
+                    !frontmost_app_is_browser(),
+                    shortcut_registered_for_thread.as_ref(),
+                );
+                thread::sleep(Duration::from_millis(350));
+            });
             let menu = MenuBuilder::new(app)
                 .text("toggle_window", "Show Annotated")
                 .text("quick_clip", "Start 90s Screen Clip")
@@ -1486,6 +1544,7 @@ pub fn run() {
             read_selected_text,
             show_app_window,
             start_detached_screen_clip,
+            open_capture_permissions,
             upload_clip_to_api,
             handle_auth_callback,
             open_auth_url,

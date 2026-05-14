@@ -609,6 +609,27 @@ kbd {
   border-bottom-color: #c0392b;
 }
 
+.recording-popup__error {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+}
+
+.recording-popup__permission {
+  justify-self: start;
+  padding: 0 0 4px;
+  border-bottom: 1px solid currentColor;
+  color: #171513;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recording-popup__permission:hover {
+  color: #c0392b;
+}
+
 .recording-popup__stop-icon {
   width: 9px;
   height: 9px;

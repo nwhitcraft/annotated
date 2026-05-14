@@ -322,6 +322,11 @@ export async function startDetachedScreenClip() {
   return invoke('start_detached_screen_clip');
 }
 
+export async function openCapturePermissions(kind = 'screen') {
+  if (!isTauri) return false;
+  return invoke('open_capture_permissions', { kind });
+}
+
 export async function extractPodcastAudio({ url, start = 0, end = 90 }, settings = {}) {
   if (!url) throw new Error('Podcast URL is required.');
   const startSec = Math.max(0, Number(start) || 0);
