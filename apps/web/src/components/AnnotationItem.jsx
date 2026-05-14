@@ -1,6 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
 import ActionRow from './ActionRow.jsx';
-import SourceType from './SourceType.jsx';
 import UserAvatar from './UserAvatar.jsx';
 import { API_ORIGIN } from '../lib/api.js';
 import { domainFromUrl, formatTime, timeAgo } from '../lib/format.js';
@@ -28,6 +27,18 @@ function isAudioPath(path) {
   return /\.(mp3|m4a|aac|wav|ogg|opus|weba)$/i.test(String(path || ''));
 }
 
+function displayDomain(value) {
+  return String(value || '')
+    .replace(/^www\./i, '')
+    .toUpperCase();
+}
+
+function sourceByline(annotation, domain) {
+  const sourceName = annotation.source_author || annotation.source_site_name || domain;
+  const sourceDate = annotation.source_published_at || annotation.published_at || annotation.created_at;
+  return [sourceName, sourceDate ? timeAgo(sourceDate) : ''].filter(Boolean).join(' · ');
+}
+
 export default function AnnotationItem({ annotation, expanded = false, canDelete = false, onDelete }) {
   const navigate = useNavigate();
   const domain = annotation.source_domain || domainFromUrl(annotation.source_url);
@@ -37,8 +48,10 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
   const hasMediaClip = Boolean(annotation.clip_media_path);
   const isAudioClip = hasMediaClip && (annotation.source_type === 'podcast' || isAudioPath(annotation.clip_media_path));
   const isVideoClip = hasMediaClip && !isAudioClip;
-  const isYouTubeClip = isYouTubeSource && hasMediaClip;
-  const displaySourceType = isYouTubeSource || isVideoClip ? 'video' : annotation.source_type;
+  const kind = annotation.annotation_type || 'Opinion';
+  const sourceType = isYouTubeSource || isVideoClip ? 'video' : annotation.source_type || 'article';
+  const sourceTitle = annotation.source_title || annotation.source_url || 'Untitled source';
+  const sourceMeta = sourceByline(annotation, domain);
   const author = {
     username: annotation.username,
     display_name: annotation.display_name,
@@ -55,68 +68,27 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
 
   return (
     <article className={`annotation-item ${expanded ? 'annotation-item-expanded' : ''}`} onClick={openDetail}>
-      <div className="annotation-byline">
+      <header className="annotation-card-author">
         <Link className="author-avatar-link" to={`/u/${annotation.username}`} onClick={(event) => event.stopPropagation()} aria-label={`Open ${annotation.display_name || annotation.username}'s profile`}>
-          <UserAvatar user={author} size="sm" />
+          <UserAvatar user={author} size="md" className="annotation-card-avatar" />
         </Link>
-        <div className="annotation-meta">
-          <Link to={`/u/${annotation.username}`} onClick={(event) => event.stopPropagation()}>
+        <div className="annotation-card-who">
+          <Link className="annotation-card-name" to={`/u/${annotation.username}`} onClick={(event) => event.stopPropagation()}>
             {annotation.display_name || annotation.username || 'Anonymous'}
           </Link>
-          <span>@{annotation.username || 'anon'}</span>
-          <span>{domain}</span>
-          <span>{timeAgo(annotation.created_at)}</span>
-          <span className="annotation-type-tag">{annotation.annotation_type || 'Opinion'}</span>
+          <span className="annotation-card-handle">
+            @{annotation.username || 'anon'}
+            <span className="annotation-dot">·</span>
+            {timeAgo(annotation.created_at)}
+          </span>
+        </div>
+        <div className="annotation-card-tags">
+          <span className="annotation-kind">{kind}</span>
           {annotation.status && annotation.status !== 'published' && (
             <span className={`annotation-status-tag ${annotation.status}`}>{annotation.status}</span>
           )}
-          <SourceType type={displaySourceType} />
         </div>
-      </div>
-
-      <div className="source-row">
-        <a
-          className="source-title"
-          href={annotation.source_url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {annotation.source_title || annotation.source_url}
-        </a>
-        {isVideoClip && (
-          <div className="source-media">
-            <video controls className="media-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-              <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'video')} />
-            </video>
-            {isYouTubeClip && (
-              <a
-                className="source-platform-link youtube-platform-link"
-                href={annotation.source_url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <span aria-hidden="true">▶</span>
-                Open on YouTube
-              </a>
-            )}
-          </div>
-        )}
-        {annotation.source_thumbnail && !isVideoClip && (
-          <a
-            className="source-thumbnail"
-            href={annotation.source_url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(event) => event.stopPropagation()}
-            aria-label={`Open source: ${annotation.source_title || domain}`}
-          >
-            <img src={annotation.source_thumbnail} alt="" />
-            <span>Open source</span>
-          </a>
-        )}
-      </div>
+      </header>
 
       <h2 className="annotation-headline">{annotation.commentary}</h2>
 
@@ -132,11 +104,56 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
         </p>
       )}
 
-      {isAudioClip && (
-        <audio controls className="audio-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'audio')} />
-        </audio>
-      )}
+      <div className={`source-card source-card-${sourceType}`} onClick={(event) => event.stopPropagation()}>
+        {isVideoClip ? (
+          <div className="source-card-media" aria-label="Video clip">
+            <video controls className="source-card-player" preload="metadata">
+              <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'video')} />
+            </video>
+          </div>
+        ) : isAudioClip ? (
+          <div className="source-card-media source-card-audio" aria-label="Audio clip">
+            <span>Audio clip attached</span>
+            <audio controls className="source-card-audio-player" preload="metadata">
+              <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'audio')} />
+            </audio>
+          </div>
+        ) : annotation.source_thumbnail ? (
+          <a
+            className="source-card-media source-card-image"
+            href={annotation.source_url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open source: ${sourceTitle}`}
+          >
+            <img src={annotation.source_thumbnail} alt="" />
+          </a>
+        ) : (
+          <a
+            className="source-card-media source-card-placeholder"
+            href={annotation.source_url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open source: ${sourceTitle}`}
+          >
+            <span>{displayDomain(domain).charAt(0) || 'A'}</span>
+          </a>
+        )}
+        <a
+          className="source-card-body"
+          href={annotation.source_url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open source: ${sourceTitle}`}
+        >
+          <span className="source-card-meta">
+            <span>{displayDomain(domain) || 'SOURCE'}</span>
+            <span className="source-card-external" aria-hidden="true">↗</span>
+          </span>
+          <strong className="source-card-title">{sourceTitle}</strong>
+          {sourceMeta && <span className="source-card-deck">{sourceMeta}</span>}
+        </a>
+      </div>
 
       <ActionRow annotation={annotation} onOpenComments={openComments} />
       {canDelete && (

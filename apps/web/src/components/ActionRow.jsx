@@ -1,6 +1,21 @@
 import { useState } from 'react';
 import { fileClaim, getAnnotationClaims, getUsername, toggleLike, toggleNoteworthy } from '../lib/api.js';
 
+function ActionIcon({ type }) {
+  const paths = {
+    credible: <path d="M4 12.5l5 5L20 6" />,
+    disagree: <path d="M6 6l12 12M18 6L6 18" />,
+    comments: <path d="M21 12a8 8 0 0 1-12 6.9L4 20l1.1-5A8 8 0 1 1 21 12Z" />,
+    claims: <path d="M12 3v18M5 8l7-5 7 5M5 8v8l7 5 7-5V8" />,
+  };
+
+  return (
+    <svg className="action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {paths[type]}
+    </svg>
+  );
+}
+
 export default function ActionRow({ annotation, onOpenComments }) {
   const [liked, setLiked] = useState(Boolean(annotation.liked));
   const [likes, setLikes] = useState(Number(annotation.like_count || 0));
@@ -81,21 +96,25 @@ export default function ActionRow({ annotation, onOpenComments }) {
   return (
     <>
       <div className="action-row" aria-label="Annotation actions">
-        <button className={liked ? 'is-active' : ''} onClick={like} aria-pressed={liked}>
+        <button className={`credible ${liked ? 'is-active' : ''}`} onClick={like} aria-pressed={liked}>
+          <ActionIcon type="credible" />
           <span>Credible</span>
-          {likes}
+          <span className="count">{likes}</span>
         </button>
-        <button className={noteworthy ? 'is-active' : ''} onClick={markNoteworthy} aria-pressed={noteworthy}>
+        <button className={`dispute ${noteworthy ? 'is-active' : ''}`} onClick={markNoteworthy} aria-pressed={noteworthy}>
+          <ActionIcon type="disagree" />
           <span>Disagree</span>
-          {noteworthyCount}
+          <span className="count">{noteworthyCount}</span>
         </button>
-        <button onClick={comments}>
+        <button className="comments-action" onClick={comments}>
+          <ActionIcon type="comments" />
           <span>Comments</span>
-          {annotation.comment_count || 0}
+          <span className="count">{annotation.comment_count || 0}</span>
         </button>
-        <button className="claim-count" onClick={openClaim}>
+        <button className="claims-action claim-count" onClick={openClaim}>
+          <ActionIcon type="claims" />
           <span>Claims</span>
-          {claimCount}
+          <span className="count">{claimCount}</span>
         </button>
       </div>
       {claimOpen && (
