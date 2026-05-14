@@ -845,7 +845,7 @@ function showComposer(rect) {
   composer.querySelector('.quote-annotation-bubble__button').addEventListener('click', () => postAnnotation(composer, 'published'));
 
   document.documentElement.append(composer);
-  positionComposer(composer, rect);
+  positionComposer(composer);
   composer.style.visibility = '';
   textarea.focus({ preventScroll: true });
 }
@@ -878,46 +878,22 @@ function mediaComposerSummary(clip) {
   `;
 }
 
-function positionComposer(composer, rect) {
+function positionComposer(composer) {
   const margin = 18;
-  const gap = 16;
-  const minUsableSpace = 150;
   const mediaMode = isMediaClip(activeClip);
   const width = Math.min(mediaMode ? 520 : 620, window.innerWidth - margin * 2);
-  const left = mediaMode
-    ? Math.max(margin, (window.innerWidth - width) / 2)
-    : Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
+  const left = Math.max(margin, (window.innerWidth - width) / 2);
 
   composer.style.width = `${width}px`;
   composer.style.maxHeight = '';
 
-  const measuredHeight = Math.min(composer.offsetHeight || 224, window.innerHeight - margin * 2);
-  if (mediaMode) {
-    const availableSpace = window.innerHeight - margin * 2;
-    const height = Math.min(measuredHeight, availableSpace, 260);
-    composer.style.left = `${left}px`;
-    composer.style.top = `${Math.max(margin, window.innerHeight - height - margin)}px`;
-    composer.style.maxHeight = `${height}px`;
-    return;
-  }
-
-  const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
-  const spaceAbove = rect.top - gap - margin;
-  let placeBelow = rect.top + rect.height / 2 < window.innerHeight / 2;
-  if (placeBelow && spaceBelow < minUsableSpace && spaceAbove > spaceBelow) placeBelow = false;
-  if (!placeBelow && spaceAbove < minUsableSpace && spaceBelow > spaceAbove) placeBelow = true;
-  const availableSpace = Math.max(minUsableSpace, placeBelow ? spaceBelow : spaceAbove);
-  const height = Math.min(measuredHeight, availableSpace);
-  const desiredTop = placeBelow ? rect.bottom + gap : rect.top - height - gap;
-  const top = clamp(desiredTop, margin, Math.max(margin, window.innerHeight - height - margin));
+  const availableSpace = Math.max(160, window.innerHeight - margin * 2);
+  const maxBubbleHeight = mediaMode ? 260 : 300;
+  const height = Math.min(composer.offsetHeight || 224, availableSpace, maxBubbleHeight);
 
   composer.style.left = `${left}px`;
-  composer.style.top = `${top}px`;
-  composer.style.maxHeight = `${availableSpace}px`;
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+  composer.style.top = `${Math.max(margin, window.innerHeight - height - margin)}px`;
+  composer.style.maxHeight = `${Math.min(availableSpace, maxBubbleHeight)}px`;
 }
 
 function updateAnchoredUi() {
@@ -941,7 +917,7 @@ function updateAnchoredUi() {
 
   setPaneStyles(rect);
   const composer = document.getElementById(COMPOSER_ID);
-  if (composer) positionComposer(composer, rect);
+  if (composer) positionComposer(composer);
 }
 
 function scheduleAnchoredUiUpdate() {
