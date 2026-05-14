@@ -979,8 +979,11 @@ async function postAnnotation(composer, status = 'published') {
     }
 
     button.textContent = 'Posted';
-    safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
+    errorEl.hidden = true;
+    errorEl.textContent = '';
+    pendingAnnotation = null;
     window.setTimeout(exitClippingMode, 600);
+    safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
   } catch (error) {
     composer.dataset.posting = 'false';
     button.disabled = false;
@@ -1097,9 +1100,13 @@ function formatClock(seconds) {
 }
 
 function safeSend(message) {
-  chrome.runtime.sendMessage(message, () => {
-    void chrome.runtime.lastError;
-  });
+  try {
+    chrome.runtime.sendMessage(message, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch {
+    // The annotation is already posted; side-panel refresh is best effort.
+  }
 }
 
 function detectPage() {
