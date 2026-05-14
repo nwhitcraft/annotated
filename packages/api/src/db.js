@@ -144,7 +144,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_annotations_user ON annotations(user_id);
   CREATE INDEX IF NOT EXISTS idx_annotations_created ON annotations(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_annotations_source_type ON annotations(source_type);
-  CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type);
   CREATE INDEX IF NOT EXISTS idx_comments_annotation ON comments(annotation_id);
   CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
   CREATE INDEX IF NOT EXISTS idx_likes_annotation ON likes(annotation_id);
@@ -199,6 +198,8 @@ for (const statement of [
     db.exec(statement);
   } catch { /* column already exists */ }
 }
+
+db.exec(`CREATE INDEX IF NOT EXISTS idx_annotations_type ON annotations(annotation_type)`);
 
 if (!annotationColumnsBeforeMigration.includes('status')) {
   db.exec(`
