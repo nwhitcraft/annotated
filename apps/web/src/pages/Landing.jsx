@@ -121,6 +121,11 @@ export default function Landing() {
           </article>
         ))}
       </section>
+
+      <footer className="landing-footer">
+        <Link to="/privacy">Privacy</Link>
+        <Link to="/terms">Terms</Link>
+      </footer>
     </div>
   );
 }

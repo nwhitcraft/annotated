@@ -13,6 +13,7 @@ import Onboarding from './pages/Onboarding.jsx';
 import OnboardingExtension from './pages/OnboardingExtension.jsx';
 import OnboardingTutorial from './pages/OnboardingTutorial.jsx';
 import Profile from './pages/Profile.jsx';
+import { PrivacyPolicy, TermsOfService } from './pages/LegalPage.jsx';
 import { checkAuth } from './lib/api.js';
 
 export default function App() {
@@ -25,6 +26,8 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/feed" element={<Feed />} />
         <Route path="/download" element={<Download />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route path="/a/:id" element={<AnnotationPage />} />
         <Route path="/u/:username" element={<Profile />} />
         <Route path="/new" element={<NewAnnotation />} />

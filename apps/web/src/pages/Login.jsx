@@ -58,7 +58,9 @@ export default function Login() {
         </div>
         {errorMessage && <p className="form-error">{errorMessage}</p>}
         <AuthButtons compact />
-        <footer>By continuing, you agree to Terms and Privacy.</footer>
+        <footer>
+          By continuing, you agree to <Link to="/terms">Terms</Link> and <Link to="/privacy">Privacy</Link>.
+        </footer>
       </section>
     </main>
   );
