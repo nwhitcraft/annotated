@@ -1695,20 +1695,90 @@ fn frontmost_source_context() -> Result<SourceContext, String> {
 
 const CLIP_SHORTCUT: &str = "Alt+Shift+X";
 
+fn trigger_desktop_clip_shortcut(app: &AppHandle) {
+    if app.get_webview_window("capture-controller").is_some() {
+        let _ = app.emit("desktop-screen-clip-shortcut-stop", true);
+    } else {
+        let _ = app.emit("tray-start-screen-clip", true);
+    }
+}
+
 fn register_desktop_clip_shortcut(app: &AppHandle) -> Result<(), String> {
     app.global_shortcut()
         .on_shortcut(CLIP_SHORTCUT, move |app, _shortcut, event| {
             if event.state != ShortcutState::Pressed {
                 return;
             }
-            if app.get_webview_window("capture-controller").is_some() {
-                let _ = app.emit("desktop-screen-clip-shortcut-stop", true);
-            } else {
-                let _ = app.emit("tray-start-screen-clip", true);
-            }
+            trigger_desktop_clip_shortcut(app);
         })
         .map_err(|error| error.to_string())
 }
+
+#[cfg(target_os = "macos")]
+fn register_macos_clip_event_tap(app: &AppHandle) {
+    let app = app.clone();
+    thread::spawn(move || {
+        use core_foundation::runloop::CFRunLoop;
+        use core_graphics::event::{
+            CallbackResult, CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions,
+            CGEventTapPlacement, CGEventType, EventField, KeyCode,
+        };
+
+        let callback = move |_proxy, event_type, event: &core_graphics::event::CGEvent| {
+            if matches!(
+                event_type,
+                CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput
+            ) {
+                return CallbackResult::Keep;
+            }
+
+            if !matches!(event_type, CGEventType::KeyDown | CGEventType::KeyUp) {
+                return CallbackResult::Keep;
+            }
+
+            let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE) as u16;
+            if keycode != KeyCode::ANSI_X {
+                return CallbackResult::Keep;
+            }
+
+            let flags = event.get_flags();
+            let has_clip_modifiers = flags.contains(CGEventFlags::CGEventFlagAlternate)
+                && flags.contains(CGEventFlags::CGEventFlagShift);
+            let has_conflicting_modifiers = flags.contains(CGEventFlags::CGEventFlagCommand)
+                || flags.contains(CGEventFlags::CGEventFlagControl);
+
+            if !has_clip_modifiers || has_conflicting_modifiers {
+                return CallbackResult::Keep;
+            }
+
+            if matches!(event_type, CGEventType::KeyDown)
+                && event.get_integer_value_field(EventField::KEYBOARD_EVENT_AUTOREPEAT) == 0
+            {
+                trigger_desktop_clip_shortcut(&app);
+            }
+
+            CallbackResult::Drop
+        };
+
+        let result = CGEventTap::with_enabled(
+            CGEventTapLocation::HID,
+            CGEventTapPlacement::HeadInsertEventTap,
+            CGEventTapOptions::Default,
+            vec![CGEventType::KeyDown, CGEventType::KeyUp],
+            callback,
+            || CFRunLoop::run_current(),
+        );
+
+        if result.is_err() {
+            eprintln!(
+                "Annotated could not install the macOS shortcut event tap. Enable Accessibility for Annotated and relaunch."
+            );
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn register_macos_clip_event_tap(_app: &AppHandle) {}
 
 #[tauri::command]
 fn open_capture_permissions(kind: Option<String>) -> Result<(), String> {
@@ -1748,6 +1818,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             register_desktop_clip_shortcut(app.handle())?;
+            register_macos_clip_event_tap(app.handle());
             let menu = MenuBuilder::new(app)
                 .text("toggle_window", "Show Annotated")
                 .text("quick_clip", "Start 90s Screen Clip")

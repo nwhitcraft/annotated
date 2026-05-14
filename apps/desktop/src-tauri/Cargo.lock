@@ -59,6 +59,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "core-foundation",
+ "core-graphics",
  "libc",
  "rusqlite",
  "serde",
