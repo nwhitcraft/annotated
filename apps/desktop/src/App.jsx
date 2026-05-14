@@ -167,14 +167,24 @@ export default function App() {
       try {
         const startUrls = await getCurrent();
         if (!cancelled && startUrls?.length) {
-          await connectCallback(startUrls[0]);
+          const callbackUrl = startUrls.find((url) => String(url).startsWith('annotated://callback'));
+          if (callbackUrl) await connectDeepLink(callbackUrl);
         }
         unlisten = await onOpenUrl((urls) => {
           const callbackUrl = urls.find((url) => String(url).startsWith('annotated://callback'));
-          if (callbackUrl) void connectCallback(callbackUrl);
+          if (callbackUrl) void connectDeepLink(callbackUrl);
         });
       } catch {
         // Browser preview and older dev builds do not expose deep-link events.
+      }
+    }
+
+    async function connectDeepLink(callbackUrl) {
+      try {
+        await connectCallback(callbackUrl);
+      } catch (error) {
+        setStatus(error.message || 'Could not finish desktop sign-in.');
+        setActiveView('settings');
       }
     }
 

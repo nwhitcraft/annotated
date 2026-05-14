@@ -5,6 +5,7 @@
   "windows": ["main", "capture-controller", "quick-composer"],
   "permissions": [
     "core:default",
+    "core:event:default",
     "deep-link:default"
   ]
 }
