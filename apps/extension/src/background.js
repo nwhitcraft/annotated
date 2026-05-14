@@ -61,22 +61,50 @@ async function openPanel(tabId) {
 }
 
 function sendToTab(tabId, message) {
-  if (!tabId) return;
+  if (!tabId) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        const error = chrome.runtime.lastError;
+        resolve(error ? null : (response || { ok: true }));
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function ensureContentScript(tabId) {
+  if (!tabId) return false;
+  const ready = await sendToTab(tabId, { type: 'PING' });
+  if (ready?.ok) return true;
+
   try {
-    chrome.tabs.sendMessage(tabId, message, () => {
-      try {
-        void chrome.runtime.lastError;
-      } catch {
-        // Tab content script belonged to a previous extension context.
-      }
+    await chrome.scripting.insertCSS({
+      target: { tabId },
+      files: ['src/content.css'],
     });
   } catch {
-    // Best effort only.
+    // CSS may already be present, or this page may reject extension injection.
   }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['src/content.js'],
+    });
+  } catch {
+    return false;
+  }
+
+  const injectedReady = await sendToTab(tabId, { type: 'PING' });
+  return Boolean(injectedReady?.ok);
 }
 
 function requestPageInfo(tabId) {
-  sendToTab(tabId, { type: 'REQUEST_PAGE_INFO' });
+  ensureContentScript(tabId).then((ready) => {
+    if (ready) sendToTab(tabId, { type: 'REQUEST_PAGE_INFO' });
+  });
 }
 
 chrome.action.onClicked.addListener((tab) => {
@@ -90,12 +118,13 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.commands.onCommand.addListener((command) => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
     const tab = tabs[0];
     if (!tab) return;
 
     if (command === 'start_clipping') {
-      sendToTab(tab.id, { type: 'START_CLIPPING' });
+      const ready = await ensureContentScript(tab.id);
+      if (ready) sendToTab(tab.id, { type: 'START_CLIPPING' });
       return;
     }
 
@@ -211,8 +240,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'START_CLIPPING_ACTIVE_TAB') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      sendToTab(tabs[0]?.id, { type: 'START_CLIPPING' });
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      const tabId = tabs[0]?.id;
+      const ready = await ensureContentScript(tabId);
+      if (ready) sendToTab(tabId, { type: 'START_CLIPPING' });
     });
   }
 });

@@ -3,9 +3,15 @@
 }
 
 .annotated-page-composer {
-  position: fixed;
-  z-index: 2147483647;
-  width: min(620px, calc(100vw - 36px));
+  position: fixed !important;
+  left: 50% !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: 18px !important;
+  z-index: 2147483647 !important;
+  width: min(620px, calc(100vw - 36px)) !important;
+  max-height: min(300px, calc(100vh - 36px)) !important;
+  transform: translateX(-50%) !important;
   animation: annotated-bubble-in 160ms ease-out;
 }
 

@@ -5,10 +5,12 @@
   "description": "Clip articles, videos, and podcasts. Add your take. Share to annotated.com.",
   "permissions": [
     "activeTab",
+    "scripting",
     "sidePanel",
     "storage"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://annotated-nwhitcraft.fly.dev/*",
     "http://localhost:3080/*",
     "http://127.0.0.1:3080/*"

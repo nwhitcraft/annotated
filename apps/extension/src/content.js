@@ -35,7 +35,11 @@ chrome.runtime.sendMessage({ type: 'GET_AUTH_STATE' }, (response) => {
 });
 
 // Listen for auth updates from background
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'PING') {
+    sendResponse({ ok: true });
+    return true;
+  }
   if (msg.type === 'START_CLIPPING') handleClippingShortcut('shortcut');
   if (msg.type === 'EXIT_CLIPPING') exitClippingMode();
   if (msg.type === 'REQUEST_PAGE_INFO') detectPage();
@@ -882,17 +886,17 @@ function positionComposer(composer) {
   const margin = 18;
   const mediaMode = isMediaClip(activeClip);
   const width = Math.min(mediaMode ? 520 : 620, window.innerWidth - margin * 2);
-  const left = Math.max(margin, (window.innerWidth - width) / 2);
 
   composer.style.width = `${width}px`;
-  composer.style.maxHeight = '';
+  composer.style.left = '50%';
+  composer.style.right = 'auto';
+  composer.style.top = 'auto';
+  composer.style.bottom = `${margin}px`;
+  composer.style.transform = 'translateX(-50%)';
 
   const availableSpace = Math.max(160, window.innerHeight - margin * 2);
   const maxBubbleHeight = mediaMode ? 260 : 300;
-  const height = Math.min(composer.offsetHeight || 224, availableSpace, maxBubbleHeight);
 
-  composer.style.left = `${left}px`;
-  composer.style.top = `${Math.max(margin, window.innerHeight - height - margin)}px`;
   composer.style.maxHeight = `${Math.min(availableSpace, maxBubbleHeight)}px`;
 }
 
