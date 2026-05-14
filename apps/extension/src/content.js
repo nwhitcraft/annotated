@@ -1027,7 +1027,33 @@ function finishPostedComposer(errorEl, button) {
   errorEl.hidden = true;
   errorEl.textContent = '';
   pendingAnnotation = null;
-  window.setTimeout(exitClippingMode, 250);
+  closePostedComposer();
+  requestAnimationFrame(closePostedComposer);
+  window.setTimeout(closePostedComposer, 150);
+}
+
+function closePostedComposer() {
+  clippingMode = false;
+  activeClip = null;
+  activeRange = null;
+  activeAnchorElement = null;
+  pendingAnnotation = null;
+  mediaPreparing = false;
+  window.clearTimeout(selectionTimer);
+  window.clearTimeout(mediaRetryTimer);
+  mediaRetryTimer = null;
+  if (trackingFrame) cancelAnimationFrame(trackingFrame);
+  trackingFrame = null;
+  document.documentElement.classList.remove('annotated-clipping-mode');
+  document.documentElement.classList.remove('annotated-media-recording-mode');
+  document.getElementById(OVERLAY_ID)?.remove();
+  document.getElementById(COMPOSER_ID)?.remove();
+  document.getElementById(RECORDING_BUBBLE_ID)?.remove();
+  try {
+    window.getSelection()?.removeAllRanges();
+  } catch {
+    // The post is already complete; selection cleanup is cosmetic.
+  }
 }
 
 async function attachMediaClip(annotationId, clip) {
