@@ -262,6 +262,9 @@ function renderState(state, options = {}) {
   const previousPageKey = pageIdentity(currentPage);
   const showLoading = options.showLoading !== false;
   if (!state) {
+    currentPage = null;
+    pendingPageUrl = '';
+    renderPageStatus();
     loadFeed({ showLoading: showLoading && !hasRenderedFeed() });
     return;
   }
