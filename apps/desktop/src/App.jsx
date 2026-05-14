@@ -9,8 +9,10 @@ import LibraryView from './components/LibraryView.jsx';
 import ProfileView from './components/ProfileView.jsx';
 import QuickClipOverlay from './components/QuickClipOverlay.jsx';
 import SettingsView from './components/SettingsView.jsx';
+import AccessibilityPrompt from './components/AccessibilityPrompt.jsx';
 import {
   addLocalComment,
+  checkAccessibilityPermission,
   checkAuth,
   clearToken,
   deleteAnnotation,
@@ -18,6 +20,7 @@ import {
   getCachedUser,
   listAnnotations,
   loadSettings,
+  openAccessibilitySettings,
   openAuthUrl,
   postAnnotation,
   readSelectedText,
@@ -53,6 +56,7 @@ export default function App() {
   const [screenStopIntent, setScreenStopIntent] = useState(0);
   const [profileKey, setProfileKey] = useState(getCachedUser()?.username || '');
   const [quickClip, setQuickClip] = useState(null);
+  const [showAccessibilityPrompt, setShowAccessibilityPrompt] = useState(false);
 
   function startScreenClip() {
     setEditing(null);
@@ -101,19 +105,40 @@ export default function App() {
       return;
     }
 
+    // Check accessibility permission before attempting text capture
+    let hasAccessibility = false;
     try {
-      const selected = String(await readSelectedText() || '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (selected) {
+      hasAccessibility = await checkAccessibilityPermission();
+    } catch {
+      // Non-macOS or Tauri unavailable — proceed to screen clip
+    }
+
+    if (hasAccessibility) {
+      try {
+        const selected = String(await readSelectedText() || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (selected) {
+          await showAppWindow();
+          setQuickClip({ quote: selected });
+          setStatus('Selection ready to annotate');
+          return;
+        }
+      } catch (error) {
+        console.warn('Selected text capture failed:', error);
+      }
+    } else {
+      // Show accessibility prompt if user hasn't dismissed it permanently
+      const dismissed = window.localStorage.getItem('annotated.accessibility_prompt_dismissed');
+      if (!dismissed) {
         await showAppWindow();
-        setQuickClip({ quote: selected });
-        setStatus('Selection ready to annotate');
+        setShowAccessibilityPrompt(true);
+        setStatus('Accessibility permission needed for text capture');
         return;
       }
-    } catch (error) {
-      console.warn('Selected text capture failed:', error);
     }
+
+    // Fallback: screen recording
     try {
       await startDetachedScreenClip();
       setStatus('Screen clip recording');
@@ -474,6 +499,24 @@ export default function App() {
           onStatus={setStatus}
         />
       )}
+
+      <AccessibilityPrompt
+        visible={showAccessibilityPrompt}
+        onOpenSettings={async () => {
+          try { await openAccessibilitySettings(); } catch {}
+          setShowAccessibilityPrompt(false);
+          setStatus('Open System Settings → Privacy & Security → Accessibility and enable Annotated');
+        }}
+        onDismiss={() => {
+          setShowAccessibilityPrompt(false);
+          setStatus('Text capture requires Accessibility permission. Using screen clip instead.');
+        }}
+        onDontShowAgain={() => {
+          window.localStorage.setItem('annotated.accessibility_prompt_dismissed', '1');
+          setShowAccessibilityPrompt(false);
+          setStatus('Accessibility prompt dismissed. Enable it later in System Settings if needed.');
+        }}
+      />
 
       <footer className="status-bar">
         <span>{status}</span>

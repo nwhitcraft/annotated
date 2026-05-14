@@ -6,5 +6,7 @@
   <string>Annotated records microphone audio only when you choose to include narration in a screen clip.</string>
   <key>NSScreenCaptureUsageDescription</key>
   <string>Annotated records your screen only when you start a desktop clip.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Annotated uses system automation to capture highlighted text from other applications when you use the annotation shortcut.</string>
 </dict>
 </plist>

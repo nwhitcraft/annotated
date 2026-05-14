@@ -312,6 +312,16 @@ export async function readSelectedText() {
   return invoke('read_selected_text');
 }
 
+export async function checkAccessibilityPermission() {
+  if (!isTauri) return true;
+  return invoke('check_accessibility_permission');
+}
+
+export async function openAccessibilitySettings() {
+  if (!isTauri) return;
+  return invoke('open_accessibility_settings');
+}
+
 export async function showAppWindow() {
   if (!isTauri) return true;
   return invoke('show_app_window');

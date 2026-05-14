@@ -14,6 +14,82 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use uuid::Uuid;
 
+#[cfg(target_os = "macos")]
+mod accessibility {
+    use core_foundation::base::{CFRelease, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+    use std::ffi::c_void;
+    use std::ptr;
+
+    type AXUIElementRef = *mut c_void;
+    type AXError = i32;
+    const K_AX_ERROR_SUCCESS: AXError = 0;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+        fn AXUIElementCopyAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: *mut *mut c_void,
+        ) -> AXError;
+        fn AXIsProcessTrusted() -> bool;
+    }
+
+    /// Returns true if the app has been granted Accessibility permission.
+    pub fn is_trusted() -> bool {
+        unsafe { AXIsProcessTrusted() }
+    }
+
+    /// Read selected text from the currently focused UI element in any app
+    /// using the macOS Accessibility API (AXSelectedText). Non-destructive —
+    /// does not touch the clipboard.
+    pub fn read_selected_text_ax() -> Option<String> {
+        unsafe {
+            let system_wide = AXUIElementCreateSystemWide();
+            if system_wide.is_null() {
+                return None;
+            }
+
+            // Get the focused UI element across all apps
+            let attr_focused = CFString::new("AXFocusedUIElement");
+            let mut focused_raw: *mut c_void = ptr::null_mut();
+            let err = AXUIElementCopyAttributeValue(
+                system_wide,
+                attr_focused.as_concrete_TypeRef(),
+                &mut focused_raw,
+            );
+            CFRelease(system_wide);
+            if err != K_AX_ERROR_SUCCESS || focused_raw.is_null() {
+                return None;
+            }
+
+            // Read AXSelectedText from that element
+            let attr_selected = CFString::new("AXSelectedText");
+            let mut selected_raw: *mut c_void = ptr::null_mut();
+            let err = AXUIElementCopyAttributeValue(
+                focused_raw,
+                attr_selected.as_concrete_TypeRef(),
+                &mut selected_raw,
+            );
+            CFRelease(focused_raw);
+            if err != K_AX_ERROR_SUCCESS || selected_raw.is_null() {
+                return None;
+            }
+
+            // Convert the CFString result to a Rust String
+            let cf_str = CFString::wrap_under_create_rule(selected_raw as CFStringRef);
+            let text = cf_str.to_string();
+            let trimmed = text.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct LocalComment {
     id: String,
@@ -1304,9 +1380,54 @@ fn start_detached_screen_clip(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn check_accessibility_permission() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        Ok(accessibility::is_trusted())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn open_accessibility_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .status()
+            .map_err(|e| format!("Could not open Accessibility settings: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn read_selected_text() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
+        // Primary: use the macOS Accessibility API (non-destructive, no clipboard touch)
+        if accessibility::is_trusted() {
+            if let Some(text) = accessibility::read_selected_text_ax() {
+                let mut selected = text;
+                if selected.chars().count() > 12_000 {
+                    selected = selected.chars().take(12_000).collect();
+                }
+                return Ok(selected);
+            }
+        }
+
+        // Fallback: clipboard-based Cmd+C simulation (for apps that don't expose AXSelectedText)
+        // Only attempt if we have accessibility permission (otherwise the keystroke is silently blocked)
+        if !accessibility::is_trusted() {
+            return Ok(String::new());
+        }
+
         let previous = Command::new("pbpaste")
             .output()
             .map(|output| output.stdout)
@@ -1325,12 +1446,20 @@ fn read_selected_text() -> Result<String, String> {
             .status()
             .map_err(|error| format!("Could not request selected text: {}", error))?;
 
-        thread::sleep(Duration::from_millis(160));
-        let copied = Command::new("pbpaste")
-            .output()
-            .map_err(|error| format!("Could not read selected text: {}", error))?
-            .stdout;
+        // Retry loop: try at 200ms, then 400ms (some apps are slow to update clipboard)
+        let mut selected = String::new();
+        for delay_ms in [200, 400] {
+            thread::sleep(Duration::from_millis(delay_ms));
+            if let Ok(output) = Command::new("pbpaste").output() {
+                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !text.is_empty() && text != sentinel {
+                    selected = text;
+                    break;
+                }
+            }
+        }
 
+        // Restore original clipboard
         if let Ok(mut child) = Command::new("pbcopy").stdin(Stdio::piped()).spawn() {
             if let Some(mut stdin) = child.stdin.take() {
                 let _ = stdin.write_all(&previous);
@@ -1338,18 +1467,13 @@ fn read_selected_text() -> Result<String, String> {
             let _ = child.wait();
         }
 
-        if !copy_status.success() {
-            return Ok(String::new());
-        }
-
-        let mut selected = String::from_utf8_lossy(&copied).trim().to_string();
-        if selected.is_empty() || selected == sentinel {
+        if !copy_status.success() || selected.is_empty() {
             return Ok(String::new());
         }
         if selected.chars().count() > 12_000 {
             selected = selected.chars().take(12_000).collect();
         }
-        return Ok(selected);
+        Ok(selected)
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -1426,6 +1550,8 @@ pub fn run() {
             cancel_screen_clip,
             screen_clip_status,
             read_selected_text,
+            check_accessibility_permission,
+            open_accessibility_settings,
             show_app_window,
             start_detached_screen_clip,
             upload_clip_to_api,
