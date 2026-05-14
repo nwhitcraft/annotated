@@ -74,6 +74,17 @@ let activeAnchorElement = null;
 let mediaRetryTimer = null;
 let lastShortcutAt = 0;
 
+const MEDIA_UI_SELECTORS = [
+  '[data-testid="now-playing-widget"]',
+  '[data-testid="now-playing-bar"]',
+  '[data-testid="playback-controls"]',
+  '[data-testid="control-button-playpause"]',
+  '[aria-label*="Now playing" i]',
+  'footer',
+  'audio[controls]',
+  'video',
+];
+
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
   if (/spotify\.com|podcasts\.apple\.com|music\.apple\.com|overcast\.fm|pocketcasts|castbox|podbean|anchor\.fm|podcasts\.google/i.test(url)) return 'podcast';
@@ -263,6 +274,7 @@ function cancelMediaRecording() {
   } catch {
     // best-effort cancellation
   }
+  window.clearTimeout(session.captureRetryTimer);
   stopCaptureTracks(session);
   mediaSession = null;
   document.getElementById(RECORDING_BUBBLE_ID)?.remove();
@@ -275,8 +287,7 @@ function startMediaRecording(clip, media) {
   document.getElementById(COMPOSER_ID)?.remove();
   document.getElementById(OVERLAY_ID)?.remove();
   document.documentElement.classList.add('annotated-media-recording-mode');
-  const rect = media.element.getBoundingClientRect();
-  createOverlay(rect && rect.width && rect.height ? rect : centerRect());
+  createOverlay(mediaAnchorRect(media.element));
 
   mediaSession = {
     clip,
@@ -289,6 +300,7 @@ function startMediaRecording(clip, media) {
     mimeType: '',
     recorder: null,
     captureStream: null,
+    captureRetryTimer: null,
     intervalId: null,
     stopping: false,
     captureError: '',
@@ -301,13 +313,14 @@ function startMediaRecording(clip, media) {
   updateRecordingBubble();
 }
 
-function startVideoCapture(session) {
+function startVideoCapture(session, attempt = 0) {
   try {
     const captureStream = session.element.captureStream?.() || session.element.mozCaptureStream?.();
     if (!captureStream) throw new Error('captureStream is unavailable for this video');
     if (!captureStream.getVideoTracks().length) throw new Error('No video track available for recording');
 
     session.captureStream = captureStream;
+    session.captureError = '';
     const mimeType = pickVideoMimeType();
     const recorderOptions = {
       videoBitsPerSecond: 1_200_000,
@@ -327,17 +340,20 @@ function startVideoCapture(session) {
 
     recorder.start(1000);
   } catch (error) {
+    if (retryMediaCapture(session, () => startVideoCapture(session, attempt + 1), attempt)) return;
     session.captureError = error.message || 'Recording unavailable';
     stopCaptureTracks(session);
   }
 }
 
-function startAudioCapture(session) {
+function startAudioCapture(session, attempt = 0) {
   try {
     const captureStream = session.element.captureStream?.() || session.element.mozCaptureStream?.();
     if (!captureStream) throw new Error('captureStream is unavailable for this audio');
+    if (!captureStream.getAudioTracks().length) throw new Error('No audio track available for recording');
 
     session.captureStream = captureStream;
+    session.captureError = '';
     const mimeType = pickAudioMimeType();
     const recorderOptions = {
       audioBitsPerSecond: 64_000,
@@ -357,9 +373,19 @@ function startAudioCapture(session) {
 
     recorder.start(1000);
   } catch (error) {
+    if (retryMediaCapture(session, () => startAudioCapture(session, attempt + 1), attempt)) return;
     session.captureError = error.message || 'Audio recording unavailable';
     stopCaptureTracks(session);
   }
+}
+
+function retryMediaCapture(session, retry, attempt) {
+  if (mediaSession !== session || session.stopping || attempt >= 30) return false;
+  session.captureError = 'Waiting for media track...';
+  stopCaptureTracks(session);
+  window.clearTimeout(session.captureRetryTimer);
+  session.captureRetryTimer = window.setTimeout(retry, 100);
+  return true;
 }
 
 function pickVideoMimeType() {
@@ -499,6 +525,7 @@ async function stopMediaRecording(reason) {
     ? Math.min(current, session.startSec + SHORT_CLIP_SECONDS)
     : session.startSec + elapsed;
 
+  window.clearTimeout(session.captureRetryTimer);
   await stopVideoCapture(session);
   stopCaptureTracks(session);
 
@@ -520,8 +547,7 @@ async function stopMediaRecording(reason) {
   document.documentElement.classList.remove('annotated-media-recording-mode');
   document.getElementById(RECORDING_BUBBLE_ID)?.remove();
 
-  const rect = session.element.getBoundingClientRect();
-  showComposer(rect && rect.width ? rect : centerRect());
+  showComposer(mediaAnchorRect(session.element));
 }
 
 async function stopVideoCapture(session) {
@@ -557,6 +583,35 @@ function isAnnotatedAppPage() {
 
 function stopCaptureTracks(session) {
   for (const track of session.captureStream?.getTracks?.() || []) track.stop();
+  session.captureStream = null;
+}
+
+function mediaAnchorRect(mediaElement) {
+  const mediaRect = visibleRect(mediaElement);
+  if (mediaRect) return mediaRect;
+
+  for (const selector of MEDIA_UI_SELECTORS) {
+    for (const element of document.querySelectorAll(selector)) {
+      if (element === mediaElement) continue;
+      const rect = visibleRect(element);
+      if (rect) return rect;
+    }
+  }
+
+  return centerRect();
+}
+
+function visibleRect(element) {
+  if (!element?.getBoundingClientRect) return null;
+  const rect = element.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return null;
+  return {
+    left: Math.max(0, rect.left),
+    top: Math.max(0, rect.top),
+    width: Math.min(window.innerWidth, rect.right) - Math.max(0, rect.left),
+    height: Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top),
+  };
 }
 
 function createOverlay(rect) {
@@ -760,6 +815,7 @@ function positionComposer(composer, rect) {
 function updateAnchoredUi() {
   trackingFrame = null;
   if (mediaSession) {
+    setPaneStyles(mediaAnchorRect(mediaSession.element));
     positionRecordingBubble();
     return;
   }
@@ -767,7 +823,7 @@ function updateAnchoredUi() {
 
   const rect = activeRange
     ? rectFromRange(activeRange)
-    : activeAnchorElement?.getBoundingClientRect();
+    : mediaAnchorRect(activeAnchorElement);
   if (!rect) return;
 
   setPaneStyles(rect);
@@ -842,33 +898,28 @@ async function postAnnotation(composer, status = 'published') {
 }
 
 async function attachMediaClip(annotationId, clip) {
-  if (clip.sourceType === 'podcast') {
-    try {
-      await attachSourceClip(annotationId, clip);
-      return;
-    } catch (sourceError) {
-      if (!clip.recordingBlob?.size) throw sourceError;
-    }
-  }
-
   if (clip.recordingBlob?.size) {
-    const form = new FormData();
-    form.append('clip', clip.recordingBlob, `annotated-${annotationId}.webm`);
-    form.append('start', String(clip.clipStartSec ?? 0));
-    form.append('end', String(clip.clipEndSec ?? 0));
-    form.append('duration', String(clip.mediaDurationS ?? 0));
-    form.append('source_type', clip.sourceType || 'video');
-    const headers = {};
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    await fetchWithRetry(() => fetch(`${API_BASE}/api/annotations/${encodeURIComponent(annotationId)}/clip-upload`, {
-      method: 'POST',
-      headers,
-      body: form,
-    }));
+    await uploadRecordedClip(annotationId, clip);
     return;
   }
 
   await attachSourceClip(annotationId, clip);
+}
+
+async function uploadRecordedClip(annotationId, clip) {
+  const form = new FormData();
+  form.append('clip', clip.recordingBlob, `annotated-${annotationId}.webm`);
+  form.append('start', String(clip.clipStartSec ?? 0));
+  form.append('end', String(clip.clipEndSec ?? 0));
+  form.append('duration', String(clip.mediaDurationS ?? 0));
+  form.append('source_type', clip.sourceType || 'video');
+  const headers = {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  await fetchWithRetry(() => fetch(`${API_BASE}/api/annotations/${encodeURIComponent(annotationId)}/clip-upload`, {
+    method: 'POST',
+    headers,
+    body: form,
+  }));
 }
 
 async function attachSourceClip(annotationId, clip) {
