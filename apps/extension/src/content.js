@@ -714,10 +714,11 @@ function showComposer(rect) {
     <textarea
       id="annotated-page-commentary"
       class="quote-annotation-bubble__textarea"
-      rows="4"
+      rows="3"
       maxlength="${MAX_COMMENTARY_LENGTH}"
       placeholder="Write your take…"
     ></textarea>
+    <p class="quote-annotation-bubble__error" hidden></p>
     <div class="quote-annotation-bubble__actions">
       <span class="quote-annotation-bubble__counter">0/${MAX_COMMENTARY_LENGTH}</span>
       <button class="quote-annotation-bubble__button" type="button">Annotate</button>
@@ -738,8 +739,11 @@ function showComposer(rect) {
 
   const textarea = composer.querySelector('textarea');
   const counter = composer.querySelector('.quote-annotation-bubble__counter');
+  const error = composer.querySelector('.quote-annotation-bubble__error');
   textarea.addEventListener('input', () => {
     counter.textContent = `${textarea.value.length}/${MAX_COMMENTARY_LENGTH}`;
+    error.hidden = true;
+    error.textContent = '';
   });
 
   textarea.addEventListener('keydown', (event) => {
@@ -789,13 +793,25 @@ function positionComposer(composer, rect) {
   const margin = 18;
   const gap = 16;
   const minUsableSpace = 150;
-  const width = Math.min(620, window.innerWidth - margin * 2);
-  const left = Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
+  const mediaMode = isMediaClip(activeClip);
+  const width = Math.min(mediaMode ? 520 : 620, window.innerWidth - margin * 2);
+  const left = mediaMode
+    ? Math.max(margin, (window.innerWidth - width) / 2)
+    : Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
 
   composer.style.width = `${width}px`;
   composer.style.maxHeight = '';
 
   const measuredHeight = Math.min(composer.offsetHeight || 224, window.innerHeight - margin * 2);
+  if (mediaMode) {
+    const availableSpace = window.innerHeight - margin * 2;
+    const height = Math.min(measuredHeight, availableSpace, 260);
+    composer.style.left = `${left}px`;
+    composer.style.top = `${Math.max(margin, window.innerHeight - height - margin)}px`;
+    composer.style.maxHeight = `${height}px`;
+    return;
+  }
+
   const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
   const spaceAbove = rect.top - gap - margin;
   let placeBelow = rect.top + rect.height / 2 < window.innerHeight / 2;
@@ -839,10 +855,22 @@ function scheduleAnchoredUiUpdate() {
 async function postAnnotation(composer, status = 'published') {
   const textarea = composer.querySelector('textarea');
   const button = composer.querySelector('.quote-annotation-bubble__button');
+  const errorEl = composer.querySelector('.quote-annotation-bubble__error');
   const commentary = textarea.value.trim();
-  if (!commentary || !activeClip) return;
-  if (commentary.length > MAX_COMMENTARY_LENGTH) return;
+  if (composer.dataset.posting === 'true') return;
+  if (!activeClip) return;
+  if (!commentary) {
+    showComposerError(errorEl, 'Write a comment before annotating.');
+    return;
+  }
+  if (commentary.length > MAX_COMMENTARY_LENGTH) {
+    showComposerError(errorEl, `Keep commentary under ${MAX_COMMENTARY_LENGTH} characters.`);
+    return;
+  }
 
+  composer.dataset.posting = 'true';
+  errorEl.hidden = true;
+  errorEl.textContent = '';
   button.disabled = true;
   button.textContent = 'Posting';
 
@@ -880,7 +908,8 @@ async function postAnnotation(composer, status = 'published') {
       button.textContent = 'Attaching clip';
       try {
         await attachMediaClip(data.id, activeClip);
-      } catch {
+      } catch (error) {
+        showComposerError(errorEl, `Posted, but clip upload failed: ${humanError(error)}`);
         button.textContent = 'Posted without clip';
         safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
         window.setTimeout(exitClippingMode, 1200);
@@ -891,10 +920,22 @@ async function postAnnotation(composer, status = 'published') {
     button.textContent = 'Posted';
     safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
     window.setTimeout(exitClippingMode, 600);
-  } catch {
+  } catch (error) {
+    composer.dataset.posting = 'false';
     button.disabled = false;
-    button.textContent = 'Error - try again';
+    button.textContent = 'Try again';
+    showComposerError(errorEl, humanError(error));
   }
+}
+
+function showComposerError(errorEl, message) {
+  if (!errorEl) return;
+  errorEl.textContent = message || 'Something went wrong. Try again.';
+  errorEl.hidden = false;
+}
+
+function humanError(error) {
+  return error?.message || 'Something went wrong. Try again.';
 }
 
 async function attachMediaClip(annotationId, clip) {
