@@ -1,5 +1,5 @@
-const API_BASE = 'http://localhost:3080';
-const WEB_BASE = 'http://localhost:3090';
+const API_BASE = 'https://annotated-nwhitcraft.fly.dev';
+const WEB_BASE = 'https://annotated-nwhitcraft.fly.dev';
 
 let currentPage = null;
 let authToken = '';

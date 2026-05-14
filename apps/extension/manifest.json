@@ -9,6 +9,7 @@
     "storage"
   ],
   "host_permissions": [
+    "https://annotated-nwhitcraft.fly.dev/*",
     "http://localhost:3080/*",
     "http://127.0.0.1:3080/*"
   ],

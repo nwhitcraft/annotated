@@ -1,6 +1,6 @@
 const stateByTab = new Map();
 const storageArea = chrome.storage.session || chrome.storage.local;
-const WEB_BASE = 'http://localhost:3090';
+const WEB_BASE = 'https://annotated-nwhitcraft.fly.dev';
 
 function tabKey(tabId) {
   return `tab:${tabId}`;

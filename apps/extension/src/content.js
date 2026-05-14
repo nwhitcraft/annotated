@@ -1,7 +1,9 @@
 // Content script — shortcut-driven clipping mode, source metadata, and media time.
 
-const API_BASE = 'http://localhost:3080';
-const WEB_BASE = 'http://localhost:3090';
+const API_BASE = 'https://annotated-nwhitcraft.fly.dev';
+const WEB_BASE = 'https://annotated-nwhitcraft.fly.dev';
+const LOCAL_API_BASE = 'http://localhost:3080';
+const LOCAL_WEB_BASE = 'http://localhost:3090';
 const COMPOSER_ID = 'annotated-page-composer';
 const OVERLAY_ID = 'annotated-clipping-overlay';
 const RECORDING_BUBBLE_ID = 'annotated-recording-bubble';
@@ -48,8 +50,8 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-// Auth bridge: on localhost pages, listen for JWT handoff from web app
-if (window.location.origin === WEB_BASE || window.location.origin === API_BASE) {
+// Auth bridge: on Annotated pages, listen for JWT handoff from web app.
+if ([WEB_BASE, API_BASE, LOCAL_WEB_BASE, LOCAL_API_BASE].includes(window.location.origin)) {
   window.postMessage({ type: 'ANNOTATED_EXTENSION_READY' }, window.location.origin);
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
@@ -564,6 +566,8 @@ function isAnnotatedAppPage() {
   const hostname = window.location.hostname.replace(/^www\./, '');
   return window.location.origin === WEB_BASE
     || window.location.origin === API_BASE
+    || window.location.origin === LOCAL_WEB_BASE
+    || window.location.origin === LOCAL_API_BASE
     || hostname === 'annotated.com';
 }
 
