@@ -23,29 +23,29 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/extension-auth" element={<ExtensionAuth />} />
-      <Route element={<Layout />}>
-        <Route path="/feed" element={<Feed />} />
-        <Route path="/download" element={<Download />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/terms" element={<TermsOfService />} />
-        <Route path="/a/:id" element={<AnnotationPage />} />
-        <Route path="/u/:username" element={<Profile />} />
-        <Route path="/new" element={<NewAnnotation />} />
-        <Route element={<OnboardingGate />}>
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route element={<AuthGate />}>
+        <Route element={<Layout />}>
+          <Route path="/feed" element={<Feed />} />
+          <Route path="/download" element={<Download />} />
+          <Route path="/a/:id" element={<AnnotationPage />} />
+          <Route path="/u/:username" element={<Profile />} />
+          <Route path="/new" element={<NewAnnotation />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/onboarding/extension" element={<OnboardingExtension />} />
           <Route path="/onboarding/tutorial" element={<OnboardingTutorial />} />
+          <Route path="/admin/claims" element={<AdminClaims />} />
+          <Route path="*" element={<Feed />} />
         </Route>
-        <Route path="/admin/claims" element={<AdminClaims />} />
-        <Route path="*" element={<Feed />} />
       </Route>
     </Routes>
   );
 }
 
-function OnboardingGate() {
+function AuthGate() {
   const location = useLocation();
-  const [state, setState] = useState({ loading: true, allowed: false, unauthorized: false });
+  const [state, setState] = useState({ loading: true, user: null, unauthorized: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +53,7 @@ function OnboardingGate() {
       if (cancelled) return;
       setState({
         loading: false,
-        allowed: !result.error && (!result.onboardingCompleted || location.pathname !== '/onboarding'),
+        user: result.user || null,
         unauthorized: Boolean(result.error),
       });
     });
@@ -74,6 +74,11 @@ function OnboardingGate() {
   }
 
   if (state.unauthorized) return <Navigate to="/login" replace />;
-  if (!state.allowed) return <Navigate to="/feed" replace />;
+  if (!state.user?.onboarding_completed && !location.pathname.startsWith('/onboarding')) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  if (state.user?.onboarding_completed && location.pathname === '/onboarding') {
+    return <Navigate to="/feed" replace />;
+  }
   return <Outlet />;
 }
