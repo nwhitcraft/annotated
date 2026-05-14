@@ -23,6 +23,18 @@ function cleanBaseUrl(value, fallback) {
   return base.replace(/\/api$/, '').replace(/\/$/, '');
 }
 
+function isLocalDevEndpoint(value) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(String(value || '').trim());
+}
+
+function productionSafeUrl(value, fallback) {
+  const cleaned = cleanBaseUrl(value, fallback);
+  if (isTauri && fallback === PRODUCTION_ORIGIN && isLocalDevEndpoint(cleaned)) {
+    return fallback;
+  }
+  return cleaned;
+}
+
 const DEFAULT_API_ENDPOINT = cleanBaseUrl(
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL,
   PRODUCTION_ORIGIN,
@@ -516,12 +528,17 @@ export async function loadSettings() {
   const loaded = isTauri
     ? await invoke('load_settings')
     : JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}');
+  const apiEndpoint = productionSafeUrl(loaded?.apiEndpoint, defaultSettings.apiEndpoint);
+  const frontendUrl = productionSafeUrl(loaded?.frontendUrl, defaultSettings.frontendUrl);
   cachedSettings = {
     ...defaultSettings,
     ...loaded,
-    apiEndpoint: cleanBaseUrl(loaded?.apiEndpoint, defaultSettings.apiEndpoint),
-    frontendUrl: cleanBaseUrl(loaded?.frontendUrl, defaultSettings.frontendUrl),
+    apiEndpoint,
+    frontendUrl,
   };
+  if (isTauri && (loaded?.apiEndpoint !== apiEndpoint || loaded?.frontendUrl !== frontendUrl)) {
+    await invoke('save_settings', { settings: cachedSettings }).catch(() => {});
+  }
   return cachedSettings;
 }
 
