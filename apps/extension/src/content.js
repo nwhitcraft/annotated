@@ -76,7 +76,7 @@ let mediaRetryTimer = null;
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
-  if (/spotify\.com|podcasts\.apple\.com|overcast\.fm|pocketcasts|castbox|podbean|anchor\.fm|podcasts\.google/i.test(url)) return 'podcast';
+  if (/spotify\.com|podcasts\.apple\.com|music\.apple\.com|overcast\.fm|pocketcasts|castbox|podbean|anchor\.fm|podcasts\.google/i.test(url)) return 'podcast';
   if (/\.mp3$|\.m4a$|\.wav$|\/audio\//i.test(url)) return 'podcast';
   return 'article';
 }
@@ -116,9 +116,13 @@ function cssEscape(value) {
   return String(value).replace(/["\\]/g, '\\$&');
 }
 
-function currentMedia() {
+function isKnownMediaPage(url = window.location.href) {
+  return /youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts|spotify\.com|podcasts\.apple\.com|music\.apple\.com/i.test(url);
+}
+
+function currentMedia({ requireReady = true } = {}) {
   const media = [...document.querySelectorAll('video, audio')]
-    .filter((item) => Number.isFinite(item.currentTime) && item.readyState > 0)
+    .filter((item) => Number.isFinite(item.currentTime) && (!requireReady || item.readyState > 0))
     .sort((a, b) => mediaScore(b) - mediaScore(a))[0];
   if (!media) return null;
 
@@ -166,13 +170,14 @@ function clipFromSelection(openPanel = false) {
   };
 }
 
-function clipFromMedia(openPanel = false) {
+function clipFromMedia(openPanel = false, options = {}) {
   const page = getPageInfo();
-  const media = currentMedia();
+  const knownMediaPage = options.knownMediaPage ?? isKnownMediaPage(page.pageUrl || page.url);
+  const media = currentMedia({ requireReady: !knownMediaPage });
   if (!media) return null;
-  if (page.sourceType === 'article' && !media.isPlaying) return null;
+  if (page.sourceType === 'article' && !media.isPlaying && !knownMediaPage) return null;
 
-  const sourceType = page.sourceType === 'article'
+  const sourceType = page.sourceType === 'article' || (knownMediaPage && media.isVideo)
     ? (media.isVideo ? 'video' : 'podcast')
     : page.sourceType;
 
@@ -197,6 +202,8 @@ function clipFromMedia(openPanel = false) {
 
 function enterClippingMode() {
   if (isAnnotatedAppPage()) return;
+  window.clearTimeout(mediaRetryTimer);
+  mediaRetryTimer = null;
 
   if (mediaSession) {
     void stopMediaRecording('shortcut');
@@ -468,9 +475,10 @@ function positionRecordingBubble() {
 
 function startMediaRecordingFromPageWithRetry(attempt = 0) {
   if (!clippingMode || mediaSession || activeClip) return;
-  const mediaClip = clipFromMedia(false);
+  const knownMediaPage = isKnownMediaPage();
+  const mediaClip = clipFromMedia(false, { knownMediaPage });
   if (mediaClip) {
-    const media = currentMedia();
+    const media = currentMedia({ requireReady: !knownMediaPage });
     if (media) {
       window.clearTimeout(mediaRetryTimer);
       mediaRetryTimer = null;
@@ -480,10 +488,10 @@ function startMediaRecordingFromPageWithRetry(attempt = 0) {
   }
 
   const page = getPageInfo();
-  const shouldRetryMedia = page.sourceType === 'youtube' || page.sourceType === 'podcast' || /youtube\.com|youtu\.be|spotify\.com|podcasts\.apple\.com/i.test(window.location.href);
-  if (!shouldRetryMedia || attempt >= 10) return;
+  const shouldRetryMedia = knownMediaPage || page.sourceType === 'youtube' || page.sourceType === 'podcast';
+  if (!shouldRetryMedia || attempt >= 30) return;
   window.clearTimeout(mediaRetryTimer);
-  mediaRetryTimer = window.setTimeout(() => startMediaRecordingFromPageWithRetry(attempt + 1), 120);
+  mediaRetryTimer = window.setTimeout(() => startMediaRecordingFromPageWithRetry(attempt + 1), 100);
 }
 
 async function stopMediaRecording(reason) {

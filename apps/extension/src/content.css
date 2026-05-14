@@ -13,9 +13,9 @@
   position: fixed;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(86px, 1fr) auto;
-  gap: 12px;
-  padding: 24px 26px 22px;
+  grid-template-rows: auto auto auto;
+  gap: 8px;
+  padding: 22px 24px 18px;
   border: 1px solid #deded9;
   border-radius: 16px;
   background: rgba(255, 255, 253, 0.96);
@@ -45,7 +45,7 @@
 
 .quote-annotation-bubble__textarea {
   width: 100% !important;
-  min-height: 86px !important;
+  min-height: 72px !important;
   padding: 0 !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -139,6 +139,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  margin-top: 2px;
 }
 
 .quote-annotation-bubble__counter {
