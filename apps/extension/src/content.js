@@ -19,6 +19,8 @@ const AUDIO_MIME_TYPES = [
   'audio/webm;codecs=opus',
   'audio/webm',
 ];
+const MEDIA_DETECTION_RETRY_MS = 100;
+const MEDIA_DETECTION_ATTEMPTS = 60;
 
 let lastUrl = window.location.href;
 let authToken = '';
@@ -72,7 +74,9 @@ let selectedType = 'Opinion';
 let mediaSession = null;
 let activeAnchorElement = null;
 let mediaRetryTimer = null;
+let mediaPreparing = false;
 let lastShortcutAt = 0;
+let pendingAnnotation = null;
 
 const MEDIA_UI_SELECTORS = [
   '[data-testid="now-playing-widget"]',
@@ -188,9 +192,11 @@ function clipFromMedia(openPanel = false, options = {}) {
   if (!media) return null;
   if (page.sourceType === 'article' && !media.isPlaying && !knownMediaPage) return null;
 
-  const sourceType = page.sourceType === 'article'
-    ? (media.isVideo ? 'video' : 'podcast')
-    : page.sourceType;
+  const pageUrl = `${page.pageUrl || ''} ${page.url || ''}`;
+  let sourceType = page.sourceType;
+  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(pageUrl)) sourceType = 'youtube';
+  else if (/spotify\.com|podcasts\.apple\.com|music\.apple\.com/i.test(pageUrl)) sourceType = 'podcast';
+  else if (sourceType === 'article') sourceType = media.isVideo ? 'video' : 'podcast';
 
   return {
     type: 'TEXT_SELECTED',
@@ -220,6 +226,8 @@ function handleClippingShortcut(reason = 'shortcut') {
     void stopMediaRecording(reason);
     return;
   }
+
+  if (mediaPreparing) return;
 
   enterClippingMode();
 }
@@ -251,9 +259,11 @@ function exitClippingMode() {
   activeClip = null;
   activeRange = null;
   activeAnchorElement = null;
+  pendingAnnotation = null;
   window.clearTimeout(selectionTimer);
   window.clearTimeout(mediaRetryTimer);
   mediaRetryTimer = null;
+  mediaPreparing = false;
   if (trackingFrame) cancelAnimationFrame(trackingFrame);
   trackingFrame = null;
   document.documentElement.classList.remove('annotated-clipping-mode');
@@ -282,6 +292,7 @@ function cancelMediaRecording() {
 }
 
 function startMediaRecording(clip, media) {
+  mediaPreparing = false;
   activeRange = null;
   activeAnchorElement = media.element;
   document.getElementById(COMPOSER_ID)?.remove();
@@ -308,7 +319,7 @@ function startMediaRecording(clip, media) {
 
   if (media.isVideo) startVideoCapture(mediaSession);
   else startAudioCapture(mediaSession);
-  showRecordingBubble();
+  showRecordingBubble('recording');
   mediaSession.intervalId = window.setInterval(updateRecordingBubble, 250);
   updateRecordingBubble();
 }
@@ -380,11 +391,11 @@ function startAudioCapture(session, attempt = 0) {
 }
 
 function retryMediaCapture(session, retry, attempt) {
-  if (mediaSession !== session || session.stopping || attempt >= 30) return false;
+  if (mediaSession !== session || session.stopping || attempt >= MEDIA_DETECTION_ATTEMPTS) return false;
   session.captureError = 'Waiting for media track...';
   stopCaptureTracks(session);
   window.clearTimeout(session.captureRetryTimer);
-  session.captureRetryTimer = window.setTimeout(retry, 100);
+  session.captureRetryTimer = window.setTimeout(retry, MEDIA_DETECTION_RETRY_MS);
   return true;
 }
 
@@ -398,25 +409,28 @@ function pickAudioMimeType() {
   return AUDIO_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) || '';
 }
 
-function showRecordingBubble() {
+function showRecordingBubble(state = 'recording') {
   document.getElementById(RECORDING_BUBBLE_ID)?.remove();
   const bubble = document.createElement('section');
   bubble.id = RECORDING_BUBBLE_ID;
-  bubble.className = 'annotated-recording-bubble';
+  bubble.className = `annotated-recording-bubble ${state === 'preparing' ? 'preparing' : ''}`;
   bubble.setAttribute('aria-label', 'Media clip recording');
   const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '') || /Mac/i.test(navigator.userAgent || '');
-  const sourceLabel = mediaSession?.clip?.sourceType === 'podcast' ? 'Podcast clip' : 'Video clip';
+  const page = getPageInfo();
+  const clipSourceType = mediaSession?.clip?.sourceType || page.sourceType;
+  const sourceLabel = clipSourceType === 'podcast' ? 'Podcast clip' : 'Video clip';
+  const isPreparing = state === 'preparing';
   bubble.innerHTML = `
     <div class="annotated-recording-bubble__head">
       <div class="annotated-recording-bubble__badge">
         <span class="annotated-recording-bubble__dot" aria-hidden="true"></span>
-        <span class="annotated-recording-bubble__label">Recording</span>
+        <span class="annotated-recording-bubble__label">${isPreparing ? 'Preparing' : 'Recording'}</span>
       </div>
       <span class="annotated-recording-bubble__source">${sourceLabel}</span>
     </div>
     <div class="annotated-recording-bubble__timer-block">
-      <span class="annotated-recording-bubble__time">${formatClock(SHORT_CLIP_SECONDS)}</span>
-      <span class="annotated-recording-bubble__meta">remaining</span>
+      <span class="annotated-recording-bubble__time">${isPreparing ? '--:--' : formatClock(SHORT_CLIP_SECONDS)}</span>
+      <span class="annotated-recording-bubble__meta">${isPreparing ? 'finding media' : 'remaining'}</span>
     </div>
     <div class="annotated-recording-bubble__wave" aria-hidden="true">
       ${[-1, -0.85, -0.7, -0.55, -0.4, -0.25, -0.1, -0.25, -0.4, -0.55, -0.7, -0.85, -1].map((delay) => `<i style="animation-delay:${delay}s"></i>`).join('')}
@@ -432,14 +446,15 @@ function showRecordingBubble() {
       </div>
       <button class="annotated-recording-bubble__stop" type="button" aria-label="Stop recording">
         <span class="annotated-recording-bubble__stop-icon" aria-hidden="true"></span>
-        <span>Stop</span>
+        <span>${isPreparing ? 'Cancel' : 'Stop'}</span>
       </button>
     </div>
-    <p class="annotated-recording-bubble__note" hidden></p>
+    <p class="annotated-recording-bubble__note"${isPreparing ? '' : ' hidden'}>${isPreparing ? 'Waiting for the page player to become available.' : ''}</p>
   `;
   bubble.addEventListener('mousedown', (event) => event.stopPropagation());
   bubble.querySelector('button').addEventListener('click', () => {
-    void stopMediaRecording('button');
+    if (mediaSession) void stopMediaRecording('button');
+    else exitClippingMode();
   });
   document.documentElement.append(bubble);
   positionRecordingBubble();
@@ -502,9 +517,41 @@ function startMediaRecordingFromPageWithRetry(attempt = 0) {
 
   const page = getPageInfo();
   const shouldRetryMedia = knownMediaPage || page.sourceType === 'youtube' || page.sourceType === 'podcast';
-  if (!shouldRetryMedia || attempt >= 30) return;
+  if (!shouldRetryMedia) return;
+  if (attempt === 0) showPreparingMediaUi();
+  if (attempt >= MEDIA_DETECTION_ATTEMPTS) {
+    mediaPreparing = false;
+    showPreparingMediaFailure();
+    return;
+  }
   window.clearTimeout(mediaRetryTimer);
-  mediaRetryTimer = window.setTimeout(() => startMediaRecordingFromPageWithRetry(attempt + 1), 100);
+  mediaRetryTimer = window.setTimeout(() => startMediaRecordingFromPageWithRetry(attempt + 1), MEDIA_DETECTION_RETRY_MS);
+}
+
+function showPreparingMediaUi() {
+  if (mediaSession || activeClip) return;
+  mediaPreparing = true;
+  document.documentElement.classList.add('annotated-media-recording-mode');
+  createOverlay(mediaAnchorRect(null));
+  showRecordingBubble('preparing');
+}
+
+function showPreparingMediaFailure() {
+  const bubble = document.getElementById(RECORDING_BUBBLE_ID);
+  if (!bubble) return;
+  bubble.classList.add('finished');
+  const label = bubble.querySelector('.annotated-recording-bubble__label');
+  if (label) label.textContent = 'No media found';
+  const meta = bubble.querySelector('.annotated-recording-bubble__meta');
+  if (meta) meta.textContent = 'try again';
+  const note = bubble.querySelector('.annotated-recording-bubble__note');
+  if (note) {
+    note.hidden = false;
+    note.textContent = 'Start playback, then press the shortcut again.';
+  }
+  window.setTimeout(() => {
+    if (!mediaSession && !activeClip) exitClippingMode();
+  }, 2600);
 }
 
 async function stopMediaRecording(reason) {
@@ -835,6 +882,11 @@ function updateAnchoredUi() {
     positionRecordingBubble();
     return;
   }
+  if (mediaPreparing) {
+    setPaneStyles(mediaAnchorRect(null));
+    positionRecordingBubble();
+    return;
+  }
   if (!clippingMode || !activeClip) return;
 
   const rect = activeRange
@@ -848,7 +900,7 @@ function updateAnchoredUi() {
 }
 
 function scheduleAnchoredUiUpdate() {
-  if (!clippingMode || (!activeRange && !activeAnchorElement && !mediaSession) || trackingFrame) return;
+  if (!clippingMode || (!activeRange && !activeAnchorElement && !mediaSession && !mediaPreparing) || trackingFrame) return;
   trackingFrame = requestAnimationFrame(updateAnchoredUi);
 }
 
@@ -878,41 +930,50 @@ async function postAnnotation(composer, status = 'published') {
     await ensureUser();
     const headers = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-    const response = await fetch(`${API_BASE}/api/annotations`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        user_id: authUser?.id || 'demo-user',
-        source_url: activeClip.url,
-        source_title: activeClip.title || '',
-        source_type: activeClip.sourceType || 'article',
-        source_domain: activeClip.domain || '',
-        source_site_name: activeClip.siteName || null,
-        source_author: activeClip.author || null,
-        source_published_at: activeClip.publishedAt || null,
-        source_thumbnail: activeClip.thumbnail || null,
-        clip_text: activeClip.text || null,
-        clip_start_sec: activeClip.clipStartSec ?? null,
-        clip_end_sec: activeClip.clipEndSec ?? null,
-        clip_media_path: null,
-        commentary,
-        annotation_type: selectedType,
-        status,
-      }),
-    });
+    const mediaClip = isMediaClip(activeClip);
+    const postKey = postingKey(activeClip, commentary, status);
+    let annotationId = pendingAnnotation?.key === postKey ? pendingAnnotation.id : null;
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.id) throw new Error(data.error || 'Post failed');
+    if (!annotationId) {
+      const response = await fetch(`${API_BASE}/api/annotations`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          user_id: authUser?.id || 'demo-user',
+          source_url: activeClip.url,
+          source_title: activeClip.title || '',
+          source_type: activeClip.sourceType || 'article',
+          source_domain: activeClip.domain || '',
+          source_site_name: activeClip.siteName || null,
+          source_author: activeClip.author || null,
+          source_published_at: activeClip.publishedAt || null,
+          source_thumbnail: activeClip.thumbnail || null,
+          clip_text: activeClip.text || null,
+          clip_start_sec: activeClip.clipStartSec ?? null,
+          clip_end_sec: activeClip.clipEndSec ?? null,
+          clip_media_path: null,
+          commentary,
+          annotation_type: selectedType,
+          status: mediaClip ? 'draft' : status,
+          pending_media: mediaClip,
+        }),
+      });
 
-    if (isMediaClip(activeClip)) {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.id) throw new Error(data.error || 'Post failed');
+      annotationId = data.id;
+      if (mediaClip) pendingAnnotation = { id: annotationId, key: postKey };
+    }
+
+    if (mediaClip) {
       button.textContent = 'Attaching clip';
       try {
-        await attachMediaClip(data.id, activeClip);
+        await attachMediaClip(annotationId, activeClip);
       } catch (error) {
-        showComposerError(errorEl, `Posted, but clip upload failed: ${humanError(error)}`);
-        button.textContent = 'Posted without clip';
-        safeSend({ type: 'ANNOTATION_POSTED', page: getPageInfo() });
-        window.setTimeout(exitClippingMode, 1200);
+        composer.dataset.posting = 'false';
+        button.disabled = false;
+        button.textContent = 'Retry clip';
+        showComposerError(errorEl, `Clip upload failed: ${humanError(error)}. Retry will reuse this post.`);
         return;
       }
     }
@@ -932,6 +993,19 @@ function showComposerError(errorEl, message) {
   if (!errorEl) return;
   errorEl.textContent = message || 'Something went wrong. Try again.';
   errorEl.hidden = false;
+}
+
+function postingKey(clip, commentary, status) {
+  return [
+    clip?.selectedAt || '',
+    clip?.url || '',
+    clip?.sourceType || '',
+    clip?.clipStartSec ?? '',
+    clip?.clipEndSec ?? '',
+    selectedType,
+    status,
+    commentary,
+  ].join('|');
 }
 
 function humanError(error) {
@@ -1058,6 +1132,7 @@ window.addEventListener('keyup', (event) => {
 document.addEventListener('mousedown', (event) => {
   if (!clippingMode) return;
   if (mediaSession) return;
+  if (mediaPreparing) return;
   const composer = document.getElementById(COMPOSER_ID);
   if (composer?.contains(event.target)) return;
   if (composer && !composer.contains(event.target)) {

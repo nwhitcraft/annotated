@@ -12,6 +12,7 @@ const app = new Hono();
 const ANNOTATION_TYPES = new Set(['Opinion', 'Analysis', 'Fact Check', 'Context', 'Correction', 'Breaking']);
 const PUBLIC_STATUSES = new Set(['published']);
 const WRITABLE_STATUSES = new Set(['draft', 'published']);
+const MEDIA_SOURCE_TYPES = new Set(['youtube', 'podcast', 'video', 'screen']);
 const MAX_COMMENTARY_LENGTH = 360;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MEDIA_DIR = join(__dirname, '..', '..', 'data', 'media');
@@ -140,6 +141,10 @@ function visibilityForStatus(status) {
   return PUBLIC_STATUSES.has(status) ? 1 : 0;
 }
 
+function isMediaSourceType(sourceType) {
+  return MEDIA_SOURCE_TYPES.has(String(sourceType || '').toLowerCase());
+}
+
 function currentTimestamp() {
   return db.prepare("SELECT datetime('now') AS now").get().now;
 }
@@ -171,7 +176,7 @@ app.post('/', async (c) => {
   const body = await c.req.json();
   const { user_id: rawUserId, source_url, source_title, source_type, source_domain, source_thumbnail,
           source_site_name, source_author, source_published_at, clip_text, clip_start_sec, clip_end_sec,
-          clip_media_path, commentary, annotation_type, status } = body;
+          clip_media_path, commentary, annotation_type, status, pending_media } = body;
 
   if (!rawUserId || !source_url || !source_type || !commentary) {
     return c.json({ error: 'Missing required fields: user_id, source_url, source_type, commentary' }, 400);
@@ -188,7 +193,8 @@ app.post('/', async (c) => {
   const user = getUserById(user_id);
   if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
   const requestedStatus = normalizeRequestedStatus(status, 'draft');
-  const finalStatus = isPaidUser(user) ? requestedStatus : 'published';
+  const pendingMedia = Boolean(pending_media) && isMediaSourceType(source_type);
+  const finalStatus = pendingMedia ? 'draft' : (isPaidUser(user) ? requestedStatus : 'published');
   const publishedAt = finalStatus === 'published' ? currentTimestamp() : null;
   const id = nanoid(12);
   const safeAnnotationType = ANNOTATION_TYPES.has(annotation_type) ? annotation_type : 'Opinion';
@@ -232,7 +238,13 @@ app.post('/:id/clip-upload', async (c) => {
   const mediaPath = `/media/${filename}`;
   db.prepare(`
     UPDATE annotations
-    SET clip_media_path = ?, clip_start_sec = ?, clip_end_sec = ?, updated_at = datetime('now')
+    SET clip_media_path = ?,
+        clip_start_sec = ?,
+        clip_end_sec = ?,
+        status = 'published',
+        is_public = 1,
+        published_at = COALESCE(published_at, datetime('now')),
+        updated_at = datetime('now')
     WHERE id = ?
   `).run(mediaPath, startSec, endSec, id);
 
@@ -273,6 +285,9 @@ app.post('/:id/source-clip', async (c) => {
         clip_end_sec = ?,
         source_title = ?,
         source_thumbnail = ?,
+        status = 'published',
+        is_public = 1,
+        published_at = COALESCE(published_at, datetime('now')),
         updated_at = datetime('now')
     WHERE id = ?
   `).run(

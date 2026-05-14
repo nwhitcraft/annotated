@@ -428,6 +428,21 @@
   animation: none;
 }
 
+.annotated-recording-bubble.preparing .annotated-recording-bubble__badge {
+  border-color: rgba(23, 21, 19, 0.14);
+  background: rgba(23, 21, 19, 0.06);
+  color: #3a352f;
+}
+
+.annotated-recording-bubble.preparing .annotated-recording-bubble__dot,
+.annotated-recording-bubble.preparing .annotated-recording-bubble__stop-icon {
+  background: #3a352f;
+}
+
+.annotated-recording-bubble.preparing .annotated-recording-bubble__wave i {
+  background: #6b645b;
+}
+
 @keyframes annotated-recorder-in {
   from {
     opacity: 0;

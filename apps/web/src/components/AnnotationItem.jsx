@@ -12,12 +12,26 @@ function mediaUrl(path) {
   return path;
 }
 
+function clipMimeType(path, kind) {
+  const lower = String(path || '').toLowerCase();
+  if (lower.endsWith('.webm') || lower.endsWith('.weba')) return `${kind}/webm`;
+  if (lower.endsWith('.mov')) return 'video/quicktime';
+  if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4';
+  if (lower.endsWith('.ogg') || lower.endsWith('.opus')) return `${kind}/ogg`;
+  if (lower.endsWith('.m4a') || lower.endsWith('.aac')) return 'audio/aac';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  return kind === 'audio' ? 'audio/mpeg' : 'video/webm';
+}
+
 export default function AnnotationItem({ annotation, expanded = false, canDelete = false, onDelete }) {
   const navigate = useNavigate();
   const domain = annotation.source_domain || domainFromUrl(annotation.source_url);
   const hasRange = annotation.clip_start_sec != null && annotation.clip_end_sec != null;
-  const isYouTubeClip = annotation.source_type === 'youtube' && annotation.clip_media_path;
-  const isVideoClip = ['youtube', 'screen'].includes(annotation.source_type) && annotation.clip_media_path;
+  const sourceUrl = `${annotation.source_url || ''} ${annotation.source_domain || ''}`;
+  const isYouTubeSource = annotation.source_type === 'youtube' || /youtube\.com|youtu\.be/i.test(sourceUrl);
+  const isYouTubeClip = isYouTubeSource && annotation.clip_media_path;
+  const isVideoClip = ['youtube', 'video', 'screen'].includes(annotation.source_type) && annotation.clip_media_path;
   const author = {
     username: annotation.username,
     display_name: annotation.display_name,
@@ -94,7 +108,7 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
 
       {isVideoClip && (
         <video controls className="media-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={mediaUrl(annotation.clip_media_path)} type={annotation.clip_media_path.endsWith('.mov') ? 'video/quicktime' : 'video/mp4'} />
+          <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'video')} />
         </video>
       )}
 
@@ -113,7 +127,7 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
 
       {annotation.clip_media_path && annotation.source_type === 'podcast' && (
         <audio controls className="audio-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={mediaUrl(annotation.clip_media_path)} type={annotation.clip_media_path.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg'} />
+          <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'audio')} />
         </audio>
       )}
 
