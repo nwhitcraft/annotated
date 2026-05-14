@@ -1,0 +1,34 @@
+app = "annotated-nwhitcraft"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  FRONTEND_URL = "https://annotated-nwhitcraft.fly.dev"
+  API_PUBLIC_URL = "https://annotated-nwhitcraft.fly.dev"
+  GOOGLE_REDIRECT = "/api/auth/google/callback"
+  TWITTER_REDIRECT = "/api/auth/twitter/callback"
+  ALLOW_DEMO_AUTH = "0"
+
+[[mounts]]
+  source = "annotated_data"
+  destination = "/app/packages/api/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
