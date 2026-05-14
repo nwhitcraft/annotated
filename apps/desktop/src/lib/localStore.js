@@ -15,6 +15,7 @@ export function getCurrentUserId() {
 const isTauri = Boolean(window.__TAURI_INTERNALS__);
 const STORAGE_KEY = 'annotated.desktop.annotations';
 const SETTINGS_KEY = 'annotated.desktop.settings';
+const PRODUCTION_ORIGIN = 'https://annotated-nwhitcraft.fly.dev';
 let cachedSettings = null;
 
 function cleanBaseUrl(value, fallback) {
@@ -24,9 +25,9 @@ function cleanBaseUrl(value, fallback) {
 
 const DEFAULT_API_ENDPOINT = cleanBaseUrl(
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL,
-  'http://localhost:3080',
+  PRODUCTION_ORIGIN,
 );
-const DEFAULT_FRONTEND_URL = cleanBaseUrl(import.meta.env.VITE_FRONTEND_URL, 'http://localhost:3090');
+const DEFAULT_FRONTEND_URL = cleanBaseUrl(import.meta.env.VITE_FRONTEND_URL, PRODUCTION_ORIGIN);
 
 async function getApiEndpoint() {
   if (!cachedSettings) {
@@ -273,10 +274,11 @@ export async function deleteAnnotation(id) {
 export async function postAnnotation(id) {
   const annotation = await getAnnotation(id);
   if (!annotation) throw new Error('Annotation not found.');
-  await syncAnnotation({ ...annotation, is_public: 1 });
+  const synced = await syncAnnotation({ ...annotation, is_public: 1 });
   const now = new Date().toISOString();
   const updated = {
     ...annotation,
+    remote_id: synced.remote_id || annotation.remote_id || null,
     is_public: 1,
     synced_at: now,
     updated_at: now,
@@ -408,6 +410,10 @@ export async function syncAnnotation(annotation) {
   try {
     const endpoint = await getApiEndpoint();
     const userId = getCurrentUserId();
+    const pendingMedia = Boolean(
+      (isTauri && annotation.clip_media_path)
+      || canAttachSourceClip(annotation)
+    );
     const body = {
       user_id: userId,
       source_url: annotation.source_url,
@@ -423,6 +429,7 @@ export async function syncAnnotation(annotation) {
       annotation_type: annotation.annotation_type || 'Opinion',
       is_public: annotation.is_public ? 1 : 0,
       status: 'published',
+      pending_media: pendingMedia,
     };
     const response = await fetch(`${endpoint}/api/annotations`, {
       method: 'POST',

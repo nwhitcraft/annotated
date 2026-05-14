@@ -15,9 +15,9 @@ const API_PUBLIC_URL = process.env.API_PUBLIC_URL || `http://localhost:${process
 const ALLOW_DEMO_AUTH = process.env.ALLOW_DEMO_AUTH === '1';
 
 // --- Google OAuth ---
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT || '/api/auth/google/callback';
+const GOOGLE_CLIENT_ID = envFirst('GOOGLE_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_ID');
+const GOOGLE_CLIENT_SECRET = envFirst('GOOGLE_CLIENT_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET');
+const GOOGLE_REDIRECT = envFirst('GOOGLE_REDIRECT', 'GOOGLE_REDIRECT_URI', 'GOOGLE_CALLBACK_URL') || '/api/auth/google/callback';
 
 app.get('/google', (c) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
@@ -83,15 +83,18 @@ app.get('/google/callback', async (c) => {
 });
 
 // --- X / Twitter OAuth 2.0 (PKCE) ---
-const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || process.env.X_CLIENT_ID;
-const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || process.env.X_CLIENT_SECRET;
-const TWITTER_REDIRECT = process.env.TWITTER_REDIRECT || process.env.X_REDIRECT || '/api/auth/twitter/callback';
+const TWITTER_CLIENT_ID = envFirst('TWITTER_CLIENT_ID', 'X_CLIENT_ID', 'TWITTER_OAUTH2_CLIENT_ID', 'X_OAUTH2_CLIENT_ID');
+const TWITTER_CLIENT_SECRET = envFirst('TWITTER_CLIENT_SECRET', 'X_CLIENT_SECRET', 'TWITTER_OAUTH2_CLIENT_SECRET', 'X_OAUTH2_CLIENT_SECRET');
+const TWITTER_REDIRECT = envFirst('TWITTER_REDIRECT', 'X_REDIRECT', 'TWITTER_REDIRECT_URI', 'X_REDIRECT_URI', 'TWITTER_CALLBACK_URL', 'X_CALLBACK_URL') || '/api/auth/twitter/callback';
+const TWITTER_AUTHORIZE_URL = envFirst('TWITTER_AUTHORIZE_URL', 'X_AUTHORIZE_URL') || 'https://twitter.com/i/oauth2/authorize';
+const TWITTER_TOKEN_URL = envFirst('TWITTER_TOKEN_URL', 'X_TOKEN_URL') || 'https://api.x.com/2/oauth2/token';
+const TWITTER_USER_URL = envFirst('TWITTER_USER_URL', 'X_USER_URL') || 'https://api.x.com/2/users/me?user.fields=profile_image_url,description';
 
 // In-memory PKCE store (swap for Redis in production)
 const pkceStore = new Map();
 
-app.get('/twitter', async (c) => {
-  if (!TWITTER_CLIENT_ID || !TWITTER_CLIENT_SECRET) {
+async function startTwitterOAuth(c) {
+  if (!TWITTER_CLIENT_ID) {
     return oauthNotConfigured(c, 'twitter');
   }
   const state = nanoid(16);
@@ -102,8 +105,7 @@ app.get('/twitter', async (c) => {
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
   const hash = await crypto.subtle.digest('SHA-256', data);
-  const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const codeChallenge = base64Url(Buffer.from(hash));
 
   pkceStore.set(state, { codeVerifier, client, created: Date.now() });
   // Clean old entries
@@ -121,10 +123,10 @@ app.get('/twitter', async (c) => {
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
   });
-  return c.redirect(`https://twitter.com/i/oauth2/authorize?${params}`);
-});
+  return c.redirect(`${TWITTER_AUTHORIZE_URL}?${params}`);
+}
 
-app.get('/twitter/callback', async (c) => {
+async function finishTwitterOAuth(c) {
   const code = c.req.query('code');
   const state = c.req.query('state');
   if (!code || !state) return c.json({ error: 'Missing code or state' }, 400);
@@ -135,27 +137,34 @@ app.get('/twitter/callback', async (c) => {
 
   try {
     const redirectUri = oauthRedirectUri(TWITTER_REDIRECT);
-    const basic = btoa(`${TWITTER_CLIENT_ID}:${TWITTER_CLIENT_SECRET}`);
-    const tokenRes = await fetch('https://api.x.com/2/oauth2/token', {
+    const tokenBody = new URLSearchParams({
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+      code_verifier: pkce.codeVerifier,
+    });
+    const tokenHeaders = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (TWITTER_CLIENT_SECRET) {
+      tokenHeaders.Authorization = `Basic ${Buffer.from(`${TWITTER_CLIENT_ID}:${TWITTER_CLIENT_SECRET}`).toString('base64')}`;
+    } else {
+      tokenBody.set('client_id', TWITTER_CLIENT_ID);
+    }
+
+    const tokenRes = await fetch(TWITTER_TOKEN_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${basic}`,
-      },
-      body: new URLSearchParams({
-        code,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri,
-        code_verifier: pkce.codeVerifier,
-      }),
+      headers: tokenHeaders,
+      body: tokenBody,
     });
     const tokens = await tokenRes.json();
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
-    const userRes = await fetch('https://api.x.com/2/users/me?user.fields=profile_image_url,description', {
+    const userRes = await fetch(TWITTER_USER_URL, {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     const { data: profile } = await userRes.json();
+    if (!profile?.id) throw new Error('Could not read X user profile');
 
     const user = upsertUser({
       provider: 'twitter',
@@ -172,7 +181,12 @@ app.get('/twitter/callback', async (c) => {
     console.error('Twitter OAuth error:', err.message);
     return c.redirect(`${FRONTEND_URL}/login?error=${err.code === 'ACCOUNT_BANNED' ? 'account_banned' : 'twitter_failed'}`);
   }
-});
+}
+
+app.get('/twitter', startTwitterOAuth);
+app.get('/x', startTwitterOAuth);
+app.get('/twitter/callback', finishTwitterOAuth);
+app.get('/x/callback', finishTwitterOAuth);
 
 // --- Demo login (development only) ---
 app.get('/demo', (c) => {
@@ -232,6 +246,22 @@ app.post('/logout', (c) => {
 });
 
 // --- Helpers ---
+
+function envFirst(...names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && String(value).trim()) return String(value).trim();
+  }
+  return '';
+}
+
+function base64Url(buffer) {
+  return Buffer.from(buffer)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
 
 function upsertUser({ provider, provider_id, email, display_name, avatar_url, username }) {
   const ban = activeIdentityBan({ provider, provider_id, email, username });

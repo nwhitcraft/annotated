@@ -125,7 +125,7 @@ struct Settings {
 
 fn default_frontend_url() -> String {
     option_env!("VITE_FRONTEND_URL")
-        .unwrap_or("http://localhost:3090")
+        .unwrap_or("https://annotated-nwhitcraft.fly.dev")
         .trim_end_matches('/')
         .to_string()
 }
@@ -133,7 +133,7 @@ fn default_frontend_url() -> String {
 fn default_api_endpoint() -> String {
     option_env!("VITE_API_URL")
         .or(option_env!("VITE_API_BASE_URL"))
-        .unwrap_or("http://localhost:3080")
+        .unwrap_or("https://annotated-nwhitcraft.fly.dev")
         .trim_end_matches('/')
         .to_string()
 }
