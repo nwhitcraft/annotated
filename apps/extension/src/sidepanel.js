@@ -7,6 +7,9 @@ let authUser = null;
 let loadingFeed = false;
 let pendingPageUrl = '';
 let feedRequestId = 0;
+let renderedFeedTitle = '';
+let renderedFeedIds = new Set();
+let feedHasRenderedOnce = false;
 
 const statusEl = document.getElementById('status');
 const feedTitleEl = document.getElementById('feed-title');
@@ -370,6 +373,7 @@ function hasRenderedFeed() {
 function renderAnnotatedPageState() {
   feedTitleEl.textContent = 'Annotated';
   feedCountEl.textContent = '';
+  rememberRenderedFeed('Annotated', []);
   feedListEl.innerHTML = `
     <p class="feed-empty">
       Annotated is already open in this tab. Use the web app here; the side panel will stay out of the way.
@@ -380,14 +384,21 @@ function renderAnnotatedPageState() {
 function renderFeed(title, items) {
   feedTitleEl.textContent = title;
   feedCountEl.textContent = items.length ? `${items.length}` : '';
+  const animateNewItems = feedHasRenderedOnce && title === renderedFeedTitle;
+  const nextIds = new Set(items.map((item) => String(item.id || '')).filter(Boolean));
 
   if (!items.length) {
     feedListEl.innerHTML = '<p class="feed-empty">No annotations yet.</p>';
+    rememberRenderedFeed(title, []);
     return;
   }
 
-  feedListEl.innerHTML = items.map((item) => `
-    <article class="feed-item">
+  feedListEl.innerHTML = items.map((item) => {
+    const itemId = String(item.id || '');
+    const classes = ['feed-item'];
+    if (animateNewItems && itemId && !renderedFeedIds.has(itemId)) classes.push('feed-item-new');
+    return `
+    <article class="${classes.join(' ')}">
       <div class="feed-byline">
         <span>${escapeHtml(item.display_name || item.username || 'Anonymous')}</span>
         <span>${escapeHtml(annotatedAt(item.created_at))}</span>
@@ -421,7 +432,15 @@ function renderFeed(title, items) {
         </button>
       </div>
     </article>
-  `).join('');
+  `;
+  }).join('');
+  rememberRenderedFeed(title, nextIds);
+}
+
+function rememberRenderedFeed(title, ids) {
+  renderedFeedTitle = title;
+  renderedFeedIds = ids instanceof Set ? ids : new Set(ids);
+  feedHasRenderedOnce = true;
 }
 
 async function handleFeedAction(event, button) {
