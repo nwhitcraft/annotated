@@ -2058,6 +2058,15 @@ textarea {
   line-height: 1.5;
 }
 
+.profile-log-out {
+  color: var(--danger);
+}
+
+.profile-log-out:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .annotation-delete {
   justify-self: start;
   width: fit-content;

@@ -204,9 +204,6 @@ export default function Profile() {
         <p className="profile-stats">
           <strong>{Number(user.stats?.annotations || 0).toLocaleString()}</strong> annotations · <strong>{Number(user.stats?.followers || 0).toLocaleString()}</strong> followers · <strong>{Number(user.stats?.following || 0).toLocaleString()}</strong> following · <strong>{Number(user.stats?.credibility || user.credibility_score || 0).toLocaleString()}</strong> credibility
         </p>
-        {isSelf && (
-          <button className="sign-out-link" type="button" onClick={handleSignOut}>Sign out</button>
-        )}
         <div className="credibility-card">
           <strong>{Number(user.stats?.credibility || user.credibility_score || 0)}</strong>
           <span>Credibility score</span>
@@ -245,6 +242,7 @@ export default function Profile() {
           <div className="form-actions">
             <button className="button button-solid" type="submit" disabled={saving}>{saving ? 'Saving' : 'Save profile'}</button>
             <button className="button button-text" type="button" onClick={stopEditing}>Cancel</button>
+            <button className="button button-text profile-log-out" type="button" onClick={handleSignOut}>Log out</button>
           </div>
         </form>
       )}
