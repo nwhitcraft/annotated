@@ -26,6 +26,10 @@ function captureErrorMessage(message) {
   return value || 'Could not start screen capture';
 }
 
+function isNoActiveCaptureError(error) {
+  return /no active screen capture/i.test(String(error?.message || error || ''));
+}
+
 export default function CaptureController() {
   const [captureStatus, setCaptureStatus] = useState({ active: false, durationSeconds: 90 });
   const [captureNow, setCaptureNow] = useState(Date.now());
@@ -91,6 +95,13 @@ export default function CaptureController() {
       await emit('desktop-screen-clip-finished', result);
       await closeWindow();
     } catch (err) {
+      if (isNoActiveCaptureError(err)) {
+        setCaptureStatus((value) => ({ ...value, active: false }));
+        await emit('desktop-screen-clip-cancelled', true);
+        await closeWindow();
+        return;
+      }
+      setCaptureStatus((value) => ({ ...value, active: false }));
       setError(captureErrorMessage(err?.message || err || 'Could not stop screen capture'));
     } finally {
       setBusy(false);
@@ -110,6 +121,12 @@ export default function CaptureController() {
       await emit('desktop-screen-clip-cancelled', true);
       await closeWindow();
     } catch (err) {
+      if (isNoActiveCaptureError(err)) {
+        setCaptureStatus((value) => ({ ...value, active: false }));
+        await emit('desktop-screen-clip-cancelled', true);
+        await closeWindow();
+        return;
+      }
       setError(captureErrorMessage(err?.message || err || 'Could not cancel screen capture'));
     } finally {
       setBusy(false);

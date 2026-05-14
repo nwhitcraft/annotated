@@ -323,7 +323,7 @@ function renderFeed(title, items) {
         <span>${escapeHtml(sourceDate(item.source_published_at || item.created_at))}</span>
         ${item.followed_by_viewer ? '<span>Following</span>' : ''}
       </div>
-      <a class="source-line" href="${escapeAttr(item.source_url)}" target="_blank" rel="noreferrer">
+      <a class="source-line" href="${escapeAttr(annotationCommentsUrl(item))}" target="_blank" rel="noreferrer">
         ${escapeHtml(sourceLabel(item))}
       </a>
       <p class="feed-commentary">${escapeHtml(item.commentary || '')}</p>

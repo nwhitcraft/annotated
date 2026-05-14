@@ -5,7 +5,10 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::menu::MenuBuilder;
@@ -1358,17 +1361,72 @@ fn read_selected_text() -> Result<String, String> {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn frontmost_bundle_identifier() -> Option<String> {
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to get bundle identifier of first application process whose frontmost is true")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn frontmost_app_is_browser() -> bool {
+    let Some(bundle_id) = frontmost_bundle_identifier() else {
+        return false;
+    };
+    matches!(
+        bundle_id.as_str(),
+        "com.google.Chrome"
+            | "com.google.Chrome.canary"
+            | "com.brave.Browser"
+            | "com.microsoft.edgemac"
+            | "com.vivaldi.Vivaldi"
+            | "company.thebrowser.Browser"
+            | "org.mozilla.firefox"
+            | "com.apple.Safari"
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn forward_clip_shortcut_to_frontmost_app() {
+    let _ = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to key code 7 using {option down, shift down}")
+        .status();
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(ScreenCaptureState::default())) as SharedScreenCaptureState)
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            let forwarding_shortcut = Arc::new(AtomicBool::new(false));
             let clip_shortcut_str = "Alt+Shift+X";
+            let forwarding_shortcut_for_handler = Arc::clone(&forwarding_shortcut);
             app.global_shortcut().on_shortcut(
                 clip_shortcut_str,
                 move |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
+                        if forwarding_shortcut_for_handler.swap(false, Ordering::SeqCst) {
+                            return;
+                        }
+                        #[cfg(target_os = "macos")]
+                        if frontmost_app_is_browser() {
+                            let forwarding_shortcut = Arc::clone(&forwarding_shortcut_for_handler);
+                            forwarding_shortcut.store(true, Ordering::SeqCst);
+                            thread::spawn(move || {
+                                forward_clip_shortcut_to_frontmost_app();
+                                thread::sleep(Duration::from_millis(450));
+                                forwarding_shortcut.store(false, Ordering::SeqCst);
+                            });
+                            return;
+                        }
                         let _ = app.emit("tray-start-screen-clip", true);
                     }
                 },

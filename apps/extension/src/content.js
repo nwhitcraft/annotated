@@ -204,8 +204,11 @@ function enterClippingMode() {
 
   clippingMode = true;
   activeClip = null;
+  activeRange = null;
   activeAnchorElement = null;
   document.documentElement.classList.add('annotated-clipping-mode');
+
+  if (captureCurrentSelection()) return;
 
   const mediaClip = clipFromMedia(false);
   if (mediaClip) {
@@ -584,19 +587,25 @@ function scheduleSelectionCapture() {
   selectionTimer = window.setTimeout(captureCompletedSelection, 120);
 }
 
-function captureCompletedSelection() {
-  if (!clippingMode) return;
+function captureCurrentSelection() {
+  if (!clippingMode) return false;
   const clip = clipFromSelection(false);
-  if (!clip) return;
+  if (!clip) return false;
 
   const selection = window.getSelection();
   activeRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
   const rect = getSelectionRect();
-  if (!rect) return;
+  if (!rect) return false;
 
   activeClip = clip;
   activeAnchorElement = null;
   showComposer(rect);
+  return true;
+}
+
+function captureCompletedSelection() {
+  if (!clippingMode) return;
+  captureCurrentSelection();
 }
 
 function getSelectionRect() {
