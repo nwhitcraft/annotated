@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
-const extensionDownloadUrl = 'https://7c03a6efd538a8d97cb687c37298ad46.r2.cloudflarestorage.com/annotated-chrome-extension-download';
+const extensionDownloadUrl = '/downloads/annotated-chrome-extension.zip';
 
 const installSteps = [
   {
