@@ -319,23 +319,12 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(900px 460px at 50% -10%, rgba(255, 255, 255, 0.72), transparent 62%),
-    radial-gradient(760px 420px at 50% 112%, rgba(23, 21, 19, 0.045), transparent 60%),
-    #f4f1ea;
+  background: var(--bg-primary);
   font-family: "EB Garamond", "Cormorant Garamond", Georgia, serif;
 }
 
 .landing-animated-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image: radial-gradient(rgba(23, 21, 19, 0.05) 1px, transparent 1px);
-  background-size: 3px 3px;
-  mix-blend-mode: multiply;
-  opacity: 0.28;
-  pointer-events: none;
+  content: none;
 }
 
 .hero-wrap {
@@ -457,7 +446,7 @@ textarea {
   padding: 18px 22px;
   border: 1px solid #e2dccd;
   border-radius: 8px;
-  background: #faf7f1;
+  background: var(--bg-primary);
   box-shadow: 0 1px 0 rgba(23, 21, 19, 0.04), 0 18px 40px -22px rgba(23, 21, 19, 0.18);
 }
 
@@ -637,7 +626,7 @@ textarea {
 .hero-cta:hover {
   border-color: #171513;
   background: #171513;
-  color: #f4f1ea;
+  color: var(--bg-primary);
 }
 
 .hero-auth-buttons .oauth-mark {
