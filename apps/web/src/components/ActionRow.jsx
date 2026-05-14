@@ -9,7 +9,9 @@ export default function ActionRow({ annotation, onOpenComments }) {
   const [claimCount, setClaimCount] = useState(Number(annotation.claim_count || 0));
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimSent, setClaimSent] = useState(false);
-  const [claim, setClaim] = useState({ email: getUsername() ? `${getUsername()}@annotated.local` : '', reason: '' });
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
+  const [claimError, setClaimError] = useState('');
+  const [claim, setClaim] = useState({ email: getUsername() ? `${getUsername()}@annotated.local` : '', description: '' });
 
   async function like(event) {
     event.preventDefault();
@@ -62,9 +64,18 @@ export default function ActionRow({ annotation, onOpenComments }) {
   async function submitClaim(event) {
     event.preventDefault();
     event.stopPropagation();
-    await fileClaim(annotation.id, claim);
-    setClaimSent(true);
-    setClaimCount((value) => value + 1);
+    if (claimSubmitting) return;
+    setClaimSubmitting(true);
+    setClaimError('');
+    try {
+      await fileClaim(annotation.id, { ...claim, reason_code: 'other' });
+      setClaimSent(true);
+      setClaimCount((value) => value + 1);
+    } catch (err) {
+      setClaimError(err.message || 'Could not file claim. Please try again.');
+    } finally {
+      setClaimSubmitting(false);
+    }
   }
 
   return (
@@ -95,9 +106,12 @@ export default function ActionRow({ annotation, onOpenComments }) {
             <>
               <strong>File a claim</strong>
               <input className="field" type="email" placeholder="Email address" required value={claim.email} onChange={(event) => setClaim((value) => ({ ...value, email: event.target.value }))} />
-              <textarea className="field" placeholder="Describe the issue" required value={claim.reason} onChange={(event) => setClaim((value) => ({ ...value, reason: event.target.value }))} />
+              <textarea className="field" placeholder="Describe the issue" required value={claim.description} onChange={(event) => setClaim((value) => ({ ...value, description: event.target.value }))} />
+              {claimError && <p className="form-error">{claimError}</p>}
               <div className="form-actions">
-                <button className="button button-solid" type="submit">Submit</button>
+                <button className="button button-solid" type="submit" disabled={claimSubmitting}>
+                  {claimSubmitting ? 'Submitting' : 'Submit'}
+                </button>
                 <button className="button button-text" type="button" onClick={() => setClaimOpen(false)}>Cancel</button>
               </div>
             </>

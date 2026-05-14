@@ -146,7 +146,7 @@ textarea {
 
 .user-search {
   position: relative;
-  width: 190px;
+  width: clamp(230px, 22vw, 300px);
 }
 
 .search-label {
@@ -182,7 +182,7 @@ textarea {
   top: calc(100% + 11px);
   right: 0;
   z-index: 30;
-  width: 318px;
+  width: min(430px, calc(100vw - 48px));
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background: var(--bg-primary);
@@ -190,7 +190,7 @@ textarea {
 
 .search-result {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) max-content;
   gap: 10px;
   align-items: center;
   padding: 12px 0;
@@ -231,10 +231,12 @@ textarea {
 }
 
 .follow-mini {
+  min-width: 76px;
   padding: 4px 0;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 12px;
+  text-align: center;
 }
 
 .follow-mini:hover {
@@ -2804,7 +2806,7 @@ textarea {
   }
 
   .user-search {
-    width: min(44vw, 190px);
+    width: min(52vw, 230px);
   }
 
   .search-results {

@@ -63,6 +63,8 @@ export default function AnnotationPage() {
   const [error, setError] = useState('');
   const [claimOpen, setClaimOpen] = useState(false);
   const [claimSent, setClaimSent] = useState(false);
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
+  const [claimError, setClaimError] = useState('');
   const [claim, setClaim] = useState({ email: '', reason_code: 'copyright', description: '' });
   const [viewer, setViewer] = useState(viewerFromStorage);
 
@@ -121,9 +123,11 @@ export default function AnnotationPage() {
 
   async function fileClaim(event) {
     event.preventDefault();
-    setClaimSent(true);
+    if (claimSubmitting) return;
+    setClaimSubmitting(true);
+    setClaimError('');
     try {
-      await fetch('/api/claims', {
+      const response = await fetch('/api/claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -133,8 +137,13 @@ export default function AnnotationPage() {
           description: claim.description,
         }),
       });
-    } catch {
-      // The UI confirmation is enough while the endpoint is unavailable.
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error) throw new Error(data.error || 'Could not file claim');
+      setClaimSent(true);
+    } catch (err) {
+      setClaimError(err.message || 'Could not file claim. Please try again.');
+    } finally {
+      setClaimSubmitting(false);
     }
   }
 
@@ -198,8 +207,11 @@ export default function AnnotationPage() {
               <span>Description</span>
               <textarea className="field" placeholder="Describe why you're filing this claim..." required value={claim.description} onChange={(event) => setClaim((value) => ({ ...value, description: event.target.value }))} />
             </label>
+            {claimError && <p className="form-error">{claimError}</p>}
             <div className="form-actions">
-              <button className="button button-solid" type="submit">Submit Claim</button>
+              <button className="button button-solid" type="submit" disabled={claimSubmitting}>
+                {claimSubmitting ? 'Submitting' : 'Submit Claim'}
+              </button>
               <button className="button button-text" type="button" onClick={() => setClaimOpen(false)}>Cancel</button>
             </div>
           </form>

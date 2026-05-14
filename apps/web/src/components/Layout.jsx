@@ -4,8 +4,6 @@ import UserAvatar from './UserAvatar.jsx';
 import UserSearch from './UserSearch.jsx';
 import { checkAuth, getAvatarUrl, getCurrentUserId, getDisplayName, getToken, getUsername } from '../lib/api.js';
 
-const ADMIN_USERNAMES = new Set(['nwhitcraft', 'demo']);
-
 function viewerFromStorage() {
   if (!getToken()) return null;
   const username = getUsername();
@@ -56,7 +54,7 @@ export default function Layout() {
             <NavLink to="/new">Annotate</NavLink>
             <NavLink to="/download">Desktop</NavLink>
             {viewer && <NavLink to={`/u/${viewer.username}`}>Profile</NavLink>}
-            {ADMIN_USERNAMES.has(String(viewer?.username || '').toLowerCase()) && <NavLink to="/admin/claims">Claims</NavLink>}
+            {viewer?.is_admin && <NavLink to="/admin/claims">Claims</NavLink>}
           </nav>
           <div className="header-tools">
             <UserSearch />

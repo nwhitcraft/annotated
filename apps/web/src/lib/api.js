@@ -194,7 +194,7 @@ export async function fileClaim(annotationId, payload) {
     body: JSON.stringify({
       annotation_id: annotationId,
       claimant_email: payload.claimant_email || payload.email,
-      reason_code: payload.reason_code || payload.reason || 'other',
+      reason_code: payload.reason_code || 'other',
       description: payload.description || payload.details || payload.reason || 'Claim filed from annotation page',
     }),
   });

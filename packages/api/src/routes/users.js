@@ -6,6 +6,7 @@ import { dirname, extname, join } from 'path';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import db from '../db.js';
+import { isAdminUser } from '../lib/admin.js';
 import { userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
@@ -128,7 +129,7 @@ app.post('/onboard', async (c) => {
     return c.json({ error: normalized.error, suggestion: suggestUsername(normalized.base || 'user') }, 400);
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(normalized.username, user.id);
+  const existing = db.prepare('SELECT id FROM users WHERE lower(username) = lower(?) AND id != ?').get(normalized.username, user.id);
   if (existing) {
     return c.json({ error: 'Username taken', suggestion: suggestUsername(normalized.username) }, 409);
   }
@@ -357,7 +358,7 @@ export default app;
 
 function findUser(idOrUsername) {
   let user = db.prepare('SELECT * FROM users WHERE id = ?').get(idOrUsername);
-  if (!user) user = db.prepare('SELECT * FROM users WHERE username = ?').get(idOrUsername);
+  if (!user) user = db.prepare('SELECT * FROM users WHERE lower(username) = lower(?)').get(idOrUsername);
   return user || null;
 }
 
@@ -379,6 +380,7 @@ function publicUser(user) {
     ...safe,
     age: safe.age == null ? null : Number(safe.age),
     onboarding_completed: Boolean(safe.onboarding_completed),
+    is_admin: isAdminUser(user),
   };
 }
 
@@ -401,7 +403,7 @@ function normalizeUsername(value) {
 }
 
 function usernameTaken(username) {
-  return Boolean(db.prepare('SELECT 1 FROM users WHERE username = ?').get(username));
+  return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(username) = lower(?)').get(username));
 }
 
 function suggestUsername(value) {

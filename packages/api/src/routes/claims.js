@@ -2,17 +2,12 @@ import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import db from '../db.js';
+import { isAdminUser } from '../lib/admin.js';
 import { sendClaimNotificationEmail } from '../lib/email.js';
 import { banUserForClaim, userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
 const JWT_SECRET = process.env.JWT_SECRET || 'annotated-dev-secret-change-in-prod';
-const ADMIN_USERNAMES = new Set(
-  String(process.env.ADMIN_USERNAMES || 'nwhitcraft,demo')
-    .split(',')
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean),
-);
 
 // Claim reason codes
 const REASON_CODES = [
@@ -220,7 +215,7 @@ function requireAdmin(c) {
     const payload = jwt.verify(auth.slice(7), JWT_SECRET);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
     if (userUnavailable(user)) return c.json({ error: 'Account unavailable' }, 403);
-    if (!ADMIN_USERNAMES.has(String(user.username || '').toLowerCase())) {
+    if (!isAdminUser(user)) {
       return c.json({ error: 'Admin access required' }, 403);
     }
     return null;

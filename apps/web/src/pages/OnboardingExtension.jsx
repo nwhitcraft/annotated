@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
-const extensionPath = '/Users/nicholaswhitcraft/Documents/New project/annotated/apps/extension';
+const extensionDownloadUrl = '';
 
 const installSteps = [
   {
@@ -45,7 +45,11 @@ export default function OnboardingExtension() {
         <div className="extension-install-card">
           <strong>Install the launch-test extension</strong>
           <p>The Chrome Web Store listing is coming soon. For now, install the development version by loading the extension folder manually.</p>
-          <code>{extensionPath}</code>
+          {extensionDownloadUrl ? (
+            <a className="button button-solid" href={extensionDownloadUrl}>Download Chrome extension</a>
+          ) : (
+            <button className="button button-solid" type="button" disabled>Download Chrome extension</button>
+          )}
         </div>
 
         <div className="extension-step-grid">

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import db from '../db.js';
+import { isAdminUser } from '../lib/admin.js';
 import { activeIdentityBan, userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
@@ -211,6 +212,7 @@ app.get('/me', (c) => {
     return c.json({
       ...user,
       onboarding_completed: Boolean(user.onboarding_completed),
+      is_admin: isAdminUser(user),
       stats: {
         annotations: annotations.count,
         followers: followers.count,
@@ -248,16 +250,21 @@ function upsertUser({ provider, provider_id, email, display_name, avatar_url, us
       error.code = 'ACCOUNT_BANNED';
       throw error;
     }
+    const normalizedExistingUsername = normalizeUsername(existing.username || username || display_name || 'user');
+    const hasCaseCollision = usernameTakenByOther(normalizedExistingUsername, existing.id);
+    const nextUsername = hasCaseCollision && !isAdminUser(existing)
+      ? suggestUsername(normalizedExistingUsername)
+      : normalizedExistingUsername;
     // Update profile on each login
-    db.prepare(`UPDATE users SET display_name = ?, avatar_url = ?, email = COALESCE(?, email), updated_at = datetime('now') WHERE id = ?`)
-      .run(display_name, avatar_url, email, existing.id);
-    return { ...existing, display_name, avatar_url };
+    db.prepare(`UPDATE users SET username = ?, display_name = ?, avatar_url = ?, email = COALESCE(?, email), updated_at = datetime('now') WHERE id = ?`)
+      .run(nextUsername, display_name, avatar_url, email, existing.id);
+    return { ...existing, username: nextUsername, display_name, avatar_url };
   }
 
-  // Dedupe username
-  let finalUsername = username || display_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
-  const taken = db.prepare('SELECT 1 FROM users WHERE username = ?').get(finalUsername);
-  if (taken) finalUsername = `${finalUsername}${nanoid(4)}`;
+  const preferredUsername = normalizeUsername(username || display_name || 'user');
+  const finalUsername = usernameTaken(preferredUsername)
+    ? suggestUsername(preferredUsername)
+    : preferredUsername;
 
   const id = nanoid(12);
   db.prepare('INSERT INTO users (id, username, display_name, avatar_url, bio, provider, provider_id, email, onboarding_completed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)')
@@ -272,6 +279,35 @@ function signToken(user) {
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
   );
+}
+
+function normalizeUsername(value) {
+  const base = String(value || 'user')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 20) || 'user';
+  return base.length >= 3 ? base : `${base}user`.slice(0, 20);
+}
+
+function usernameTaken(username) {
+  return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(username) = lower(?)').get(username));
+}
+
+function usernameTakenByOther(username, userId) {
+  return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(username) = lower(?) AND id != ?').get(username, userId));
+}
+
+function suggestUsername(value) {
+  const base = normalizeUsername(value).slice(0, 18);
+  for (let index = 1; index < 1000; index += 1) {
+    const suffix = `_${index}`;
+    const candidate = `${base.slice(0, 20 - suffix.length)}${suffix}`;
+    if (!usernameTaken(candidate)) return candidate;
+  }
+  return `${base}_${nanoid(4).toLowerCase()}`;
 }
 
 function callbackTarget(token, client = 'web') {
