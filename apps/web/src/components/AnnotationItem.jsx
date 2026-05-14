@@ -24,14 +24,21 @@ function clipMimeType(path, kind) {
   return kind === 'audio' ? 'audio/mpeg' : 'video/webm';
 }
 
+function isAudioPath(path) {
+  return /\.(mp3|m4a|aac|wav|ogg|opus|weba)$/i.test(String(path || ''));
+}
+
 export default function AnnotationItem({ annotation, expanded = false, canDelete = false, onDelete }) {
   const navigate = useNavigate();
   const domain = annotation.source_domain || domainFromUrl(annotation.source_url);
   const hasRange = annotation.clip_start_sec != null && annotation.clip_end_sec != null;
   const sourceUrl = `${annotation.source_url || ''} ${annotation.source_domain || ''}`;
   const isYouTubeSource = annotation.source_type === 'youtube' || /youtube\.com|youtu\.be/i.test(sourceUrl);
-  const isYouTubeClip = isYouTubeSource && annotation.clip_media_path;
-  const isVideoClip = ['youtube', 'video', 'screen'].includes(annotation.source_type) && annotation.clip_media_path;
+  const hasMediaClip = Boolean(annotation.clip_media_path);
+  const isAudioClip = hasMediaClip && (annotation.source_type === 'podcast' || isAudioPath(annotation.clip_media_path));
+  const isVideoClip = hasMediaClip && !isAudioClip;
+  const isYouTubeClip = isYouTubeSource && hasMediaClip;
+  const displaySourceType = isYouTubeSource || isVideoClip ? 'video' : annotation.source_type;
   const author = {
     username: annotation.username,
     display_name: annotation.display_name,
@@ -63,7 +70,7 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
           {annotation.status && annotation.status !== 'published' && (
             <span className={`annotation-status-tag ${annotation.status}`}>{annotation.status}</span>
           )}
-          <SourceType type={annotation.source_type} />
+          <SourceType type={displaySourceType} />
         </div>
       </div>
 
@@ -77,6 +84,25 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
         >
           {annotation.source_title || annotation.source_url}
         </a>
+        {isVideoClip && (
+          <div className="source-media">
+            <video controls className="media-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
+              <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'video')} />
+            </video>
+            {isYouTubeClip && (
+              <a
+                className="source-platform-link youtube-platform-link"
+                href={annotation.source_url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <span aria-hidden="true">▶</span>
+                Open on YouTube
+              </a>
+            )}
+          </div>
+        )}
         {annotation.source_thumbnail && !isVideoClip && (
           <a
             className="source-thumbnail"
@@ -102,30 +128,11 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
 
       {!annotation.clip_text && hasRange && (
         <p className="media-range">
-          {annotation.source_type === 'podcast' ? 'Audio excerpt' : 'Video excerpt'} · {formatTime(annotation.clip_start_sec)}–{formatTime(annotation.clip_end_sec)}
+          {isAudioClip ? 'Audio excerpt' : 'Video excerpt'} · {formatTime(annotation.clip_start_sec)}–{formatTime(annotation.clip_end_sec)}
         </p>
       )}
 
-      {isVideoClip && (
-        <video controls className="media-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
-          <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'video')} />
-        </video>
-      )}
-
-      {isYouTubeClip && (
-        <a
-          className="source-platform-link youtube-platform-link"
-          href={annotation.source_url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <span aria-hidden="true">▶</span>
-          Open on YouTube
-        </a>
-      )}
-
-      {annotation.clip_media_path && annotation.source_type === 'podcast' && (
+      {isAudioClip && (
         <audio controls className="audio-player" preload="metadata" onClick={(event) => event.stopPropagation()}>
           <source src={mediaUrl(annotation.clip_media_path)} type={clipMimeType(annotation.clip_media_path, 'audio')} />
         </audio>

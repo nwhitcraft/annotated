@@ -7,7 +7,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_ROOT = join(__dirname, '..', 'data');
+const DATA_ROOT = process.env.DATA_DIR || join(__dirname, '..', 'data');
 const WEB_ROOT = join(__dirname, '..', 'public');
 import annotations from './routes/annotations.js';
 import feed from './routes/feed.js';
@@ -35,6 +35,7 @@ app.route('/api/clip', clip);
 
 // Serve clip media files — resolve from package root, not cwd
 app.use('/media/*', serveStatic({ root: DATA_ROOT }));
+app.all('/media/*', (c) => c.json({ error: 'Media not found' }, 404));
 
 // Serve built web app when deployed as a single Fly service.
 app.use('*', serveStatic({ root: WEB_ROOT }));

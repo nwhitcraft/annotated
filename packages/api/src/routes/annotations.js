@@ -15,7 +15,8 @@ const WRITABLE_STATUSES = new Set(['draft', 'published']);
 const MEDIA_SOURCE_TYPES = new Set(['youtube', 'podcast', 'video', 'screen']);
 const MAX_COMMENTARY_LENGTH = 360;
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MEDIA_DIR = join(__dirname, '..', '..', 'data', 'media');
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const MEDIA_DIR = join(DATA_DIR, 'media');
 const MAX_MEDIA_CLIP_SECONDS = 90;
 
 if (!existsSync(MEDIA_DIR)) mkdirSync(MEDIA_DIR, { recursive: true });

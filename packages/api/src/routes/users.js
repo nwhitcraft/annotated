@@ -11,7 +11,8 @@ import { userUnavailable } from '../lib/moderation.js';
 
 const app = new Hono();
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const AVATAR_DIR = join(__dirname, '..', '..', 'data', 'media', 'avatars');
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const AVATAR_DIR = join(DATA_DIR, 'media', 'avatars');
 const PUBLIC_AVATAR_PATH = '/media/avatars';
 const PROFILE_FIELDS = ['display_name', 'bio', 'avatar_url', 'link', 'twitter_handle'];
 const JWT_SECRET = process.env.JWT_SECRET || 'annotated-dev-secret-change-in-prod';

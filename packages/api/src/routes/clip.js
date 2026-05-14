@@ -9,7 +9,8 @@ import { extractTweet } from '@annotated/clip-engine';
 import { detectSourceType } from '@annotated/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MEDIA_DIR = join(__dirname, '..', '..', 'data', 'media');
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const MEDIA_DIR = join(DATA_DIR, 'media');
 
 if (!existsSync(MEDIA_DIR)) mkdirSync(MEDIA_DIR, { recursive: true });
 
