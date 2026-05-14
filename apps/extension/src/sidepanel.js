@@ -73,8 +73,8 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 
   if (msg.type === 'ANNOTATION_POSTED') {
-    if (msg.state) renderState(msg.state);
-    else loadFeed();
+    if (msg.state) renderState(msg.state, { showLoading: false });
+    else loadFeed({ showLoading: false });
   }
 
   if (msg.type === 'AUTH_UPDATED') {
@@ -352,7 +352,7 @@ async function loadFeed(options = {}) {
     if (!isLatestFeedRequest(requestId, pageKey)) return;
     renderFeed(title, items.slice(0, 50));
   } catch {
-    if (showLoading && isLatestFeedRequest(requestId, pageKey)) renderFeed('Feed', []);
+    if (showLoading && !hasRenderedFeed() && isLatestFeedRequest(requestId, pageKey)) renderFeed('Feed', []);
   } finally {
     if (requestId === feedRequestId) loadingFeed = false;
   }

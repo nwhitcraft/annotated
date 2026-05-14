@@ -174,7 +174,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'ANNOTATION_POSTED') {
-    saveTabState(tabId, { page: msg.page })
+    saveTabState(tabId, {
+      pendingUrl: '',
+      clip: null,
+      lastAnnotationId: msg.annotationId || null,
+      page: msg.page || null,
+    })
       .then((state) => safeBroadcast({ type: 'ANNOTATION_POSTED', state }));
     return;
   }

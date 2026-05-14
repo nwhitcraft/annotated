@@ -1014,10 +1014,10 @@ async function postAnnotation(composer, status = 'published') {
     }
 
     serverPosted = true;
-    finishPostedComposer(errorEl, button);
+    finishPostedComposer(errorEl, button, annotationId);
   } catch (error) {
     if (serverPosted || (annotationId && isExtensionContextInvalidated(error))) {
-      finishPostedComposer(errorEl, button);
+      finishPostedComposer(errorEl, button, annotationId);
       return;
     }
     composer.dataset.posting = 'false';
@@ -1055,14 +1055,34 @@ function isExtensionContextInvalidated(error) {
   return /extension context invalidated/i.test(humanError(error));
 }
 
-function finishPostedComposer(errorEl, button) {
+function finishPostedComposer(errorEl, button, annotationId) {
   button.textContent = 'Posted';
   errorEl.hidden = true;
   errorEl.textContent = '';
+  notifyAnnotationPosted(annotationId);
   pendingAnnotation = null;
   closePostedComposer();
   requestAnimationFrame(closePostedComposer);
   window.setTimeout(closePostedComposer, 150);
+}
+
+function notifyAnnotationPosted(annotationId) {
+  const page = getPageInfo();
+  safeSend({
+    type: 'ANNOTATION_POSTED',
+    annotationId,
+    page: {
+      url: page.url,
+      pageUrl: page.pageUrl,
+      title: page.title,
+      sourceType: page.sourceType,
+      domain: page.domain,
+      siteName: page.siteName,
+      author: page.author,
+      publishedAt: page.publishedAt,
+      thumbnail: page.thumbnail,
+    },
+  });
 }
 
 function closePostedComposer() {
