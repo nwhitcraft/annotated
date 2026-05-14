@@ -72,6 +72,7 @@ let trackingFrame = null;
 let selectedType = 'Opinion';
 let mediaSession = null;
 let activeAnchorElement = null;
+let mediaRetryTimer = null;
 
 function detectSourceType(url) {
   if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(url)) return 'youtube';
@@ -210,11 +211,7 @@ function enterClippingMode() {
 
   if (captureCurrentSelection()) return;
 
-  const mediaClip = clipFromMedia(false);
-  if (mediaClip) {
-    const media = currentMedia();
-    if (media) startMediaRecording(mediaClip, media);
-  }
+  startMediaRecordingFromPageWithRetry();
 }
 
 function exitClippingMode() {
@@ -224,6 +221,8 @@ function exitClippingMode() {
   activeRange = null;
   activeAnchorElement = null;
   window.clearTimeout(selectionTimer);
+  window.clearTimeout(mediaRetryTimer);
+  mediaRetryTimer = null;
   if (trackingFrame) cancelAnimationFrame(trackingFrame);
   trackingFrame = null;
   document.documentElement.classList.remove('annotated-clipping-mode');
@@ -458,13 +457,33 @@ function positionRecordingBubble() {
 
   const margin = 14;
   const width = Math.min(440, window.innerWidth - margin * 2);
-  const height = bubble.offsetHeight || 220;
   const left = Math.max(margin, (window.innerWidth - width) / 2);
-  const top = Math.max(margin, (window.innerHeight - height) / 2);
 
   bubble.style.width = `${width}px`;
+  const height = bubble.offsetHeight || 220;
+  const top = Math.max(margin, window.innerHeight - height - 24);
   bubble.style.left = `${left}px`;
   bubble.style.top = `${top}px`;
+}
+
+function startMediaRecordingFromPageWithRetry(attempt = 0) {
+  if (!clippingMode || mediaSession || activeClip) return;
+  const mediaClip = clipFromMedia(false);
+  if (mediaClip) {
+    const media = currentMedia();
+    if (media) {
+      window.clearTimeout(mediaRetryTimer);
+      mediaRetryTimer = null;
+      startMediaRecording(mediaClip, media);
+      return;
+    }
+  }
+
+  const page = getPageInfo();
+  const shouldRetryMedia = page.sourceType === 'youtube' || page.sourceType === 'podcast' || /youtube\.com|youtu\.be|spotify\.com|podcasts\.apple\.com/i.test(window.location.href);
+  if (!shouldRetryMedia || attempt >= 10) return;
+  window.clearTimeout(mediaRetryTimer);
+  mediaRetryTimer = window.setTimeout(() => startMediaRecordingFromPageWithRetry(attempt + 1), 120);
 }
 
 async function stopMediaRecording(reason) {
@@ -720,6 +739,7 @@ function mediaComposerSummary(clip) {
 function positionComposer(composer, rect) {
   const margin = 18;
   const gap = 16;
+  const minUsableSpace = 150;
   const width = Math.min(620, window.innerWidth - margin * 2);
   const left = Math.max(margin, Math.min(window.innerWidth - width - margin, rect.left + rect.width / 2 - width / 2));
 
@@ -729,8 +749,10 @@ function positionComposer(composer, rect) {
   const measuredHeight = Math.min(composer.offsetHeight || 224, window.innerHeight - margin * 2);
   const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
   const spaceAbove = rect.top - gap - margin;
-  const placeBelow = spaceBelow >= measuredHeight || spaceBelow >= spaceAbove;
-  const availableSpace = Math.max(140, placeBelow ? spaceBelow : spaceAbove);
+  let placeBelow = rect.top + rect.height / 2 < window.innerHeight / 2;
+  if (placeBelow && spaceBelow < minUsableSpace && spaceAbove > spaceBelow) placeBelow = false;
+  if (!placeBelow && spaceAbove < minUsableSpace && spaceBelow > spaceAbove) placeBelow = true;
+  const availableSpace = Math.max(minUsableSpace, placeBelow ? spaceBelow : spaceAbove);
   const height = Math.min(measuredHeight, availableSpace);
   const top = placeBelow
     ? Math.min(rect.bottom + gap, window.innerHeight - height - margin)
