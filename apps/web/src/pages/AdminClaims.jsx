@@ -72,6 +72,8 @@ export default function AdminClaims() {
     }));
   }
 
+  const accessMessage = adminAccessMessage(error);
+
   if (loading) return <div className="page"><p>Loading claims...</p></div>;
 
   return (
@@ -82,92 +84,130 @@ export default function AdminClaims() {
         <h1>Claim Review</h1>
       </header>
 
-      <div className="claim-admin-filters">
-        {FILTERS.map((status) => (
-          <button
-            key={status}
-            className={`button ${filter === status ? 'button-solid' : 'button-outline'}`}
-            onClick={() => setFilter(status)}
-            type="button"
-          >
-            {status.replace('_', ' ')}
-          </button>
-        ))}
-      </div>
-
-      {error ? (
+      {accessMessage ? (
+        <div className="empty-state admin-locked-state">
+          <strong>{accessMessage.title}</strong>
+          <p>{accessMessage.body}</p>
+          <Link className="button button-outline" to="/login">Sign in with an admin account</Link>
+        </div>
+      ) : error ? (
         <p className="form-error">{error}</p>
       ) : claims.length === 0 ? (
-        <p className="feed-empty">No {filter.replace('_', ' ')} claims.</p>
+        <>
+          <ClaimFilters filter={filter} setFilter={setFilter} />
+          <p className="feed-empty">No {filter.replace('_', ' ')} claims.</p>
+        </>
       ) : (
-        <div className="ruled-list">
-          {claims.map((claim) => (
-            <article className="claim-admin-row" key={claim.id}>
-              <div className="claim-admin-header">
-                <div>
-                  <strong>{claim.display_name || claim.username || 'Unknown annotation owner'}</strong>
-                  {claim.username && <span>@{claim.username}</span>}
-                  {claim.deleted_at && <em>deleted</em>}
+        <>
+          <ClaimFilters filter={filter} setFilter={setFilter} />
+          <div className="ruled-list">
+            {claims.map((claim) => (
+              <article className="claim-admin-row" key={claim.id}>
+                <div className="claim-admin-header">
+                  <div>
+                    <strong>{claim.display_name || claim.username || 'Unknown annotation owner'}</strong>
+                    {claim.username && <span>@{claim.username}</span>}
+                    {claim.deleted_at && <em>deleted</em>}
+                  </div>
+                  <span>{claim.status.replace('_', ' ')}</span>
                 </div>
-                <span>{claim.status.replace('_', ' ')}</span>
-              </div>
 
-              <section className="claim-admin-section">
-                <strong>Annotation</strong>
-                <p>{claim.commentary}</p>
-                <a href={claim.source_url} target="_blank" rel="noreferrer">
-                  {claim.source_title || claim.source_url}
-                </a>
-              </section>
+                <section className="claim-admin-section">
+                  <strong>Annotation</strong>
+                  <p>{claim.commentary}</p>
+                  <a href={claim.source_url} target="_blank" rel="noreferrer">
+                    {claim.source_title || claim.source_url}
+                  </a>
+                </section>
 
-              <section className="claim-admin-section claim-admin-claim">
-                <strong>Claim</strong>
-                <p><span>Reason:</span> {REASON_LABELS[claim.reason_code] || claim.reason_code}</p>
-                <p><span>Claimant:</span> {claim.claimant_email}</p>
-                <p><span>Description:</span> {claim.description}</p>
-                <p><span>Email notification:</span> {claim.email_notification_status || 'not_sent'}{claim.email_notification_error ? ` - ${claim.email_notification_error}` : ''}</p>
-              </section>
+                <section className="claim-admin-section claim-admin-claim">
+                  <strong>Claim</strong>
+                  <p><span>Reason:</span> {REASON_LABELS[claim.reason_code] || claim.reason_code}</p>
+                  <p><span>Claimant:</span> {claim.claimant_email}</p>
+                  <p><span>Description:</span> {claim.description}</p>
+                  <p><span>Email notification:</span> {claim.email_notification_status || 'not_sent'}{claim.email_notification_error ? ` - ${claim.email_notification_error}` : ''}</p>
+                </section>
 
-              <section className="claim-admin-review">
-                <label>
-                  <span>Internal note</span>
-                  <textarea
-                    value={drafts[claim.id]?.note || claim.reviewer_note || ''}
-                    onChange={(event) => updateDraft(claim.id, 'note', event.target.value)}
-                    placeholder="Why you made this decision"
-                  />
-                </label>
-                <label>
-                  <span>Outcome summary for claimant</span>
-                  <textarea
-                    value={drafts[claim.id]?.outcome || claim.outcome || ''}
-                    onChange={(event) => updateDraft(claim.id, 'outcome', event.target.value)}
-                    placeholder="Short outcome you can paste into the response email"
-                  />
-                </label>
-              </section>
+                <section className="claim-admin-review">
+                  <label>
+                    <span>Internal note</span>
+                    <textarea
+                      value={drafts[claim.id]?.note || claim.reviewer_note || ''}
+                      onChange={(event) => updateDraft(claim.id, 'note', event.target.value)}
+                      placeholder="Why you made this decision"
+                    />
+                  </label>
+                  <label>
+                    <span>Outcome summary for claimant</span>
+                    <textarea
+                      value={drafts[claim.id]?.outcome || claim.outcome || ''}
+                      onChange={(event) => updateDraft(claim.id, 'outcome', event.target.value)}
+                      placeholder="Short outcome you can paste into the response email"
+                    />
+                  </label>
+                </section>
 
-              <div className="claim-admin-actions">
-                <button className="button button-outline" type="button" onClick={() => handleStatus(claim, 'reviewed')}>
-                  Mark reviewed
-                </button>
-                <button className="button button-solid" type="button" onClick={() => handleStatus(claim, 'resolved')}>
-                  Resolve, keep annotation
-                </button>
-                <button className="button button-outline" type="button" onClick={() => handleStatus(claim, 'annotation_removed')}>
-                  Remove annotation
-                </button>
-                <button className="button button-outline danger" type="button" onClick={() => handleBanUser(claim)}>
-                  Ban annotation owner 30 days
-                </button>
-                <span>Filed {new Date(claim.created_at).toLocaleDateString()}</span>
-              </div>
-            </article>
-          ))}
-        </div>
+                <div className="claim-admin-actions">
+                  <button className="button button-outline" type="button" onClick={() => handleStatus(claim, 'reviewed')}>
+                    Mark reviewed
+                  </button>
+                  <button className="button button-solid" type="button" onClick={() => handleStatus(claim, 'resolved')}>
+                    Resolve, keep annotation
+                  </button>
+                  <button className="button button-outline" type="button" onClick={() => handleStatus(claim, 'annotation_removed')}>
+                    Remove annotation
+                  </button>
+                  <button className="button button-outline danger" type="button" onClick={() => handleBanUser(claim)}>
+                    Ban annotation owner 30 days
+                  </button>
+                  <span>Filed {new Date(claim.created_at).toLocaleDateString()}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
+}
+
+function ClaimFilters({ filter, setFilter }) {
+  return (
+    <div className="claim-admin-filters">
+      {FILTERS.map((status) => (
+        <button
+          key={status}
+          className={`button ${filter === status ? 'button-solid' : 'button-outline'}`}
+          onClick={() => setFilter(status)}
+          type="button"
+        >
+          {status.replace('_', ' ')}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function adminAccessMessage(error) {
+  if (error === 'Admin authentication required') {
+    return {
+      title: 'Admin-only page',
+      body: 'Claim Review is only visible to admin accounts. Sign in as Nick or another configured admin to review claims.',
+    };
+  }
+  if (error === 'Admin access required') {
+    return {
+      title: 'Admin access required',
+      body: 'You are signed in, but this account is not configured as an admin.',
+    };
+  }
+  if (error === 'Invalid admin token') {
+    return {
+      title: 'Admin session expired',
+      body: 'Sign in again with an admin account to continue reviewing claims.',
+    };
+  }
+  return null;
 }
 
 function defaultOutcome(status) {
