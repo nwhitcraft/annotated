@@ -1,5 +1,5 @@
 app = "annotated-nwhitcraft"
-primary_region = "sjc"
+primary_region = "sin"
 
 [build]
   dockerfile = "Dockerfile"
@@ -8,13 +8,15 @@ primary_region = "sjc"
   PORT = "8080"
   FRONTEND_URL = "https://annotated-nwhitcraft.fly.dev"
   API_PUBLIC_URL = "https://annotated-nwhitcraft.fly.dev"
+  DATA_DIR = "/data"
   GOOGLE_REDIRECT = "/api/auth/google/callback"
   TWITTER_REDIRECT = "/api/auth/twitter/callback"
+  ADMIN_USERNAMES = "nwhitcraft"
   ALLOW_DEMO_AUTH = "0"
 
 [[mounts]]
   source = "annotated_data"
-  destination = "/app/packages/api/data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080
