@@ -53,8 +53,20 @@ chrome.runtime.onMessage.addListener((msg) => {
 // Auth bridge: on Annotated pages, listen for JWT handoff from web app.
 if ([WEB_BASE, API_BASE, LOCAL_WEB_BASE, LOCAL_API_BASE].includes(window.location.origin)) {
   window.postMessage({ type: 'ANNOTATED_EXTENSION_READY' }, window.location.origin);
+  const clearExtensionAuth = () => {
+    chrome.runtime.sendMessage({ type: 'CLEAR_AUTH_TOKEN' }, () => {
+      void chrome.runtime.lastError;
+    });
+    authToken = '';
+    authUser = null;
+  };
+  window.addEventListener('annotated:sign-out', clearExtensionAuth);
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
+    if (event.data?.type === 'ANNOTATED_SIGN_OUT') {
+      clearExtensionAuth();
+      return;
+    }
     if (event.data?.type !== 'ANNOTATED_AUTH_TOKEN' || !event.data.token) return;
     chrome.runtime.sendMessage({
       type: 'STORE_AUTH_TOKEN',

@@ -26,6 +26,7 @@ export function clearToken() {
 }
 
 export function signOut() {
+  notifyExtensionSignOut();
   clearToken();
   notifyUserChanged(null);
 }
@@ -106,6 +107,15 @@ function cacheUser(user) {
 
 function notifyUserChanged(user) {
   window.dispatchEvent(new CustomEvent(USER_UPDATED_EVENT, { detail: user || {} }));
+}
+
+function notifyExtensionSignOut() {
+  try {
+    window.dispatchEvent(new CustomEvent('annotated:sign-out'));
+    window.postMessage({ type: 'ANNOTATED_SIGN_OUT' }, window.location.origin);
+  } catch {
+    // The website session is still cleared even when the extension is unavailable.
+  }
 }
 
 async function request(path, options = {}) {

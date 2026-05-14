@@ -195,6 +195,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'CLEAR_AUTH_TOKEN') {
+    storageArea.remove(['auth_token', 'auth_user']).then(() => {
+      safeBroadcast({ type: 'AUTH_UPDATED', user: null });
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (msg.type === 'GET_AUTH_STATE') {
     storageArea.get(['auth_token', 'auth_user']).then((state) => {
       sendResponse({ token: state.auth_token || '', user: state.auth_user || null });
