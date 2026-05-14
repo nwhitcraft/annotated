@@ -1,7 +1,10 @@
 .git
 node_modules
-apps/*/node_modules
-packages/*/node_modules
+**/node_modules
+**/dist
+**/target
+apps/desktop
+apps/extension
 apps/web/dist
 dist
 .vite
