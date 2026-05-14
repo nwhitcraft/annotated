@@ -312,6 +312,31 @@ export async function readSelectedText() {
   return invoke('read_selected_text');
 }
 
+export async function checkAccessibilityPermission() {
+  if (!isTauri) return true;
+  return invoke('check_accessibility_permission');
+}
+
+export async function openAccessibilitySettings() {
+  if (!isTauri) return true;
+  return invoke('open_accessibility_settings');
+}
+
+export async function getFrontmostSourceContext() {
+  if (!isTauri) {
+    return {
+      appName: '',
+      windowTitle: document.title || '',
+      bundleId: '',
+      sourceTitle: document.title || 'Desktop clip',
+      sourceDomain: 'Browser preview',
+      sourceUrl: 'screen://local',
+      sourceType: 'screen',
+    };
+  }
+  return invoke('frontmost_source_context');
+}
+
 export async function showAppWindow() {
   if (!isTauri) return true;
   return invoke('show_app_window');
@@ -320,6 +345,11 @@ export async function showAppWindow() {
 export async function startDetachedScreenClip() {
   if (!isTauri) throw new Error('Screen clipping requires the Annotated desktop app.');
   return invoke('start_detached_screen_clip');
+}
+
+export async function openDetachedQuickAnnotation(payload) {
+  if (!isTauri) return false;
+  return invoke('open_detached_quick_annotation', { payload });
 }
 
 export async function openCapturePermissions(kind = 'screen') {

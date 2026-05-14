@@ -10,7 +10,16 @@ function normalizeQuote(value) {
     .slice(0, 2200);
 }
 
-export default function QuickClipOverlay({ quote, authUser, onClose, onSave, onSignIn, onStatus }) {
+export default function QuickClipOverlay({
+  quote,
+  sourceContext,
+  windowMode = false,
+  authUser,
+  onClose,
+  onSave,
+  onSignIn,
+  onStatus,
+}) {
   const [commentary, setCommentary] = useState('');
   const [annotationType, setAnnotationType] = useState('Opinion');
   const [visibility, setVisibility] = useState('private');
@@ -18,6 +27,12 @@ export default function QuickClipOverlay({ quote, authUser, onClose, onSave, onS
   const [error, setError] = useState('');
   const textareaRef = useRef(null);
   const cleanedQuote = normalizeQuote(quote);
+  const sourceTitle = sourceContext?.sourceTitle || sourceContext?.windowTitle || 'Desktop selection';
+  const sourceDomain = sourceContext?.sourceDomain || sourceContext?.appName || 'Selected text';
+  const sourceUrl = sourceContext?.sourceUrl || 'screen://selection';
+  const sourceType = ['youtube', 'podcast', 'twitter'].includes(sourceContext?.sourceType)
+    ? sourceContext.sourceType
+    : 'article';
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -35,10 +50,10 @@ export default function QuickClipOverlay({ quote, authUser, onClose, onSave, onS
     try {
       await onSave({
         user_id: authUser?.id || 'local-user',
-        source_url: 'screen://selection',
-        source_type: 'article',
-        source_title: 'Desktop selection',
-        source_domain: 'Selected text',
+        source_url: sourceUrl,
+        source_type: sourceType,
+        source_title: sourceTitle,
+        source_domain: sourceDomain,
         source_thumbnail: '',
         clip_text: cleanedQuote,
         clip_start_sec: null,
@@ -71,11 +86,11 @@ export default function QuickClipOverlay({ quote, authUser, onClose, onSave, onS
   }
 
   return (
-    <div className="desktop-quick-overlay" role="presentation">
+    <div className={windowMode ? 'desktop-quick-window-shell' : 'desktop-quick-overlay'} role="presentation">
       <section className="desktop-quick-card" aria-label="Quick annotation">
         <header className="desktop-quick-header">
           <div>
-            <p>Desktop clip</p>
+            <p>{sourceDomain}</p>
             <h2>Annotate selection</h2>
           </div>
           <button className="desktop-quick-close" type="button" onClick={onClose} aria-label="Cancel quick annotation">

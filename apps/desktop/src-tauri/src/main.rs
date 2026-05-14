@@ -5,10 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
-};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::menu::MenuBuilder;
@@ -16,6 +13,74 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use uuid::Uuid;
+
+#[cfg(target_os = "macos")]
+mod accessibility {
+    use core_foundation::base::{CFRelease, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+    use std::ffi::c_void;
+    use std::ptr;
+
+    type AXUIElementRef = *mut c_void;
+    type AXError = i32;
+    const K_AX_ERROR_SUCCESS: AXError = 0;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+        fn AXUIElementCopyAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: *mut *mut c_void,
+        ) -> AXError;
+        fn AXIsProcessTrusted() -> bool;
+    }
+
+    pub fn is_trusted() -> bool {
+        unsafe { AXIsProcessTrusted() }
+    }
+
+    pub fn read_selected_text() -> Option<String> {
+        unsafe {
+            let system_wide = AXUIElementCreateSystemWide();
+            if system_wide.is_null() {
+                return None;
+            }
+
+            let focused_attribute = CFString::new("AXFocusedUIElement");
+            let mut focused_raw: *mut c_void = ptr::null_mut();
+            let focused_error = AXUIElementCopyAttributeValue(
+                system_wide,
+                focused_attribute.as_concrete_TypeRef(),
+                &mut focused_raw,
+            );
+            CFRelease(system_wide);
+            if focused_error != K_AX_ERROR_SUCCESS || focused_raw.is_null() {
+                return None;
+            }
+
+            let selected_attribute = CFString::new("AXSelectedText");
+            let mut selected_raw: *mut c_void = ptr::null_mut();
+            let selected_error = AXUIElementCopyAttributeValue(
+                focused_raw,
+                selected_attribute.as_concrete_TypeRef(),
+                &mut selected_raw,
+            );
+            CFRelease(focused_raw);
+            if selected_error != K_AX_ERROR_SUCCESS || selected_raw.is_null() {
+                return None;
+            }
+
+            let cf_string = CFString::wrap_under_create_rule(selected_raw as CFStringRef);
+            let selected = cf_string.to_string().trim().to_string();
+            if selected.is_empty() {
+                None
+            } else {
+                Some(selected)
+            }
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct LocalComment {
@@ -144,6 +209,25 @@ struct ScreenClipResult {
     error: Option<String>,
     stdout: String,
     stderr: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SourceContext {
+    app_name: String,
+    window_title: String,
+    bundle_id: String,
+    source_title: String,
+    source_domain: String,
+    source_url: String,
+    source_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct QuickAnnotationPayload {
+    quote: String,
+    source: Option<SourceContext>,
 }
 
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -1306,10 +1390,132 @@ fn start_detached_screen_clip(app: AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+fn quick_annotation_position(
+    app: &AppHandle,
+    width: f64,
+    height: f64,
+    margin: f64,
+) -> Option<(f64, f64)> {
+    let monitor = app.primary_monitor().ok().flatten()?;
+    let work_area = monitor.work_area();
+    let scale = monitor.scale_factor();
+    let x =
+        work_area.position.x as f64 / scale + work_area.size.width as f64 / scale - width - margin;
+    let y =
+        work_area.position.y as f64 / scale + (work_area.size.height as f64 / scale - height) / 2.0;
+    Some((x, y.max(margin)))
+}
+
+fn percent_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    encoded
+}
+
+#[tauri::command]
+fn open_detached_quick_annotation(
+    app: AppHandle,
+    payload: QuickAnnotationPayload,
+) -> Result<(), String> {
+    let width = 560.0;
+    let height = 620.0;
+    let margin = 26.0;
+
+    if let Some(window) = app.get_webview_window("quick-composer") {
+        if let Some((x, y)) = quick_annotation_position(&app, width, height, margin) {
+            let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+        }
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit("desktop-quick-annotation-payload", payload);
+        return Ok(());
+    }
+
+    let payload_json = serde_json::to_string(&payload).map_err(|error| error.to_string())?;
+    let url = format!(
+        "index.html?window=quick&payload={}",
+        percent_encode(&payload_json)
+    );
+    let mut builder =
+        WebviewWindowBuilder::new(&app, "quick-composer", WebviewUrl::App(url.into()))
+            .title("Annotated Selection")
+            .inner_size(width, height)
+            .min_inner_size(440.0, 520.0)
+            .resizable(false)
+            .decorations(false)
+            .always_on_top(true)
+            .transparent(true)
+            .skip_taskbar(true)
+            .focused(true);
+
+    if let Some((x, y)) = quick_annotation_position(&app, width, height, margin) {
+        builder = builder.position(x, y);
+    } else {
+        builder = builder.center();
+    }
+
+    builder
+        .build()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn check_accessibility_permission() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        Ok(accessibility::is_trusted())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn open_accessibility_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .status()
+            .map_err(|error| format!("Could not open Accessibility settings: {}", error))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err("Could not open Accessibility settings.".to_string())
+        };
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn read_selected_text() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
+        if accessibility::is_trusted() {
+            if let Some(text) = accessibility::read_selected_text() {
+                let mut selected = text;
+                if selected.chars().count() > 12_000 {
+                    selected = selected.chars().take(12_000).collect();
+                }
+                return Ok(selected);
+            }
+        } else {
+            return Ok(String::new());
+        }
+
         let previous = Command::new("pbpaste")
             .output()
             .map(|output| output.stdout)
@@ -1328,11 +1534,17 @@ fn read_selected_text() -> Result<String, String> {
             .status()
             .map_err(|error| format!("Could not request selected text: {}", error))?;
 
-        thread::sleep(Duration::from_millis(160));
-        let copied = Command::new("pbpaste")
-            .output()
-            .map_err(|error| format!("Could not read selected text: {}", error))?
-            .stdout;
+        let mut selected = String::new();
+        for delay_ms in [200, 400] {
+            thread::sleep(Duration::from_millis(delay_ms));
+            if let Ok(output) = Command::new("pbpaste").output() {
+                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !text.is_empty() && text != sentinel {
+                    selected = text;
+                    break;
+                }
+            }
+        }
 
         if let Ok(mut child) = Command::new("pbcopy").stdin(Stdio::piped()).spawn() {
             if let Some(mut stdin) = child.stdin.take() {
@@ -1345,8 +1557,7 @@ fn read_selected_text() -> Result<String, String> {
             return Ok(String::new());
         }
 
-        let mut selected = String::from_utf8_lossy(&copied).trim().to_string();
-        if selected.is_empty() || selected == sentinel {
+        if selected.is_empty() {
             return Ok(String::new());
         }
         if selected.chars().count() > 12_000 {
@@ -1362,78 +1573,141 @@ fn read_selected_text() -> Result<String, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn frontmost_bundle_identifier() -> Option<String> {
+fn frontmost_app_identity() -> Option<(String, String)> {
     let output = Command::new("osascript")
         .arg("-l")
         .arg("JavaScript")
         .arg("-e")
-        .arg("ObjC.import('AppKit'); $.NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier.js")
+        .arg(
+            r#"
+            ObjC.import('AppKit');
+            const app = $.NSWorkspace.sharedWorkspace.frontmostApplication;
+            const name = app.localizedName.js || '';
+            const bundle = app.bundleIdentifier.js || '';
+            `${name}\n${bundle}`;
+            "#,
+        )
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut lines = text.lines();
+    let app_name = lines.next().unwrap_or("").trim().to_string();
+    let bundle_id = lines.next().unwrap_or("").trim().to_string();
+    if app_name.is_empty() && bundle_id.is_empty() {
+        None
+    } else {
+        Some((app_name, bundle_id))
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn frontmost_app_is_browser() -> bool {
-    let Some(bundle_id) = frontmost_bundle_identifier() else {
-        return false;
-    };
-    matches!(
-        bundle_id.as_str(),
-        "com.google.Chrome"
-            | "com.google.Chrome.canary"
-            | "com.brave.Browser"
-            | "com.microsoft.edgemac"
-            | "com.vivaldi.Vivaldi"
-            | "company.thebrowser.Browser"
-            | "org.mozilla.firefox"
-            | "com.apple.Safari"
-    )
+fn frontmost_window_title() -> String {
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(
+            r#"tell application "System Events"
+              set frontApp to first application process whose frontmost is true
+              try
+                return name of front window of frontApp
+              on error
+                return ""
+              end try
+            end tell"#,
+        )
+        .output();
+    match output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => String::new(),
+    }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn frontmost_app_is_browser() -> bool {
-    false
+fn infer_source_type(app_name: &str, bundle_id: &str, window_title: &str) -> String {
+    let haystack = format!("{} {} {}", app_name, bundle_id, window_title).to_lowercase();
+    if haystack.contains("youtube") {
+        return "youtube".to_string();
+    }
+    if haystack.contains("spotify")
+        || haystack.contains("podcast")
+        || haystack.contains("overcast")
+        || haystack.contains("pocket casts")
+    {
+        return "podcast".to_string();
+    }
+    if haystack.contains("twitter") || haystack.contains("x.com") {
+        return "twitter".to_string();
+    }
+    "screen".to_string()
+}
+
+#[tauri::command]
+fn frontmost_source_context() -> Result<SourceContext, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let (app_name, bundle_id) = frontmost_app_identity().unwrap_or_default();
+        let window_title = frontmost_window_title();
+        let source_title = if !window_title.is_empty() {
+            window_title.clone()
+        } else if !app_name.is_empty() {
+            app_name.clone()
+        } else {
+            "Desktop clip".to_string()
+        };
+        let source_domain = if !app_name.is_empty() {
+            app_name.clone()
+        } else if !bundle_id.is_empty() {
+            bundle_id.clone()
+        } else {
+            "Mac desktop".to_string()
+        };
+        let source_type = infer_source_type(&app_name, &bundle_id, &window_title);
+        return Ok(SourceContext {
+            app_name,
+            window_title,
+            bundle_id: bundle_id.clone(),
+            source_title,
+            source_domain,
+            source_url: if bundle_id.is_empty() {
+                "screen://local".to_string()
+            } else {
+                format!("screen://{}", bundle_id)
+            },
+            source_type,
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(SourceContext {
+            app_name: String::new(),
+            window_title: String::new(),
+            bundle_id: String::new(),
+            source_title: "Desktop clip".to_string(),
+            source_domain: "Desktop".to_string(),
+            source_url: "screen://local".to_string(),
+            source_type: "screen".to_string(),
+        })
+    }
 }
 
 const CLIP_SHORTCUT: &str = "Alt+Shift+X";
 
-fn set_desktop_clip_shortcut(app: &AppHandle, enabled: bool, registered: &AtomicBool) {
-    if enabled {
-        if registered
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
-            return;
-        }
-        if app
-            .global_shortcut()
-            .on_shortcut(CLIP_SHORTCUT, move |app, _shortcut, event| {
-                if event.state != ShortcutState::Pressed {
-                    return;
-                }
-                if app.get_webview_window("capture-controller").is_some() {
-                    let _ = app.emit("desktop-screen-clip-shortcut-cancel", true);
-                } else {
-                    let _ = app.emit("tray-start-screen-clip", true);
-                }
-            })
-            .is_err()
-        {
-            registered.store(false, Ordering::SeqCst);
-        }
-        return;
-    }
-
-    if registered
-        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-        .is_ok()
-    {
-        let _ = app.global_shortcut().unregister(CLIP_SHORTCUT);
-    }
+fn register_desktop_clip_shortcut(app: &AppHandle) -> Result<(), String> {
+    app.global_shortcut()
+        .on_shortcut(CLIP_SHORTCUT, move |app, _shortcut, event| {
+            if event.state != ShortcutState::Pressed {
+                return;
+            }
+            if app.get_webview_window("capture-controller").is_some() {
+                let _ = app.emit("desktop-screen-clip-shortcut-stop", true);
+            } else {
+                let _ = app.emit("tray-start-screen-clip", true);
+            }
+        })
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1473,22 +1747,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let shortcut_registered = Arc::new(AtomicBool::new(false));
-            let app_handle = app.handle().clone();
-            set_desktop_clip_shortcut(
-                &app_handle,
-                !frontmost_app_is_browser(),
-                shortcut_registered.as_ref(),
-            );
-            let shortcut_registered_for_thread = Arc::clone(&shortcut_registered);
-            thread::spawn(move || loop {
-                set_desktop_clip_shortcut(
-                    &app_handle,
-                    !frontmost_app_is_browser(),
-                    shortcut_registered_for_thread.as_ref(),
-                );
-                thread::sleep(Duration::from_millis(350));
-            });
+            register_desktop_clip_shortcut(app.handle())?;
             let menu = MenuBuilder::new(app)
                 .text("toggle_window", "Show Annotated")
                 .text("quick_clip", "Start 90s Screen Clip")
@@ -1504,11 +1763,10 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle_window" => show_main_window(app),
                     "quick_clip" => {
-                        show_main_window(app);
                         let _ = app.emit("tray-start-screen-clip", true);
                     }
                     "stop_clip" => {
-                        let _ = app.emit("tray-stop-screen-clip", true);
+                        let _ = app.emit("desktop-screen-clip-shortcut-stop", true);
                     }
                     _ => {}
                 })
@@ -1542,8 +1800,12 @@ pub fn run() {
             cancel_screen_clip,
             screen_clip_status,
             read_selected_text,
+            check_accessibility_permission,
+            open_accessibility_settings,
+            frontmost_source_context,
             show_app_window,
             start_detached_screen_clip,
+            open_detached_quick_annotation,
             open_capture_permissions,
             upload_clip_to_api,
             handle_auth_callback,

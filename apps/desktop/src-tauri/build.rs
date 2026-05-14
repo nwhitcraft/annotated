@@ -13,16 +13,27 @@ fn main() {
         let sidecar_name = format!("annotated-capture-{}", target);
         let sidecar_dir = manifest_dir.join("binaries");
         let sidecar = sidecar_dir.join(&sidecar_name);
+        let module_cache = out_dir.join("swift-module-cache");
+        let swift_target = if target.starts_with("aarch64") {
+            Some("arm64-apple-macos13.0")
+        } else if target.starts_with("x86_64") {
+            Some("x86_64-apple-macos13.0")
+        } else {
+            None
+        };
 
         println!("cargo:rerun-if-changed={}", source.display());
         println!("cargo:rustc-env=ANNOTATED_CAPTURE_SIDECAR={}", sidecar_name);
         if source.exists() {
             let _ = fs::create_dir_all(&out_dir);
             let _ = fs::create_dir_all(&sidecar_dir);
+            let _ = fs::create_dir_all(&module_cache);
             let mut args = vec![
                 "swiftc".to_string(),
                 "-O".to_string(),
                 "-parse-as-library".to_string(),
+                "-module-cache-path".to_string(),
+                module_cache.to_string_lossy().to_string(),
                 "-framework".to_string(),
                 "ScreenCaptureKit".to_string(),
                 "-framework".to_string(),
@@ -36,6 +47,9 @@ fn main() {
                 "-o".to_string(),
                 sidecar.to_string_lossy().to_string(),
             ];
+            if let Some(swift_target) = swift_target {
+                args.splice(1..1, ["-target".to_string(), swift_target.to_string()]);
+            }
             if info_plist.exists() {
                 args.extend([
                     "-Xlinker".to_string(),

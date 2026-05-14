@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import AccessibilityPrompt from './components/AccessibilityPrompt.jsx';
 import Composer from './components/Composer.jsx';
 import DetailView from './components/DetailView.jsx';
 import FeedView from './components/FeedView.jsx';
@@ -11,14 +12,18 @@ import QuickClipOverlay from './components/QuickClipOverlay.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import {
   addLocalComment,
+  checkAccessibilityPermission,
   checkAuth,
   clearToken,
   deleteAnnotation,
   exportAnnotation,
   getCachedUser,
+  getFrontmostSourceContext,
   listAnnotations,
   loadSettings,
+  openAccessibilitySettings,
   openAuthUrl,
+  openDetachedQuickAnnotation,
   postAnnotation,
   readSelectedText,
   saveAnnotation,
@@ -53,6 +58,8 @@ export default function App() {
   const [screenStopIntent, setScreenStopIntent] = useState(0);
   const [profileKey, setProfileKey] = useState(getCachedUser()?.username || '');
   const [quickClip, setQuickClip] = useState(null);
+  const [showAccessibilityPrompt, setShowAccessibilityPrompt] = useState(false);
+  const pendingScreenSourceRef = useRef(null);
 
   function startScreenClip() {
     setEditing(null);
@@ -61,16 +68,18 @@ export default function App() {
     setScreenCaptureIntent((value) => value + 1);
   }
 
-  function screenClipResultToDraft(result) {
+  function screenClipResultToDraft(result, sourceContext = null) {
     if (!result?.ok || !result.outputPath) return null;
     const duration = result.durationSeconds || 90;
+    const sourceTitle = sourceContext?.sourceTitle || sourceContext?.windowTitle || 'Screen recording';
+    const sourceDomain = sourceContext?.sourceDomain || sourceContext?.appName || '';
     return {
-      source_url: 'screen://local',
+      source_url: sourceContext?.sourceUrl || 'screen://local',
       source_type: 'screen',
-      source_title: 'Screen recording',
-      source_domain: '',
+      source_title: sourceTitle,
+      source_domain: sourceDomain,
       source_thumbnail: '',
-      clip_text: `Screen recording attached (${duration}s, 90s max).`,
+      clip_text: `Screen recording attached from ${sourceTitle} (${duration}s, 90s max).`,
       clip_start_sec: 0,
       clip_end_sec: duration,
       clip_media_path: result.outputPath,
@@ -93,11 +102,19 @@ export default function App() {
 
   async function startGlobalClip() {
     setEditing(null);
+    const source = await getFrontmostSourceContext().catch(() => null);
     const localSelection = selectedTextFromFocusedElement();
     if (localSelection) {
-      await showAppWindow();
-      setQuickClip({ quote: localSelection });
+      await openDetachedQuickAnnotation({ quote: localSelection, source });
       setStatus('Selection ready to annotate');
+      return;
+    }
+
+    const accessibilityReady = await checkAccessibilityPermission().catch(() => false);
+    if (!accessibilityReady) {
+      await showAppWindow();
+      setShowAccessibilityPrompt(true);
+      setStatus('Enable Accessibility permission to use global text clipping');
       return;
     }
 
@@ -106,8 +123,7 @@ export default function App() {
         .replace(/\s+/g, ' ')
         .trim();
       if (selected) {
-        await showAppWindow();
-        setQuickClip({ quote: selected });
+        await openDetachedQuickAnnotation({ quote: selected, source });
         setStatus('Selection ready to annotate');
         return;
       }
@@ -115,6 +131,7 @@ export default function App() {
       console.warn('Selected text capture failed:', error);
     }
     try {
+      pendingScreenSourceRef.current = source;
       await startDetachedScreenClip();
       setStatus('Screen clip recording');
     } catch (error) {
@@ -190,7 +207,9 @@ export default function App() {
         unlisteners.push(await listen('desktop-screen-clip-finished', async (event) => {
           try {
             const result = event.payload;
-            const draft = screenClipResultToDraft(result);
+            const source = pendingScreenSourceRef.current;
+            pendingScreenSourceRef.current = null;
+            const draft = screenClipResultToDraft(result, source);
             await showAppWindow();
             if (!draft) {
               setStatus('Screen clip did not produce a file');
@@ -205,7 +224,13 @@ export default function App() {
           }
         }));
         unlisteners.push(await listen('desktop-screen-clip-cancelled', () => {
+          pendingScreenSourceRef.current = null;
           setStatus('Screen clip cancelled');
+        }));
+        unlisteners.push(await listen('desktop-annotation-saved', async (event) => {
+          const saved = event.payload;
+          setStatus(saved?.is_public ? 'Selection published' : 'Selection saved privately');
+          await refresh(saved?.id);
         }));
       } catch (err) {
         console.error('Failed to register desktop event listener:', err);
@@ -467,6 +492,7 @@ export default function App() {
       {quickClip && (
         <QuickClipOverlay
           quote={quickClip.quote}
+          sourceContext={quickClip.source}
           authUser={authUser}
           onClose={() => setQuickClip(null)}
           onSave={saveQuickClip}
@@ -474,6 +500,12 @@ export default function App() {
           onStatus={setStatus}
         />
       )}
+
+      <AccessibilityPrompt
+        visible={showAccessibilityPrompt}
+        onOpenSettings={openAccessibilitySettings}
+        onDismiss={() => setShowAccessibilityPrompt(false)}
+      />
 
       <footer className="status-bar">
         <span>{status}</span>

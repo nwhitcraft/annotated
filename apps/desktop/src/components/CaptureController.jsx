@@ -94,8 +94,8 @@ export default function CaptureController() {
 
   useEffect(() => {
     let unlisten = null;
-    listen('desktop-screen-clip-shortcut-cancel', () => {
-      void cancel();
+    listen('desktop-screen-clip-shortcut-stop', () => {
+      void stop();
     }).then((value) => {
       unlisten = value;
     }).catch(() => {});

@@ -1287,6 +1287,24 @@ kbd {
   backdrop-filter: blur(12px);
 }
 
+html.quick-composer-root,
+html.quick-composer-root #root,
+body.quick-composer-body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.desktop-quick-window-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: transparent;
+}
+
 .desktop-quick-card {
   display: grid;
   width: min(680px, 100%);
@@ -1298,6 +1316,13 @@ kbd {
   border-radius: 18px;
   background: rgba(255, 255, 253, 0.9);
   box-shadow: 0 24px 68px rgba(26, 26, 26, 0.12);
+}
+
+.desktop-quick-window-shell .desktop-quick-card {
+  width: 100%;
+  max-height: calc(100vh - 28px);
+  border-radius: 16px;
+  background: rgba(255, 255, 253, 0.95);
 }
 
 .desktop-quick-header {
@@ -1444,6 +1469,79 @@ kbd {
   justify-self: end;
   color: var(--accent-hover);
   font-size: 14px;
+}
+
+.accessibility-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgba(250, 250, 248, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.accessibility-prompt-card {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 253, 0.95);
+}
+
+.accessibility-prompt-card header {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.accessibility-prompt-card header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+
+.accessibility-prompt-card h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 34px;
+  line-height: 1.05;
+}
+
+.accessibility-prompt-card p,
+.accessibility-prompt-card li {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.accessibility-prompt-card ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.accessibility-prompt-card kbd {
+  display: inline-flex;
+  min-width: 24px;
+  justify-content: center;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.72);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.accessibility-prompt-card footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .capture-controller-shell {

@@ -18,3 +18,4 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 libc = "0.2"
 tauri-plugin-deep-link = "2.0.0"
+core-foundation = "0.10"
