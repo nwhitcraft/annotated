@@ -340,8 +340,9 @@
 
     .feed-actions {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 14px;
+      gap: 10px 14px;
       color: var(--text-tertiary);
       font-size: 12px;
     }
@@ -357,6 +358,78 @@
 
     .feed-action:hover {
       color: var(--accent-hover);
+    }
+
+    .feed-action.is-active {
+      color: var(--text-primary);
+    }
+
+    .feed-action-credible {
+      color: #28704f;
+    }
+
+    .feed-action-disagree,
+    .feed-action-report:hover {
+      color: var(--danger);
+    }
+
+    .feed-report-form {
+      display: grid;
+      gap: 8px;
+      padding: 10px 0 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .feed-report-form strong {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      font-weight: 500;
+    }
+
+    .feed-report-form textarea {
+      min-height: 74px;
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-primary);
+      outline: none;
+      resize: vertical;
+    }
+
+    .feed-report-form textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .feed-report-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .feed-report-actions button {
+      padding: 0;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .feed-report-actions button:hover {
+      text-decoration: underline;
+    }
+
+    .feed-report-error,
+    .feed-report-confirmation {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .feed-report-error {
+      color: var(--danger);
+    }
+
+    .feed-report-confirmation {
+      color: var(--text-secondary);
     }
 
     .feed-empty {

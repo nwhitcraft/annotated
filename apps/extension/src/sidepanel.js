@@ -22,14 +22,25 @@ document.addEventListener('visibilitychange', refreshFeedIfVisible);
 window.setInterval(refreshFeedIfVisible, 5000);
 
 feedListEl?.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-comment-url]');
-  if (!button) return;
+  const actionButton = event.target.closest('[data-feed-action]');
+  if (actionButton) {
+    void handleFeedAction(event, actionButton);
+    return;
+  }
 
+  const cancelButton = event.target.closest('[data-report-cancel]');
+  if (cancelButton) {
+    event.preventDefault();
+    cancelButton.closest('[data-report-form]')?.remove();
+    return;
+  }
+});
+
+feedListEl?.addEventListener('submit', (event) => {
+  const form = event.target.closest('[data-report-form]');
+  if (!form) return;
   event.preventDefault();
-  const url = button.getAttribute('data-comment-url');
-  if (!url) return;
-
-  chrome.windows.create({ url, type: 'normal', focused: true });
+  void submitReportForm(form);
 });
 
 document.addEventListener('click', (event) => {
@@ -371,7 +382,7 @@ function renderFeed(title, items) {
     <article class="feed-item">
       <div class="feed-byline">
         <span>${escapeHtml(item.display_name || item.username || 'Anonymous')}</span>
-        <span>${escapeHtml(sourceDate(item.source_published_at || item.created_at))}</span>
+        <span>${escapeHtml(annotatedAt(item.created_at))}</span>
         ${item.followed_by_viewer ? '<span>Following</span>' : ''}
       </div>
       <a class="source-line" href="${escapeAttr(annotationCommentsUrl(item))}" target="_blank" rel="noreferrer">
@@ -380,14 +391,140 @@ function renderFeed(title, items) {
       <p class="feed-commentary">${escapeHtml(item.commentary || '')}</p>
       ${clipPreview(item)}
       <div class="feed-actions">
-        <button class="feed-action" type="button" data-comment-url="${escapeAttr(annotationCommentsUrl(item))}" aria-label="Open comments">
+        <button class="feed-action feed-action-credible" type="button" data-feed-action="credible" data-annotation-id="${escapeAttr(item.id)}" aria-label="Mark credible">
+          <span aria-hidden="true">✓</span>
+          <span>Credible</span>
+          <span data-action-count>${Number(item.like_count || 0)}</span>
+        </button>
+        <button class="feed-action feed-action-disagree" type="button" data-feed-action="disagree" data-annotation-id="${escapeAttr(item.id)}" aria-label="Disagree">
+          <span aria-hidden="true">×</span>
+          <span>Disagree</span>
+          <span data-action-count>${Number(item.noteworthy_count || 0)}</span>
+        </button>
+        <button class="feed-action" type="button" data-feed-action="comments" data-comment-url="${escapeAttr(annotationCommentsUrl(item))}" aria-label="Open comments">
           <span aria-hidden="true">○</span>
-          <span>${Number(item.comment_count || 0)}</span>
-          <span>Comment</span>
+          <span>Comments</span>
+          <span data-action-count>${Number(item.comment_count || 0)}</span>
+        </button>
+        <button class="feed-action feed-action-report" type="button" data-feed-action="report" data-annotation-id="${escapeAttr(item.id)}" aria-label="Report annotation">
+          <span aria-hidden="true">◇</span>
+          <span>Reports</span>
+          <span data-action-count>${Number(item.claim_count || 0)}</span>
         </button>
       </div>
     </article>
   `).join('');
+}
+
+async function handleFeedAction(event, button) {
+  event.preventDefault();
+  const action = button.getAttribute('data-feed-action');
+  const annotationId = button.getAttribute('data-annotation-id');
+
+  if (action === 'comments') {
+    const url = button.getAttribute('data-comment-url');
+    if (url) chrome.windows.create({ url, type: 'normal', focused: true });
+    return;
+  }
+
+  if (action === 'report') {
+    toggleReportForm(button.closest('.feed-item'), annotationId);
+    return;
+  }
+
+  if (!annotationId || !['credible', 'disagree'].includes(action)) return;
+
+  const endpoint = action === 'credible' ? 'like' : 'noteworthy';
+  const stateKey = action === 'credible' ? 'liked' : 'noteworthy';
+  const countEl = button.querySelector('[data-action-count]');
+  const wasActive = button.classList.contains('is-active');
+  const nextActive = !wasActive;
+  button.classList.toggle('is-active', nextActive);
+  updateCount(countEl, nextActive ? 1 : -1);
+  button.disabled = true;
+
+  try {
+    const data = await fetchJson(`/api/annotations/${encodeURIComponent(annotationId)}/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: currentActorId() }),
+    });
+    if (typeof data[stateKey] === 'boolean' && data[stateKey] !== nextActive) {
+      button.classList.toggle('is-active', data[stateKey]);
+      updateCount(countEl, data[stateKey] ? 1 : -1);
+    }
+  } catch {
+    button.classList.toggle('is-active', wasActive);
+    updateCount(countEl, nextActive ? -1 : 1);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function toggleReportForm(article, annotationId) {
+  if (!article || !annotationId) return;
+  const existing = article.querySelector('[data-report-form]');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  article.insertAdjacentHTML('beforeend', `
+    <form class="feed-report-form" data-report-form data-annotation-id="${escapeAttr(annotationId)}">
+      <strong>File a report</strong>
+      <textarea name="description" required placeholder="Describe the issue"></textarea>
+      <p class="feed-report-error" hidden></p>
+      <div class="feed-report-actions">
+        <button type="submit">Submit</button>
+        <button type="button" data-report-cancel>Cancel</button>
+      </div>
+    </form>
+  `);
+}
+
+async function submitReportForm(form) {
+  const annotationId = form.getAttribute('data-annotation-id');
+  const description = form.elements.description?.value?.trim();
+  const submit = form.querySelector('button[type="submit"]');
+  const error = form.querySelector('.feed-report-error');
+  if (!annotationId || !description || !submit) return;
+
+  submit.disabled = true;
+  submit.textContent = 'Submitting';
+  if (error) error.hidden = true;
+
+  try {
+    await fetchJson('/api/claims', {
+      method: 'POST',
+      body: JSON.stringify({
+        annotation_id: annotationId,
+        reason_code: 'other',
+        description,
+      }),
+    });
+    const reportButton = form.closest('.feed-item')?.querySelector('[data-feed-action="report"] [data-action-count]');
+    updateCount(reportButton, 1);
+    form.innerHTML = '<p class="feed-report-confirmation">Report filed. We will review it shortly.</p>';
+  } catch (err) {
+    if (error) {
+      error.hidden = false;
+      error.textContent = err.message || 'Could not file report';
+    }
+  } finally {
+    if (form.isConnected) {
+      submit.disabled = false;
+      submit.textContent = 'Submit';
+    }
+  }
+}
+
+function currentActorId() {
+  return authUser?.id || authUser?.username || 'demo-user';
+}
+
+function updateCount(el, delta) {
+  if (!el) return;
+  const next = Math.max(0, Number(el.textContent || 0) + delta);
+  el.textContent = String(next);
 }
 
 async function fetchJson(path, options = {}) {
@@ -455,11 +592,22 @@ function hostnameFromUrl(value) {
   }
 }
 
-function sourceDate(value) {
+function annotatedAt(value) {
   if (!value) return '';
-  const date = new Date(value);
+  const date = parseDate(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  return date.toLocaleString('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function parseDate(value) {
+  const normalized = String(value || '').trim().replace(' ', 'T');
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  return new Date(hasZone ? normalized : `${normalized}Z`);
 }
 
 function truncate(str, max) {

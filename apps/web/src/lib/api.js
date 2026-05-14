@@ -189,14 +189,16 @@ export async function getAnnotationClaims(id) {
 }
 
 export async function fileClaim(annotationId, payload) {
+  const body = {
+    annotation_id: annotationId,
+    reason_code: payload.reason_code || 'other',
+    description: payload.description || payload.details || payload.reason || 'Report filed from annotation page',
+  };
+  const claimantEmail = payload.claimant_email || payload.email;
+  if (claimantEmail) body.claimant_email = claimantEmail;
   return request('/claims', {
     method: 'POST',
-    body: JSON.stringify({
-      annotation_id: annotationId,
-      claimant_email: payload.claimant_email || payload.email,
-      reason_code: payload.reason_code || 'other',
-      description: payload.description || payload.details || payload.reason || 'Claim filed from annotation page',
-    }),
+    body: JSON.stringify(body),
   });
 }
 

@@ -4,6 +4,7 @@ import AnnotationItem from '../components/AnnotationItem.jsx';
 import CommentThread from '../components/CommentThread.jsx';
 import {
   checkAuth,
+  fileClaim as fileReport,
   getAnnotation,
   getAvatarUrl,
   getCurrentUserId,
@@ -65,7 +66,7 @@ export default function AnnotationPage() {
   const [claimSent, setClaimSent] = useState(false);
   const [claimSubmitting, setClaimSubmitting] = useState(false);
   const [claimError, setClaimError] = useState('');
-  const [claim, setClaim] = useState({ email: '', reason_code: 'copyright', description: '' });
+  const [claim, setClaim] = useState({ reason_code: 'copyright', description: '' });
   const [viewer, setViewer] = useState(viewerFromStorage);
 
   useEffect(() => {
@@ -121,27 +122,19 @@ export default function AnnotationPage() {
     }
   }
 
-  async function fileClaim(event) {
+  async function submitReport(event) {
     event.preventDefault();
     if (claimSubmitting) return;
     setClaimSubmitting(true);
     setClaimError('');
     try {
-      const response = await fetch('/api/claims', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          annotation_id: id,
-          claimant_email: claim.email,
-          reason_code: claim.reason_code,
-          description: claim.description,
-        }),
+      await fileReport(id, {
+        reason_code: claim.reason_code,
+        description: claim.description,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.error) throw new Error(data.error || 'Could not file claim');
       setClaimSent(true);
     } catch (err) {
-      setClaimError(err.message || 'Could not file claim. Please try again.');
+      setClaimError(err.message || 'Could not file report. Please try again.');
     } finally {
       setClaimSubmitting(false);
     }
@@ -181,12 +174,12 @@ export default function AnnotationPage() {
 
       <footer className="claim-area">
         {!claimOpen ? (
-          <button className="claim-link" onClick={() => setClaimOpen(true)}>File a claim</button>
+          <button className="claim-link" onClick={() => setClaimOpen(true)}>File a report</button>
         ) : claimSent ? (
-          <p className="claim-confirmation">Claim filed. We will review it shortly.</p>
+          <p className="claim-confirmation">Report filed. We will review it shortly.</p>
         ) : (
-          <form className="claim-form" onSubmit={fileClaim}>
-            <strong>File a claim</strong>
+          <form className="claim-form" onSubmit={submitReport}>
+            <strong>File a report</strong>
             <p className="claim-hint">Select a reason and describe the issue. We'll review it and take appropriate action.</p>
             <label>
               <span>Reason</span>
@@ -200,17 +193,13 @@ export default function AnnotationPage() {
               </select>
             </label>
             <label>
-              <span>Your email</span>
-              <input className="field" type="email" placeholder="you@example.com" required value={claim.email} onChange={(event) => setClaim((value) => ({ ...value, email: event.target.value }))} />
-            </label>
-            <label>
               <span>Description</span>
-              <textarea className="field" placeholder="Describe why you're filing this claim..." required value={claim.description} onChange={(event) => setClaim((value) => ({ ...value, description: event.target.value }))} />
+              <textarea className="field" placeholder="Describe why you're filing this report..." required value={claim.description} onChange={(event) => setClaim((value) => ({ ...value, description: event.target.value }))} />
             </label>
             {claimError && <p className="form-error">{claimError}</p>}
             <div className="form-actions">
               <button className="button button-solid" type="submit" disabled={claimSubmitting}>
-                {claimSubmitting ? 'Submitting' : 'Submit Claim'}
+                {claimSubmitting ? 'Submitting' : 'Submit Report'}
               </button>
               <button className="button button-text" type="button" onClick={() => setClaimOpen(false)}>Cancel</button>
             </div>

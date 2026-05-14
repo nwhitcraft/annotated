@@ -182,7 +182,7 @@ export const mockComments = [
     username: 'ina',
     display_name: 'Ina Morales',
     avatar_url: null,
-    body: 'This is also a good example of why annotations need the clip attached. The take is stronger because you can inspect the claim.',
+    body: 'This is also a good example of why annotations need the clip attached. The take is stronger because you can inspect the report.',
     created_at: '2026-05-10 08:37:00',
     replies: [],
   },

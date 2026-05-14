@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { banClaimUser, getClaims, updateClaim } from '../lib/api.js';
+import { formatAnnotatedAt } from '../lib/format.js';
 
 const REASON_LABELS = {
   copyright: 'Copyright infringement',
@@ -31,7 +32,7 @@ export default function AdminClaims() {
       const data = await getClaims(filter);
       setClaims(data.items || []);
     } catch (err) {
-      setError(err.message || 'Could not load claims');
+      setError(err.message || 'Could not load reports');
     } finally {
       setLoading(false);
     }
@@ -46,16 +47,16 @@ export default function AdminClaims() {
       });
       await fetchClaims();
     } catch (err) {
-      alert(err.message || 'Could not update claim');
+      alert(err.message || 'Could not update report');
     }
   }
 
   async function handleBanUser(claim) {
     const target = claim.username ? `@${claim.username}` : 'the annotation owner';
-    const message = `Ban ${target}? This does not affect the claimant. It removes the account that posted the claimed annotation, hides their annotations, deletes their comments/follows/reactions, and blocks the same identity from signing up again for 30 days.`;
+    const message = `Ban ${target}? This does not affect the reporter. It removes the account that posted the reported annotation, hides their annotations, deletes their comments/follows/reactions, and blocks the same identity from signing up again for 30 days.`;
     if (!confirm(message)) return;
     try {
-      await banClaimUser(claim.id, (drafts[claim.id]?.note || '').trim() || 'Claim review');
+      await banClaimUser(claim.id, (drafts[claim.id]?.note || '').trim() || 'Report review');
       await fetchClaims();
     } catch (err) {
       alert(err.message || 'Could not ban user');
@@ -74,14 +75,14 @@ export default function AdminClaims() {
 
   const accessMessage = adminAccessMessage(error);
 
-  if (loading) return <div className="page"><p>Loading claims...</p></div>;
+  if (loading) return <div className="page"><p>Loading reports...</p></div>;
 
   return (
     <div className="page">
       <Link to="/feed" className="back-link">← Feed</Link>
       <header className="editor-heading">
         <p>Admin</p>
-        <h1>Claim Review</h1>
+        <h1>Report Review</h1>
       </header>
 
       {accessMessage ? (
@@ -95,7 +96,7 @@ export default function AdminClaims() {
       ) : claims.length === 0 ? (
         <>
           <ClaimFilters filter={filter} setFilter={setFilter} />
-          <p className="feed-empty">No {filter.replace('_', ' ')} claims.</p>
+          <p className="feed-empty">No {filter.replace('_', ' ')} reports.</p>
         </>
       ) : (
         <>
@@ -121,9 +122,9 @@ export default function AdminClaims() {
                 </section>
 
                 <section className="claim-admin-section claim-admin-claim">
-                  <strong>Claim</strong>
+                  <strong>Report</strong>
                   <p><span>Reason:</span> {REASON_LABELS[claim.reason_code] || claim.reason_code}</p>
-                  <p><span>Claimant:</span> {claim.claimant_email}</p>
+                  <p><span>Reporter:</span> {claim.claimant_email}</p>
                   <p><span>Description:</span> {claim.description}</p>
                   <p><span>Email notification:</span> {claim.email_notification_status || 'not_sent'}{claim.email_notification_error ? ` - ${claim.email_notification_error}` : ''}</p>
                 </section>
@@ -138,7 +139,7 @@ export default function AdminClaims() {
                     />
                   </label>
                   <label>
-                    <span>Outcome summary for claimant</span>
+                    <span>Outcome summary for reporter</span>
                     <textarea
                       value={drafts[claim.id]?.outcome || claim.outcome || ''}
                       onChange={(event) => updateDraft(claim.id, 'outcome', event.target.value)}
@@ -160,7 +161,7 @@ export default function AdminClaims() {
                   <button className="button button-outline danger" type="button" onClick={() => handleBanUser(claim)}>
                     Ban annotation owner 30 days
                   </button>
-                  <span>Filed {new Date(claim.created_at).toLocaleDateString()}</span>
+                  <span>Filed {formatAnnotatedAt(claim.created_at)}</span>
                 </div>
               </article>
             ))}
@@ -192,7 +193,7 @@ function adminAccessMessage(error) {
   if (error === 'Admin authentication required') {
     return {
       title: 'Admin-only page',
-      body: 'Claim Review is only visible to admin accounts. Sign in as Nick or another configured admin to review claims.',
+      body: 'Report Review is only visible to admin accounts. Sign in as Nick or another configured admin to review reports.',
     };
   }
   if (error === 'Admin access required') {
@@ -204,15 +205,15 @@ function adminAccessMessage(error) {
   if (error === 'Invalid admin token') {
     return {
       title: 'Admin session expired',
-      body: 'Sign in again with an admin account to continue reviewing claims.',
+      body: 'Sign in again with an admin account to continue reviewing reports.',
     };
   }
   return null;
 }
 
 function defaultOutcome(status) {
-  if (status === 'resolved') return 'We reviewed the claim and are keeping the annotation live.';
-  if (status === 'annotation_removed') return 'We reviewed the claim and removed the annotation from public feeds.';
-  if (status === 'reviewed') return 'We have reviewed the claim and are still assessing the final outcome.';
+  if (status === 'resolved') return 'We reviewed the report and are keeping the annotation live.';
+  if (status === 'annotation_removed') return 'We reviewed the report and removed the annotation from public feeds.';
+  if (status === 'reviewed') return 'We have reviewed the report and are still assessing the final outcome.';
   return '';
 }

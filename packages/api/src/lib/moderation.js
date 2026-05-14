@@ -27,7 +27,7 @@ export function userUnavailable(user) {
   return Boolean(row?.active);
 }
 
-export function banUserForClaim({ userId, claimId, reason = 'Claim review' }) {
+export function banUserForClaim({ userId, claimId, reason = 'Report review' }) {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
   if (!user) return null;
 

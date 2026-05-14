@@ -7,14 +7,14 @@ const privacySections = [
     title: 'Information we collect',
     body: [
       'When you sign in, Annotated receives the basic account information provided by your OAuth provider, such as your name, username or email address, profile image, and provider account identifier.',
-      'When you use the product, we store the annotations, comments, source links, selected quotes, timestamps, media clip metadata, profile details, and claim or moderation reports that you submit.',
+      'When you use the product, we store the annotations, comments, source links, selected quotes, timestamps, media clip metadata, profile details, and moderation reports that you submit.',
       'We may also collect ordinary technical information, such as browser, device, log, and usage information, to keep the service secure and working.',
     ],
   },
   {
     title: 'How we use information',
     body: [
-      'We use information to provide sign-in, publish and display annotations, connect comments to sources, operate the feed, maintain your profile, respond to claims, prevent abuse, and improve the product.',
+      'We use information to provide sign-in, publish and display annotations, connect comments to sources, operate the feed, maintain your profile, respond to reports, prevent abuse, and improve the product.',
       'Some information you publish, including your profile, annotations, comments, source references, and public activity, may be visible to other users and visitors.',
     ],
   },
@@ -29,7 +29,7 @@ const privacySections = [
     title: 'Retention and control',
     body: [
       'We keep account and content information for as long as needed to provide the service, comply with legal obligations, resolve disputes, enforce terms, and preserve moderation history.',
-      'You may request account or content deletion by contacting us. Some removed content may remain in backups, logs, claim records, or places where others have already seen or interacted with it.',
+      'You may request account or content deletion by contacting us. Some removed content may remain in backups, logs, report records, or places where others have already seen or interacted with it.',
     ],
   },
   {
@@ -59,7 +59,7 @@ const termsSections = [
     title: 'Public discussion and moderation',
     body: [
       'Annotations, comments, profiles, and related activity may be public. We may remove content, limit distribution, suspend accounts, or take other moderation action when we believe it is necessary to protect people, sources, rights, or the service.',
-      'Annotated may provide claim and review tools, but we are not responsible for resolving every dispute between users, publishers, creators, or third parties.',
+      'Annotated may provide report and review tools, but we are not responsible for resolving every dispute between users, publishers, creators, or third parties.',
     ],
   },
   {

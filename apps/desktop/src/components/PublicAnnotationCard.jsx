@@ -103,7 +103,7 @@ export default function PublicAnnotationCard({
           {noteworthyCount}
         </button>
         <span>Comments {annotation.comment_count || 0}</span>
-        <span>Claims {annotation.claim_count || 0}</span>
+        <span>Reports {annotation.claim_count || 0}</span>
       </footer>
     </article>
   );

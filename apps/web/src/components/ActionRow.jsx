@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fileClaim, getAnnotationClaims, getUsername, toggleLike, toggleNoteworthy } from '../lib/api.js';
+import { fileClaim, getAnnotationClaims, toggleLike, toggleNoteworthy } from '../lib/api.js';
 
 function ActionIcon({ type }) {
   const paths = {
@@ -26,7 +26,7 @@ export default function ActionRow({ annotation, onOpenComments }) {
   const [claimSent, setClaimSent] = useState(false);
   const [claimSubmitting, setClaimSubmitting] = useState(false);
   const [claimError, setClaimError] = useState('');
-  const [claim, setClaim] = useState({ email: getUsername() ? `${getUsername()}@annotated.local` : '', description: '' });
+  const [claim, setClaim] = useState({ description: '' });
 
   async function like(event) {
     event.preventDefault();
@@ -87,7 +87,7 @@ export default function ActionRow({ annotation, onOpenComments }) {
       setClaimSent(true);
       setClaimCount((value) => value + 1);
     } catch (err) {
-      setClaimError(err.message || 'Could not file claim. Please try again.');
+      setClaimError(err.message || 'Could not file report. Please try again.');
     } finally {
       setClaimSubmitting(false);
     }
@@ -113,18 +113,17 @@ export default function ActionRow({ annotation, onOpenComments }) {
         </button>
         <button className="claims-action claim-count" onClick={openClaim}>
           <ActionIcon type="claims" />
-          <span>Claims</span>
+          <span>Reports</span>
           <span className="count">{claimCount}</span>
         </button>
       </div>
       {claimOpen && (
         <form className="claim-form inline-claim-form" onSubmit={submitClaim} onClick={(event) => event.stopPropagation()}>
           {claimSent ? (
-            <p className="claim-confirmation">Claim filed. We will review it shortly.</p>
+            <p className="claim-confirmation">Report filed. We will review it shortly.</p>
           ) : (
             <>
-              <strong>File a claim</strong>
-              <input className="field" type="email" placeholder="Email address" required value={claim.email} onChange={(event) => setClaim((value) => ({ ...value, email: event.target.value }))} />
+              <strong>File a report</strong>
               <textarea className="field" placeholder="Describe the issue" required value={claim.description} onChange={(event) => setClaim((value) => ({ ...value, description: event.target.value }))} />
               {claimError && <p className="form-error">{claimError}</p>}
               <div className="form-actions">

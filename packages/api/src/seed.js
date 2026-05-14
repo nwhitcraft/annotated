@@ -127,7 +127,7 @@ const comments = [
   { id: 'c-econ-3', annotation_id: 'I6KyT-Ah5Wna', user_id: 'hZTIgPwtkZPF', body: 'And that is why the source quote matters. It grounds the optimism in boring operating reality.', parent_id: 'c-econ-2', created_at: '2026-05-10 08:16:00' },
 
   // On "Forgetting" (forgetting-thread)
-  { id: 'c-forget-1', annotation_id: 'forgetting-thread', user_id: 'ina', body: 'This is also a good example of why annotations need the clip attached. The take is stronger because you can inspect the claim.', parent_id: null, created_at: '2026-05-10 08:37:00' },
+  { id: 'c-forget-1', annotation_id: 'forgetting-thread', user_id: 'ina', body: 'This is also a good example of why annotations need the clip attached. The take is stronger because you can inspect the report.', parent_id: null, created_at: '2026-05-10 08:37:00' },
   { id: 'c-forget-2', annotation_id: 'forgetting-thread', user_id: 'david', body: 'The relationship between forgetting and creativity is worth a whole thread. Not everything worth remembering is worth keeping.', parent_id: null, created_at: '2026-05-10 09:02:00' },
 
   // On "Minerals map" (minerals-map)

@@ -3,38 +3,38 @@ const RESEND_EMAILS_URL = 'https://api.resend.com/emails';
 export async function sendClaimNotificationEmail(claim) {
   const to = process.env.CLAIMS_NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'dreamteamai71@gmail.com';
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.CLAIMS_FROM_EMAIL || 'Annotated Claims <claims@annotated.com>';
+  const from = process.env.CLAIMS_FROM_EMAIL || 'Annotated Reports <reports@annotated.com>';
 
   if (!to || !apiKey) {
     return {
       status: 'not_configured',
-      error: 'Set RESEND_API_KEY and CLAIMS_NOTIFY_EMAIL to email claim notifications.',
+      error: 'Set RESEND_API_KEY and CLAIMS_NOTIFY_EMAIL to email report notifications.',
     };
   }
 
   const adminUrl = `${(process.env.FRONTEND_URL || 'http://localhost:3090').replace(/\/$/, '')}/admin/claims`;
-  const subject = `[Annotated claim] ${claim.reason_code} on ${claim.source_title || claim.annotation_id}`;
+  const subject = `[Annotated report] ${claim.reason_code} on ${claim.source_title || claim.annotation_id}`;
   const text = [
-    'A new Annotated claim has been filed.',
+    'A new Annotated report has been filed.',
     '',
-    `Claim ID: ${claim.id}`,
+    `Report ID: ${claim.id}`,
     `Annotation ID: ${claim.annotation_id}`,
-    `Claimant: ${claim.claimant_email}`,
+    `Reporter: ${claim.claimant_email}`,
     `Reason: ${claim.reason_code}`,
     `Annotation owner: ${claim.display_name || claim.username || claim.user_id || 'Unknown'}${claim.username ? ` (@${claim.username})` : ''}`,
     `Source: ${claim.source_title || 'Untitled source'}`,
     claim.source_url || '',
     '',
-    'Claim description:',
+    'Report description:',
     claim.description,
     '',
     'Annotation commentary:',
     claim.commentary || '',
     '',
     'Ban/removal note:',
-    'Any account action should apply to the annotation owner above, not the claimant who filed this report.',
+    'Any account action should apply to the annotation owner above, not the reporter who filed this report.',
     '',
-    `Review claims: ${adminUrl}`,
+    `Review reports: ${adminUrl}`,
   ].join('\n');
 
   const html = text

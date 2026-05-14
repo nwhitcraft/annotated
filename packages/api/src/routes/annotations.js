@@ -58,7 +58,7 @@ app.get('/', (c) => {
   return c.json({ items, total: total.count });
 });
 
-// Claims filed against a single annotation
+// Reports filed against a single annotation
 app.get('/:id/claims', (c) => {
   const { id } = c.req.param();
   const claims = db.prepare(`

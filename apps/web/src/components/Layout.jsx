@@ -54,7 +54,7 @@ export default function Layout() {
             <NavLink to="/new">Annotate</NavLink>
             <NavLink to="/download">Desktop</NavLink>
             {viewer && <NavLink to={`/u/${viewer.username}`}>Profile</NavLink>}
-            {viewer?.is_admin && <NavLink to="/admin/claims">Claims</NavLink>}
+            {viewer?.is_admin && <NavLink to="/admin/claims">Reports</NavLink>}
           </nav>
           <div className="header-tools">
             <UserSearch />

@@ -9,7 +9,7 @@ import { banUserForClaim, userUnavailable } from '../lib/moderation.js';
 const app = new Hono();
 const JWT_SECRET = process.env.JWT_SECRET || 'annotated-dev-secret-change-in-prod';
 
-// Claim reason codes
+// Report reason codes
 const REASON_CODES = [
   'copyright',
   'misrepresentation',
@@ -19,12 +19,13 @@ const REASON_CODES = [
   'other',
 ];
 
-// File a fair-use claim against an annotation
+// File a fair-use report against an annotation
 app.post('/', async (c) => {
   const { annotation_id, claimant_email, reason_code, description } = await c.req.json();
+  const reporterEmail = cleanNullable(claimant_email) || reporterEmailFromAuth(c) || 'reporter@annotated.local';
 
-  if (!annotation_id || !claimant_email || !reason_code || !description) {
-    return c.json({ error: 'Missing required fields: annotation_id, claimant_email, reason_code, description' }, 400);
+  if (!annotation_id || !reason_code || !description) {
+    return c.json({ error: 'Missing required fields: annotation_id, reason_code, description' }, 400);
   }
 
   if (!REASON_CODES.includes(reason_code)) {
@@ -41,7 +42,7 @@ app.post('/', async (c) => {
 
   const id = nanoid(12);
   db.prepare('INSERT INTO claims (id, annotation_id, claimant_email, reason, reason_code, description) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, annotation_id, claimant_email, reason_code, reason_code, description);
+    .run(id, annotation_id, reporterEmail, reason_code, reason_code, description);
   db.prepare('UPDATE annotations SET claim_count = claim_count + 1 WHERE id = ?')
     .run(annotation_id);
 
@@ -51,10 +52,10 @@ app.post('/', async (c) => {
     ...annotation,
     id,
     annotation_id,
-    claimant_email,
+    claimant_email: reporterEmail,
     reason_code,
     description,
-  }).catch((error) => ({ status: 'failed', error: error.message || 'Claim notification failed' }));
+  }).catch((error) => ({ status: 'failed', error: error.message || 'Report notification failed' }));
 
   db.prepare(`
     UPDATE claims
@@ -74,7 +75,7 @@ app.post('/', async (c) => {
   }, 201);
 });
 
-// List claims (admin)
+// List reports (admin)
 app.get('/', (c) => {
   const admin = requireAdmin(c);
   if (admin) return admin;
@@ -95,7 +96,7 @@ app.get('/', (c) => {
   return c.json({ items });
 });
 
-// Update claim status (admin)
+// Update report status (admin)
 app.patch('/:id', async (c) => {
   const admin = requireAdmin(c);
   if (admin) return admin;
@@ -115,7 +116,7 @@ app.patch('/:id', async (c) => {
         resolved_at = CASE WHEN ? IN ('resolved', 'annotation_removed', 'user_blocked') THEN COALESCE(resolved_at, datetime('now')) ELSE resolved_at END
     WHERE id = ?
   `).run(status, cleanNullable(reviewer_note), cleanNullable(outcome), status, status, id);
-  if (!result.changes) return c.json({ error: 'Claim not found' }, 404);
+  if (!result.changes) return c.json({ error: 'Report not found' }, 404);
 
   // If action is to remove the annotation or block the user
   if (status === 'annotation_removed') {
@@ -148,9 +149,9 @@ app.post('/:id/ban-user', async (c) => {
     JOIN annotations a ON a.id = c.annotation_id
     WHERE c.id = ?
   `).get(id);
-  if (!claim) return c.json({ error: 'Claim not found' }, 404);
+  if (!claim) return c.json({ error: 'Report not found' }, 404);
 
-  const reason = cleanNullable(body.reason) || `Claim review: ${claim.reason_code || claim.reason || 'policy violation'}`;
+  const reason = cleanNullable(body.reason) || `Report review: ${claim.reason_code || claim.reason || 'policy violation'}`;
   const result = banUserForClaim({ userId: claim.user_id, claimId: id, reason });
   if (!result) return c.json({ error: 'User not found' }, 404);
   return c.json({ banned: true, ...result });
@@ -164,20 +165,20 @@ app.post('/block-user', async (c) => {
   const { user_id, claim_id, reason } = await c.req.json();
   if (!user_id) return c.json({ error: 'Missing user_id' }, 400);
 
-  const result = banUserForClaim({ userId: user_id, claimId: claim_id, reason: reason || 'Claim review' });
+  const result = banUserForClaim({ userId: user_id, claimId: claim_id, reason: reason || 'Report review' });
   if (!result) return c.json({ error: 'User not found' }, 404);
 
   return c.json({ blocked: true, banned: true, ...result });
 });
 
-// Delete a claim and keep annotation claim_count in sync
+// Delete a report and keep annotation claim_count in sync
 app.delete('/:id', (c) => {
   const admin = requireAdmin(c);
   if (admin) return admin;
 
   const { id } = c.req.param();
   const claim = db.prepare('SELECT annotation_id FROM claims WHERE id = ?').get(id);
-  if (!claim) return c.json({ error: 'Claim not found' }, 404);
+  if (!claim) return c.json({ error: 'Report not found' }, 404);
 
   db.prepare('DELETE FROM claims WHERE id = ?').run(id);
   db.prepare('UPDATE annotations SET claim_count = MAX(0, claim_count - 1) WHERE id = ?')
@@ -201,6 +202,20 @@ function claimById(id) {
 function cleanNullable(value) {
   const text = String(value || '').trim();
   return text || null;
+}
+
+function reporterEmailFromAuth(c) {
+  const auth = c.req.header('Authorization');
+  if (!auth?.startsWith('Bearer ')) return null;
+
+  try {
+    const payload = jwt.verify(auth.slice(7), JWT_SECRET);
+    const user = db.prepare('SELECT username, email FROM users WHERE id = ?').get(payload.sub);
+    if (!user || userUnavailable(user)) return null;
+    return cleanNullable(user.email) || (user.username ? `${user.username}@annotated.local` : null);
+  } catch {
+    return null;
+  }
 }
 
 function requireAdmin(c) {

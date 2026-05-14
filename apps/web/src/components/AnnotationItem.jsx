@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import ActionRow from './ActionRow.jsx';
 import UserAvatar from './UserAvatar.jsx';
 import { API_ORIGIN } from '../lib/api.js';
-import { domainFromUrl, formatTime, timeAgo } from '../lib/format.js';
+import { domainFromUrl, formatAnnotatedAt, formatTime, timeAgo } from '../lib/format.js';
 
 function mediaUrl(path) {
   if (!path) return '';
@@ -79,7 +79,7 @@ export default function AnnotationItem({ annotation, expanded = false, canDelete
           <span className="annotation-card-handle">
             @{annotation.username || 'anon'}
             <span className="annotation-dot">·</span>
-            {timeAgo(annotation.created_at)}
+            {formatAnnotatedAt(annotation.created_at)}
           </span>
         </div>
         <div className="annotation-card-tags">
